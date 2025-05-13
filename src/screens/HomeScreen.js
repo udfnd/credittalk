@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -13,10 +14,18 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 function HomeScreen() {
   const navigation = useNavigation();
 
+  const handleNavigation = (screen) => {
+    Alert.alert(
+      '회원가입이 필요합니다!',
+      '기능을 사용하려면 회원가입이 필요합니다.',
+      [{ text: '확인', onPress: () => navigation.navigate('SignUp') }],
+    );
+  };
+
   const renderGridButton = (title, targetScreen, iconName) => (
     <TouchableOpacity
       style={styles.button}
-      onPress={() => navigation.navigate(targetScreen)}
+      onPress={() => handleNavigation(targetScreen)}
       activeOpacity={0.7}
     >
       <Icon name={iconName} size={40} color="white" style={styles.icon} />

@@ -9,6 +9,7 @@ import UnifiedSearchScreen from './src/screens/UnifiedSearchScreen';
 import AccountSearchScreen from './src/screens/AccountSearchScreen';
 import PhoneSearchScreen from './src/screens/PhoneSearchScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import SignUpScreen from './src/screens/SignUpScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -46,6 +47,11 @@ function App(): React.JSX.Element {
           name="Settings"
           component={SettingsScreen}
           options={{ title: '설정' }}
+        />
+        <Stack.Screen
+          name="SignUp"
+          component={SignUpScreen} // 회원가입 화면을 추가
+          options={{ title: '회원가입' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
