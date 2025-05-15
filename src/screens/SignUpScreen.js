@@ -7,95 +7,273 @@ import {
   Alert,
   StyleSheet,
   Keyboard,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+  Platform,
 } from 'react-native';
-import { supabase } from '../lib/supabaseClient';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 
-function SignUpScreen({ navigation }) {
+const jobTypes = ['일반', '대부업 종사자', '자영업 종사자'];
+
+function SignUpScreen() {
+  const navigation = useNavigation();
+  const { signUpWithEmail, isLoading: authIsLoading } = useAuth();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [jobType, setJobType] = useState('일반');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validateEmail = (text) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(text);
+  };
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
 
-    if (!name || !phoneNumber || !nationalId || !jobType) {
-      Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
+    if (
+      !email.trim() ||
+      !password.trim() ||
+      !name.trim() ||
+      !phoneNumber.trim() ||
+      !nationalId.trim() ||
+      !jobType
+    ) {
+      Alert.alert('입력 오류', '모든 필수 항목을 입력해주세요.');
+      return;
+    }
+    if (!validateEmail(email.trim())) {
+      Alert.alert('입력 오류', '올바른 이메일 형식이 아닙니다.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('입력 오류', '비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert('입력 오류', '비밀번호는 6자 이상이어야 합니다.');
+      return;
+    }
+    if (!/^\d{13}$/.test(nationalId.trim())) {
+      Alert.alert('입력 오류', '주민등록번호는 13자리 숫자로 입력해주세요.');
+      return;
+    }
+    if (!/^\d{10,11}$/.test(phoneNumber.trim())) {
+      Alert.alert(
+        '입력 오류',
+        '전화번호를 올바르게 입력해주세요. (예: 01012345678)',
+      );
       return;
     }
 
-    try {
-      const { data, error } = await supabase.from('users').insert([
-        {
-          name,
-          phone_number: phoneNumber,
-          national_id: nationalId,
-          job_type: jobType,
-        },
-      ]);
+    setIsSubmitting(true);
+    const additionalData = {
+      name: name.trim(),
+      phoneNumber: phoneNumber.trim(),
+      nationalId: nationalId.trim(),
+      jobType,
+    };
+    const result = await signUpWithEmail(
+      email.trim(),
+      password,
+      additionalData,
+    );
+    setIsSubmitting(false);
 
-      if (error) throw error;
-
-      Alert.alert('회원가입 성공', '회원가입이 완료되었습니다.');
-      navigation.goBack(); // 홈 화면으로 돌아가기
-    } catch (error) {
-      Alert.alert('회원가입 실패', `오류 발생: ${error.message}`);
+    if (result.success) {
+      // 성공 시 AuthContext의 onAuthStateChange가 화면 전환을 처리
+      // Supabase에서 이메일 확인을 요구하는 경우, 사용자에게 알림
+      Alert.alert(
+        '회원가입 요청됨',
+        '가입 확인을 위해 이메일을 확인해주세요. (실제 이메일 전송은 Supabase 설정에 따름)',
+      );
+      navigation.navigate('SignIn'); // 로그인 화면으로 이동하여 로그인 유도
     }
+    // 실패 시 Alert는 AuthContext 내부에서 처리
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>회원가입</Text>
+    <ScrollView
+      contentContainerStyle={styles.scrollContainer}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.container}>
+        <Text style={styles.title}>회원가입</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="이름"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="전화번호 (010-xxxx-xxxx)"
-        value={phoneNumber}
-        onChangeText={setPhoneNumber}
-        keyboardType="phone-pad"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="주민등록번호"
-        value={nationalId}
-        onChangeText={setNationalId}
-        keyboardType="number-pad"
-      />
-      <View style={styles.jobTypeContainer}>
-        <Button title="일반" onPress={() => setJobType('일반')} />
-        <Button
-          title="대부업 종사자"
-          onPress={() => setJobType('대부업 종사자')}
+        <TextInput
+          style={styles.input}
+          placeholder="이메일 주소"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
         />
-        <Button
-          title="자영업 종사자"
-          onPress={() => setJobType('자영업 종사자')}
+        <TextInput
+          style={styles.input}
+          placeholder="비밀번호 (6자 이상)"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoCapitalize="none"
         />
+        <TextInput
+          style={styles.input}
+          placeholder="비밀번호 확인"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="이름"
+          value={name}
+          onChangeText={setName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="전화번호 (예: 01012345678)"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          keyboardType="phone-pad"
+          maxLength={11}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="주민등록번호 (13자리, - 제외)"
+          value={nationalId}
+          onChangeText={setNationalId}
+          keyboardType="number-pad"
+          maxLength={13}
+          secureTextEntry // 민감 정보
+        />
+
+        <Text style={styles.label}>직업 유형</Text>
+        <View style={styles.jobTypeContainer}>
+          {jobTypes.map((type) => (
+            <TouchableOpacity
+              key={type}
+              style={[
+                styles.jobTypeButton,
+                jobType === type && styles.jobTypeButtonSelected,
+              ]}
+              onPress={() => setJobType(type)}
+            >
+              <Text
+                style={[
+                  styles.jobTypeButtonText,
+                  jobType === type && styles.jobTypeButtonTextSelected,
+                ]}
+              >
+                {type}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {isSubmitting || authIsLoading ? (
+          <ActivityIndicator
+            size="large"
+            color="#3d5afe"
+            style={styles.spinner}
+          />
+        ) : (
+          <Button title="회원가입" onPress={handleSubmit} color="#3d5afe" />
+        )}
+
+        <TouchableOpacity
+          style={styles.linkButton}
+          onPress={() => navigation.navigate('SignIn')}
+        >
+          <Text style={styles.linkText}>
+            이미 회원가입 하셨나요? 로그인하기
+          </Text>
+        </TouchableOpacity>
       </View>
-      <Button title="회원가입" onPress={handleSubmit} color="#3d5afe" />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 20 },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+  },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 30,
+    color: '#1e3a5f',
   },
-  input: { height: 50, borderWidth: 1, marginBottom: 15, paddingLeft: 10 },
+  input: {
+    height: 50,
+    borderColor: '#ced4da',
+    borderWidth: 1,
+    marginBottom: 12,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    backgroundColor: 'white',
+    fontSize: 16,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 8,
+    fontWeight: '600',
+    color: '#495057',
+    marginTop: 5,
+  },
   jobTypeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 20,
+    marginBottom: 25,
+    marginTop: 5,
+  },
+  jobTypeButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#adb5bd',
+    backgroundColor: '#e9ecef',
+  },
+  jobTypeButtonSelected: {
+    backgroundColor: '#3d5afe',
+    borderColor: '#3d5afe',
+  },
+  jobTypeButtonText: {
+    fontSize: 14,
+    color: '#495057',
+  },
+  jobTypeButtonTextSelected: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  linkButton: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  linkText: {
+    color: '#3d5afe',
+    fontSize: 15,
+    textDecorationLine: 'underline',
+  },
+  spinner: {
+    marginVertical: Platform.OS === 'ios' ? 18 : 19, // 버튼 높이와 유사하게
   },
 });
 
