@@ -1,5 +1,3 @@
-// src/screens/SearchBaseScreen.js
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -10,67 +8,113 @@ import {
   Button,
   TextInput,
   Keyboard,
-  TouchableOpacity, // 검색 버튼용
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // 아이콘 사용
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 
 const ITEMS_PER_PAGE = 10;
 
 export const SEARCH_TYPES = {
-  UNIFIED: 'unified', // 이름, 연락처, 계좌 모두 검색
-  ACCOUNT: 'account', // 계좌만 검색 (이제 HomeScreen에서 직접 사용 안 함)
-  PHONE: 'phone', // 연락처만 검색 (이제 HomeScreen에서 직접 사용 안 함)
-  NUMERIC_UNIFIED: 'numeric_unified', // 연락처 또는 계좌번호 검색 (HomeScreen에서 사용)
+  UNIFIED: 'unified', // 이름(닉네임), 계좌(포함), 전화번호(정확히)
+  ACCOUNT: 'account', // 계좌(포함)
+  PHONE: 'phone', // 전화번호(정확히)
+  NUMERIC_UNIFIED: 'numeric_unified', // 계좌(포함), 전화번호(정확히)
 };
 
-// 기존 maskPhoneNumber, maskAccountNumber 함수는 변경 없이 유지
+// 이름 마스킹 함수 (가운데 글자 마스킹)
+const maskName = (name) => {
+  if (!name || typeof name !== 'string' || name.length <= 1) {
+    return name || '';
+  }
+  if (name.length === 2) {
+    return `${name[0]}*`;
+  }
+  // 요청: 이름의 2번째 글자만 마스킹
+  return `${name[0]}*${name.substring(2)}`;
+};
 
+// 전화번호 마스킹 함수 (중간 숫자 2개 마스킹)
 const maskPhoneNumber = (phoneNumber) => {
-  if (
-    !phoneNumber ||
-    typeof phoneNumber !== 'string' ||
-    phoneNumber.length < 10
-  ) {
+  if (!phoneNumber || typeof phoneNumber !== 'string') {
     return phoneNumber || '';
   }
-  const chars = phoneNumber.split('');
-  // 더 안전하고 일관된 마스킹 로직 (예: 중간 4자리 마스킹)
-  if (phoneNumber.length === 10) {
-    // 02-123-4567
-    for (let i = 3; i < 6; i++) chars[i] = '*';
-  } else if (phoneNumber.length === 11) {
-    // 010-1234-5678
-    for (let i = 3; i < 7; i++) chars[i] = '*';
-  } else {
-    // 그 외 길이 (예상치 못한 경우)
-    const index1 = Math.floor(Math.random() * 4) + 3;
-    const index2 = Math.floor(Math.random() * 4) + 7;
-    if (chars[index1]) chars[index1] = '*';
-    if (chars[index2]) chars[index2] = '*';
-  }
-  return chars.join('');
-};
+  const cleanNumber = phoneNumber.replace(/-/g, '');
+  const len = cleanNumber.length;
 
-const maskAccountNumber = (accountNumber) => {
-  if (
-    !accountNumber ||
-    typeof accountNumber !== 'string' ||
-    accountNumber.length < 4
-  ) {
-    return accountNumber || '';
+  if (len < 7) {
+    // 너무 짧은 번호는 그대로 반환
+    return phoneNumber;
   }
-  const chars = accountNumber.split('');
-  const len = accountNumber.length;
-  // 뒤에서 2~5번째 숫자를 *로 마스킹 (최소 2개)
-  const numToMask = Math.min(4, Math.max(2, len - 4)); // 계좌번호 길이에 따라 유동적이지만 최소 2개, 최대 4개 마스킹
-  for (let i = 0; i < numToMask; i++) {
-    if (len - 3 - i >= 0) {
-      // 마스킹할 인덱스가 음수가 되지 않도록
-      chars[len - 3 - i] = '*';
+
+  let maskedNumber = '';
+  // 010-xxxx-xxxx, 010-xxx-xxxx 형식 (10~11자리)
+  if (len === 11) {
+    // 010-1234-5678
+    maskedNumber = `${cleanNumber.substring(0, 5)}**${cleanNumber.substring(7)}`;
+    return `${maskedNumber.substring(0, 3)}-${maskedNumber.substring(3, 7)}-${maskedNumber.substring(7)}`;
+  } else if (len === 10) {
+    // 010-123-4567 또는 지역번호
+    if (cleanNumber.startsWith('02')) {
+      // 서울 지역번호 (02-xxxx-xxxx 또는 02-xxx-xxxx)
+      // 02-1234-5678 -> 02-123**-78
+      // 02-123-4567 -> 02-1**-567
+      const midIndex = Math.floor(len / 2) - 1; // 중간쯤의 인덱스
+      maskedNumber = `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
+      if (
+        cleanNumber.length === 10 &&
+        cleanNumber.split('-').length === 3 &&
+        cleanNumber.split('-')[1].length === 4
+      ) {
+        // 02-xxxx-xxxx
+        return `${maskedNumber.substring(0, 2)}-${maskedNumber.substring(2, 6)}-${maskedNumber.substring(6)}`;
+      } else {
+        // 02-xxx-xxxx
+        return `${maskedNumber.substring(0, 2)}-${maskedNumber.substring(2, 5)}-${maskedNumber.substring(5)}`;
+      }
+    } else {
+      // 기타 01x-xxx-xxxx
+      maskedNumber = `${cleanNumber.substring(0, 4)}**${cleanNumber.substring(6)}`;
+      return `${maskedNumber.substring(0, 3)}-${maskedNumber.substring(3, 6)}-${maskedNumber.substring(6)}`;
     }
   }
-  return chars.join('');
+  // 일반적인 7~9자리 번호 (예: 123-4567, 1234-5678) - 중간 2자리
+  else if (len >= 7 && len <= 9) {
+    const midIndex = Math.floor(len / 2) - 1;
+    maskedNumber = `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
+    // 하이픈 복원은 원래 하이픈이 있었다면 고려, 없다면 그대로 반환
+    return maskedNumber; // 하이픈 없이 반환하거나, 원본 phoneNumber 형식에 따라 조건부 추가
+  }
+  return phoneNumber; // 규칙에 맞지 않으면 원본 반환
+};
+
+// 계좌번호 마스킹 함수 (중간 숫자 2개 마스킹)
+const maskAccountNumber = (accountNumber) => {
+  if (!accountNumber || typeof accountNumber !== 'string') {
+    return accountNumber || '';
+  }
+  const cleanAccount = accountNumber.replace(/-/g, '');
+  const len = cleanAccount.length;
+
+  if (len < 5) {
+    // 너무 짧으면 그대로 반환
+    return accountNumber;
+  }
+
+  // 중간에서 2자리 마스킹 (앞에서 1/3 지점부터 2자리)
+  const startIndex = Math.max(1, Math.floor(len / 3)); // 최소 1번째 인덱스 이후부터 시작
+  if (startIndex + 1 >= len - 1) {
+    // 마스킹할 자리가 충분하지 않으면 끝에서 2개 마스킹
+    return `${cleanAccount.substring(0, len - 2)}**`;
+  }
+
+  const maskedAccount =
+    cleanAccount.substring(0, startIndex) +
+    '**' +
+    cleanAccount.substring(startIndex + 2);
+
+  return maskedAccount; // 하이픈 제거된 상태로 반환 (일관성)
 };
 
 function SearchBaseScreen({
@@ -79,35 +123,38 @@ function SearchBaseScreen({
   searchType: propSearchType,
   title: propTitle,
 }) {
-  // route.params에서 searchType과 initialSearchTerm을 받을 수 있도록 수정
-  const searchType = route?.params?.searchType || propSearchType;
-  const initialSearchTerm = route?.params?.searchTerm || '';
-  const screenTitle = route?.params?.title || propTitle;
+  const searchTypeFromParams = route?.params?.searchType;
+  const initialSearchTermFromParams = route?.params?.searchTerm || '';
+  const screenTitleFromParams = route?.params?.title;
+
+  const currentSearchType =
+    searchTypeFromParams || propSearchType || SEARCH_TYPES.UNIFIED;
+  const currentScreenTitle = screenTitleFromParams || propTitle || '검색';
 
   const [reports, setReports] = useState([]);
   const [maskedReports, setMaskedReports] = useState([]);
-  const [loading, setLoading] = useState(false); // 초기 로딩은 false로 변경
+  const [loading, setLoading] = useState(true); // 초기 로딩 시작
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-
-  // 검색 입력창 상태는 SearchBaseScreen 내부에서 관리
-  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
-  // 실제 API 요청에 사용될 검색어 (검색 버튼 클릭 시 업데이트)
-  const [submittedSearchTerm, setSubmittedSearchTerm] =
-    useState(initialSearchTerm);
+  const [searchTerm, setSearchTerm] = useState(initialSearchTermFromParams);
+  const [submittedSearchTerm, setSubmittedSearchTerm] = useState(
+    initialSearchTermFromParams,
+  );
 
   const fetchReports = useCallback(
-    async (pageNum, currentSearchTermToSubmit) => {
+    async (pageNum, termToSearch) => {
+      // UNIFIED 또는 NUMERIC_UNIFIED 검색이 아니고, 검색어가 비어있다면, 검색 실행 안함
       if (
-        !currentSearchTermToSubmit ||
-        currentSearchTermToSubmit.trim() === ''
+        termToSearch.trim() === '' &&
+        currentSearchType !== SEARCH_TYPES.UNIFIED &&
+        currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED
       ) {
         setReports([]);
         setMaskedReports([]);
         setTotalCount(0);
         setLoading(false);
-        setError(null); // 검색어가 없으면 검색 실행 안 함
+        setError(null);
         return;
       }
 
@@ -117,28 +164,33 @@ function SearchBaseScreen({
       const to = from + ITEMS_PER_PAGE - 1;
 
       let query = supabase
-        .from('masked_scammer_reports') // 주의: 실제 Supabase에 이 view가 있어야 함
+        .from('masked_scammer_reports') // 이 뷰에는 name, nickname, phone_number, account_number 등이 있어야 함
         .select('*', { count: 'exact' });
 
-      // currentSearchTermToSubmit은 실제 제출된 검색어
-      if (currentSearchTermToSubmit) {
-        let orConditions = '';
-        if (searchType === SEARCH_TYPES.UNIFIED) {
-          // 이름 필드 추가 시: name.ilike.%${currentSearchTermToSubmit}%,
-          orConditions = `phone_number.ilike.%${currentSearchTermToSubmit}%,account_number.ilike.%${currentSearchTermToSubmit}%`;
-        } else if (searchType === SEARCH_TYPES.ACCOUNT) {
-          orConditions = `account_number.ilike.%${currentSearchTermToSubmit}%`;
-        } else if (searchType === SEARCH_TYPES.PHONE) {
-          orConditions = `phone_number.ilike.%${currentSearchTermToSubmit}%`;
-        } else if (searchType === SEARCH_TYPES.NUMERIC_UNIFIED) {
-          // 새로운 검색 유형
-          orConditions = `phone_number.ilike.%${currentSearchTermToSubmit}%,account_number.ilike.%${currentSearchTermToSubmit}%`;
+      const trimmedTerm = termToSearch.trim();
+
+      if (trimmedTerm !== '') {
+        let orConditions = [];
+
+        if (currentSearchType === SEARCH_TYPES.UNIFIED) {
+          orConditions.push(`name.ilike.%${trimmedTerm}%`);
+          orConditions.push(`nickname.ilike.%${trimmedTerm}%`); // 닉네임 포함 검색
+          orConditions.push(`phone_number.eq.${trimmedTerm}`); // 전화번호 정확히 일치
+          orConditions.push(`account_number.ilike.%${trimmedTerm}%`); // 계좌번호 포함 검색
+        } else if (currentSearchType === SEARCH_TYPES.ACCOUNT) {
+          orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
+        } else if (currentSearchType === SEARCH_TYPES.PHONE) {
+          orConditions.push(`phone_number.eq.${trimmedTerm}`); // 전화번호 정확히 일치
+        } else if (currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED) {
+          orConditions.push(`phone_number.eq.${trimmedTerm}`); // 전화번호 정확히 일치
+          orConditions.push(`account_number.ilike.%${trimmedTerm}%`); // 계좌번호 포함 검색
         }
 
-        if (orConditions) {
-          query = query.or(orConditions);
+        if (orConditions.length > 0) {
+          query = query.or(orConditions.join(','));
         }
       }
+      // 검색어가 비어있으면 (trimmedTerm === ''), orConditions가 적용되지 않아 전체 데이터 조회
 
       query = query.order('created_at', { ascending: false }).range(from, to);
 
@@ -150,46 +202,44 @@ function SearchBaseScreen({
       } catch (err) {
         setError(`데이터 조회 실패: ${err.message || '알 수 없는 오류'}`);
         setReports([]);
-        setMaskedReports([]); // 에러 시 초기화
-        setTotalCount(0); // 에러 시 초기화
+        setMaskedReports([]);
+        setTotalCount(0);
       } finally {
         setLoading(false);
       }
     },
-    [searchType], // page, submittedSearchTerm는 useEffect 의존성 배열로 이동
+    [currentSearchType],
   );
 
-  // submittedSearchTerm (실제 검색 실행어) 또는 page가 변경될 때 fetchReports 호출
   useEffect(() => {
-    if (submittedSearchTerm) {
-      // submittedSearchTerm이 있을 때만 실행
-      fetchReports(page, submittedSearchTerm);
-    } else {
-      // 검색어가 없으면 목록 비우기
-      setReports([]);
-      setMaskedReports([]);
-      setTotalCount(0);
-      setError(null);
-    }
-  }, [page, submittedSearchTerm, fetchReports]);
+    // 페이지 변경 또는 실제 검색어(submittedSearchTerm) 변경 시 데이터 요청
+    // 초기 로드 시 submittedSearchTerm은 initialSearchTermFromParams를 가지며,
+    // UNIFIED, NUMERIC_UNIFIED 타입은 빈 검색어로도 전체 조회를 실행함.
+    fetchReports(page, submittedSearchTerm);
+  }, [page, submittedSearchTerm, fetchReports]); // currentSearchType은 fetchReports의 의존성이므로 제거
 
   useEffect(() => {
     if (reports.length > 0) {
-      const newMaskedReports = reports.map((item) => ({
-        ...item,
-        phone_number: maskPhoneNumber(item.phone_number),
-        account_number: maskAccountNumber(item.account_number),
-        categoryColor:
-          item.category === '노쇼'
-            ? '#3498db' // Blue
-            : item.category === '보이스피싱'
-              ? '#e74c3c' // Red
-              : item.category === '중고나라 사기'
-                ? '#f39c12' // Orange
-                : item.category === '불법 사채'
-                  ? '#8e44ad' // Purple
-                  : '#34495e', // Default Black/Dark Gray
-      }));
+      const newMaskedReports = reports.map((item) => {
+        const displayName = item.name || item.nickname; // 이름 없으면 닉네임 사용
+        return {
+          ...item,
+          displayName: maskName(displayName), // 마스킹된 이름 (또는 닉네임)
+          // phone_number와 account_number는 DB에서 가져온 원본을 마스킹
+          phone_number_masked: maskPhoneNumber(item.phone_number),
+          account_number_masked: maskAccountNumber(item.account_number),
+          categoryColor:
+            item.category === '노쇼'
+              ? '#3498db'
+              : item.category === '보이스피싱'
+                ? '#e74c3c'
+                : item.category === '중고나라 사기'
+                  ? '#f39c12'
+                  : item.category === '불법 사채'
+                    ? '#8e44ad'
+                    : '#34495e',
+        };
+      });
       setMaskedReports(newMaskedReports);
     } else {
       setMaskedReports([]);
@@ -199,30 +249,19 @@ function SearchBaseScreen({
   const handleSearch = () => {
     Keyboard.dismiss();
     const trimmedTerm = searchTerm.trim();
-    if (trimmedTerm === '') {
-      Alert.alert('검색어 필요', '검색어를 입력해주세요.');
-      setSubmittedSearchTerm(''); // 검색어 초기화
-      setPage(0);
-      return;
-    }
     if (trimmedTerm !== submittedSearchTerm || page !== 0) {
-      setPage(0); // 새 검색 시 첫 페이지로
+      setPage(0);
     }
-    setSubmittedSearchTerm(trimmedTerm); // submittedSearchTerm 업데이트로 useEffect 트리거
+    setSubmittedSearchTerm(trimmedTerm);
   };
 
   const handleClearSearch = () => {
     Keyboard.dismiss();
     setSearchTerm('');
-    setSubmittedSearchTerm(''); // 실제 검색어도 비워야 useEffect에서 목록 초기화
+    setSubmittedSearchTerm(''); // 빈 문자열로 설정하여 useEffect가 전체 목록 또는 빈 목록을 로드하도록 함
     setPage(0);
-    setReports([]); // 즉시 목록 비우기
-    setMaskedReports([]);
-    setTotalCount(0);
-    setError(null);
   };
 
-  // 페이지네이션 핸들러는 동일하게 유지
   const handlePreviousPage = () => {
     if (page > 0) {
       setPage(page - 1);
@@ -232,14 +271,12 @@ function SearchBaseScreen({
   const handleNextPage = () => {
     const lastPage = Math.ceil(totalCount / ITEMS_PER_PAGE) - 1;
     if (page < lastPage && totalCount > (page + 1) * ITEMS_PER_PAGE) {
-      // 다음 페이지에 항목이 있을 때만
       setPage(page + 1);
     }
   };
 
   const renderItem = useCallback(
     ({ item }) => {
-      // 화면 유형에 따른 정보 표시는 기존 로직 유지 또는 NUMERIC_UNIFIED에 맞게 조정
       const commonInfo = (
         <>
           <Text style={styles.itemText}>
@@ -248,27 +285,30 @@ function SearchBaseScreen({
               {item.category || 'N/A'}
             </Text>
           </Text>
-          <Text style={styles.itemText}>이름: {item.name || 'N/A'}</Text>
+          <Text style={styles.itemText}>
+            이름:{' '}
+            <Text style={styles.maskedText}>{item.displayName || 'N/A'}</Text>
+          </Text>
         </>
       );
 
       let screenSpecificInfo;
       if (
-        searchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
-        searchType === SEARCH_TYPES.UNIFIED
+        currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
+        currentSearchType === SEARCH_TYPES.UNIFIED
       ) {
         screenSpecificInfo = (
           <>
             <Text style={styles.itemText}>
               연락처:{' '}
               <Text style={styles.maskedText}>
-                {item.phone_number || 'N/A'}
+                {item.phone_number_masked || 'N/A'}
               </Text>
             </Text>
             <Text style={styles.itemText}>
               계좌:{' '}
               <Text style={styles.maskedText}>
-                {item.account_number || 'N/A'}
+                {item.account_number_masked || 'N/A'}
               </Text>
             </Text>
             {item.description && (
@@ -276,10 +316,34 @@ function SearchBaseScreen({
             )}
           </>
         );
-      } else if (searchType === SEARCH_TYPES.ACCOUNT) {
-        // ...
-      } else if (searchType === SEARCH_TYPES.PHONE) {
-        // ...
+      } else if (currentSearchType === SEARCH_TYPES.ACCOUNT) {
+        screenSpecificInfo = (
+          <>
+            <Text style={styles.itemText}>
+              계좌:{' '}
+              <Text style={styles.maskedText}>
+                {item.account_number_masked || 'N/A'}
+              </Text>
+            </Text>
+            {item.description && (
+              <Text style={styles.itemDesc}>내용: {item.description}</Text>
+            )}
+          </>
+        );
+      } else if (currentSearchType === SEARCH_TYPES.PHONE) {
+        screenSpecificInfo = (
+          <>
+            <Text style={styles.itemText}>
+              연락처:{' '}
+              <Text style={styles.maskedText}>
+                {item.phone_number_masked || 'N/A'}
+              </Text>
+            </Text>
+            {item.description && (
+              <Text style={styles.itemDesc}>내용: {item.description}</Text>
+            )}
+          </>
+        );
       }
 
       return (
@@ -287,50 +351,49 @@ function SearchBaseScreen({
           {commonInfo}
           {screenSpecificInfo}
           <Text style={styles.dateText}>
-            등록일: {new Date(item.created_at).toLocaleDateString()}{' '}
-            {/* 시간 제외하고 날짜만 */}
+            등록일: {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
       );
     },
-    [searchType], // searchType 의존성 추가
+    [currentSearchType], // currentSearchType이 변경될 때 renderItem 재생성
   );
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE)); // 최소 1페이지
+  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
 
-  // 화면 타이틀 설정 (optional)
   useEffect(() => {
-    if (screenTitle && navigation) {
-      navigation.setOptions({ title: screenTitle });
+    if (currentScreenTitle && navigation) {
+      navigation.setOptions({ title: currentScreenTitle });
     }
-  }, [screenTitle, navigation]);
+  }, [currentScreenTitle, navigation]);
 
   return (
     <View style={styles.container}>
-      {/* 검색창은 HomeScreen에서 이미 입력받았으므로 여기서는 표시하지 않거나, 다른 UI 구성 가능 */}
-      {/* 여기서는 route.params로 받은 검색어를 바로 사용 */}
-      {/* <Text style={styles.title}>{screenTitle || '검색 결과'}</Text> */}
-
       <View style={styles.searchBarContainer}>
         <TextInput
           style={styles.searchInput}
           placeholder={
-            searchType === SEARCH_TYPES.UNIFIED
-              ? '이름, 전화번호, 계좌번호 입력'
-              : searchType === SEARCH_TYPES.NUMERIC_UNIFIED
-                ? '연락처 또는 계좌번호 입력'
-                : '검색어 입력'
+            currentSearchType === SEARCH_TYPES.UNIFIED
+              ? '이름, 닉네임, 전화번호(정확히), 계좌번호(포함)'
+              : currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED
+                ? '연락처(정확히) 또는 계좌번호(포함)'
+                : currentSearchType === SEARCH_TYPES.ACCOUNT
+                  ? '계좌번호(포함) 입력'
+                  : currentSearchType === SEARCH_TYPES.PHONE
+                    ? '전화번호(정확히) 입력'
+                    : '검색어 입력'
           }
           value={searchTerm}
           onChangeText={setSearchTerm}
           onSubmitEditing={handleSearch}
           returnKeyType="search"
           keyboardType={
-            searchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
-            searchType === SEARCH_TYPES.PHONE ||
-            searchType === SEARCH_TYPES.ACCOUNT
-              ? 'number-pad'
-              : 'default'
+            currentSearchType === SEARCH_TYPES.PHONE
+              ? 'phone-pad' // PHONE 타입은 전화번호 키패드
+              : currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
+                  currentSearchType === SEARCH_TYPES.ACCOUNT
+                ? 'number-pad' // 숫자/계좌는 숫자 키패드
+                : 'default' // 통합 검색은 일반 키패드
           }
         />
         {searchTerm ? (
@@ -344,16 +407,17 @@ function SearchBaseScreen({
         <TouchableOpacity
           onPress={handleSearch}
           style={styles.searchIconTouchable}
-          disabled={loading || !searchTerm.trim()}
+          disabled={loading}
         >
           <Icon name="magnify" size={28} color="white" />
         </TouchableOpacity>
       </View>
 
-      {loading && <ActivityIndicator size="large" style={styles.loader} />}
       {error && <Text style={styles.errorText}>{error}</Text>}
 
-      {!loading && (
+      {loading ? (
+        <ActivityIndicator size="large" style={styles.loader} />
+      ) : (
         <FlatList
           data={maskedReports}
           renderItem={renderItem}
@@ -362,9 +426,12 @@ function SearchBaseScreen({
             <View style={styles.emptyContainer}>
               <Icon name="alert-circle-outline" size={50} color="#aaa" />
               <Text style={styles.emptyText}>
-                {submittedSearchTerm
+                {submittedSearchTerm.trim() !== '' ||
+                (currentSearchType !== SEARCH_TYPES.UNIFIED &&
+                  currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED &&
+                  submittedSearchTerm.trim() === '')
                   ? '검색 결과가 없습니다.'
-                  : '검색어를 입력하고 검색 버튼을 누르세요.'}
+                  : '등록된 정보가 없습니다.'}
               </Text>
             </View>
           }
@@ -399,20 +466,13 @@ function SearchBaseScreen({
   );
 }
 
+// 스타일은 이전 답변과 동일하게 유지
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 15, // 좌우 패딩
+    paddingHorizontal: 15,
     paddingTop: 15,
     backgroundColor: '#f8f9fa',
-  },
-  title: {
-    // 이 스타일은 SearchBaseScreen 자체에서는 이제 덜 중요할 수 있음
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginVertical: 10,
-    color: '#343a40',
   },
   searchBarContainer: {
     flexDirection: 'row',
@@ -433,20 +493,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#212529',
   },
-  clearButton: {
-    padding: 10,
-  },
+  clearButton: { padding: 10 },
   searchIconTouchable: {
     backgroundColor: '#3d5afe',
     padding: 12,
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
-  },
-  loader: {
-    flex: 1, // 화면 중앙에 표시되도록
+    height: 50,
     justifyContent: 'center',
-    alignItems: 'center',
   },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: {
     color: '#e74c3c',
     textAlign: 'center',
@@ -467,9 +523,9 @@ const styles = StyleSheet.create({
   },
   itemContainer: {
     backgroundColor: '#ffffff',
-    padding: 18, // 패딩 증가
+    padding: 18,
     marginBottom: 12,
-    borderRadius: 10, // 더 둥글게
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#dee2e6',
     shadowColor: '#000',
@@ -478,15 +534,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  itemText: {
-    fontSize: 16, // 폰트 크기 조정
-    marginBottom: 7,
-    color: '#495057',
-    lineHeight: 22, // 줄 간격
-  },
+  itemText: { fontSize: 16, marginBottom: 7, color: '#495057', lineHeight: 22 },
   maskedText: {
-    fontWeight: '600', // 마스킹된 텍스트 강조
-    color: '#343a40',
+    /* 스타일 필요시 추가 */
   },
   itemDesc: {
     fontSize: 14,
@@ -498,7 +548,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   dateText: {
-    fontSize: 12, // 폰트 크기 조정
+    fontSize: 12,
     color: '#adb5bd',
     marginTop: 12,
     textAlign: 'right',
@@ -510,13 +560,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
-    backgroundColor: '#f8f9fa', // 배경색 추가
+    backgroundColor: '#f8f9fa',
   },
-  pageInfoText: {
-    fontSize: 14,
-    color: '#495057',
-    fontWeight: '600',
-  },
+  pageInfoText: { fontSize: 14, color: '#495057', fontWeight: '600' },
 });
 
 export default SearchBaseScreen;
