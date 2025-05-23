@@ -14,8 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native'; // 타입 없이 사용
 // import type { RootStackParamList } from '../../App'; // .js 파일에서는 이 import 불필요
 
-const KOREA_FINANCIAL_CRIME_PREVENTION_CENTER_URL =
-  'https://open.kakao.com/o/gKmnz1Ae';
+const HELP_CENTER_PHONE_NUMBER = '010-9655-1604';
 
 function SettingsScreen() {
   const { user, profile, signOutUser, isLoading: authIsLoading } = useAuth();
@@ -24,6 +23,38 @@ function SettingsScreen() {
   const handleLinkPress = (url) => {
     Linking.openURL(url).catch((err) =>
       Alert.alert('오류', '링크를 열 수 없습니다: ' + err.message),
+    );
+  };
+
+  const handleHelpCenterPress = () => {
+    Alert.alert(
+      '헬프센터 연결',
+      `${HELP_CENTER_PHONE_NUMBER}\n어떤 방법으로 연결하시겠습니까?`,
+      [
+        {
+          text: '전화걸기',
+          onPress: () => {
+            Linking.openURL(`tel:${HELP_CENTER_PHONE_NUMBER}`).catch((err) =>
+              Alert.alert('오류', '전화 앱을 열 수 없습니다.'),
+            );
+          },
+        },
+        {
+          text: '문자보내기',
+          onPress: () => {
+            // iOS와 Android에서 SMS body 파라미터 처리가 다를 수 있음
+            const separator = Platform.OS === 'ios' ? '&' : '?';
+            Linking.openURL(
+              `sms:${HELP_CENTER_PHONE_NUMBER}${separator}body=`,
+            ).catch((err) => Alert.alert('오류', '문자 앱을 열 수 없습니다.'));
+          },
+        },
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true },
     );
   };
 
@@ -53,8 +84,7 @@ function SettingsScreen() {
       id: 'helpCenter',
       title: '헬프센터 (한국금융범죄예방연구센터)',
       icon: 'face-agent',
-      action: () =>
-        handleLinkPress(KOREA_FINANCIAL_CRIME_PREVENTION_CENTER_URL),
+      action: () => handleHelpCenterPress(),
       requiresAuth: false,
     },
     {

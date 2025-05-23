@@ -22,6 +22,7 @@
     "react": "19.0.0",
     "react-native": "0.79.1",
     "react-native-get-random-values": "^1.11.0",
+    "react-native-image-picker": "^8.2.1",
     "react-native-paper": "^5.13.3",
     "react-native-picker-select": "^9.3.1",
     "react-native-quick-crypto": "^0.7.13",

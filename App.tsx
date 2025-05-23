@@ -9,12 +9,14 @@ import {
   StyleSheet,
   Text,
   ActivityIndicator,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import {
   NavigationContainer,
   EventArg,
   useNavigation,
-} from '@react-navigation/native';
+} from '@react-navigation/native'; // NavigationProp 제거 (필요시 개별적으로 사용)
 import {
   createNativeStackNavigator,
   NativeStackNavigationProp,
@@ -39,6 +41,12 @@ import ChatScreen from './src/screens/ChatScreen';
 import CommunityListScreen from './src/screens/CommunityListScreen';
 import CommunityPostDetailScreen from './src/screens/CommunityPostDetailScreen';
 import CommunityPostCreateScreen from './src/screens/CommunityPostCreateScreen';
+import ReviewListScreen from './src/screens/ReviewListScreen';
+import ReviewDetailScreen from './src/screens/ReviewDetailScreen';
+import ReviewCreateScreen from './src/screens/ReviewCreateScreen';
+import IncidentPhotoListScreen from './src/screens/IncidentPhotoListScreen';
+import IncidentPhotoDetailScreen from './src/screens/IncidentPhotoDetailScreen';
+// import AdminIncidentPhotoCreateScreen from './src/screens/AdminIncidentPhotoCreateScreen';
 
 export type RootStackParamList = {
   MainApp: undefined;
@@ -58,6 +66,13 @@ export type RootStackParamList = {
   ArrestNews: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  // 새로운 스크린 타입 정의
+  ReviewList: undefined;
+  ReviewDetail: { reviewId: number; reviewTitle: string };
+  ReviewCreate: undefined;
+  IncidentPhotoList: undefined;
+  IncidentPhotoDetail: { photoId: number; photoTitle: string };
+  // AdminIncidentPhotoCreate: undefined; // 관리자 기능 (필요시)
 };
 
 export type CommunityStackParamList = {
@@ -66,13 +81,20 @@ export type CommunityStackParamList = {
   CommunityPostCreate: undefined;
 };
 
+// Review 스택을 위한 타입 (CommunityStack과 유사하게)
+export type ReviewStackParamList = {
+  ReviewList: undefined;
+  ReviewDetail: { reviewId: number; reviewTitle: string };
+  ReviewCreate: undefined;
+};
+
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const CommunityNativeStack =
   createNativeStackNavigator<CommunityStackParamList>();
+const ReviewNativeStack = createNativeStackNavigator<ReviewStackParamList>(); // Review 스택용
 const Tab = createBottomTabNavigator();
 
-const KOREA_FINANCIAL_CRIME_PREVENTION_CENTER_URL =
-  'https://open.kakao.com/o/gKmnz1Ae';
+const HELP_CENTER_PHONE_NUMBER = '010-9655-1604';
 
 function CommunityStack() {
   return (
@@ -98,7 +120,64 @@ function CommunityStack() {
   );
 }
 
+// Review 스택 네비게이터 함수
+function ReviewStack() {
+  return (
+    <ReviewNativeStack.Navigator id={undefined} initialRouteName="ReviewList">
+      <ReviewNativeStack.Screen
+        name="ReviewList"
+        component={ReviewListScreen}
+        options={{ title: '크레디톡 후기' }}
+      />
+      <ReviewNativeStack.Screen
+        name="ReviewDetail"
+        component={ReviewDetailScreen}
+      />
+      <ReviewNativeStack.Screen
+        name="ReviewCreate"
+        component={ReviewCreateScreen}
+        options={{ title: '후기 작성' }}
+      />
+    </ReviewNativeStack.Navigator>
+  );
+}
+
 function MainTabs() {
+  const rootNavigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const handleHelpCenterPress = () => {
+    Alert.alert(
+      '헬프센터 연결',
+      `${HELP_CENTER_PHONE_NUMBER}\n어떤 방법으로 연결하시겠습니까?`,
+      [
+        {
+          text: '전화걸기',
+          onPress: () => {
+            Linking.openURL(`tel:${HELP_CENTER_PHONE_NUMBER}`).catch((err) =>
+              Alert.alert('오류', '전화 앱을 열 수 없습니다.'),
+            );
+          },
+        },
+        {
+          text: '문자보내기',
+          onPress: () => {
+            // iOS와 Android에서 SMS body 파라미터 처리가 다를 수 있음
+            const separator = Platform.OS === 'ios' ? '&' : '?';
+            Linking.openURL(
+              `sms:${HELP_CENTER_PHONE_NUMBER}${separator}body=`,
+            ).catch((err) => Alert.alert('오류', '문자 앱을 열 수 없습니다.'));
+          },
+        },
+        {
+          text: '취소',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true },
+    );
+  };
+
   return (
     <Tab.Navigator
       id={undefined}
@@ -154,14 +233,12 @@ function MainTabs() {
       />
       <Tab.Screen
         name="HelpCenterTab"
-        component={View} // Dummy
+        component={View}
         options={{ title: '헬프센터' }}
         listeners={{
           tabPress: (e: EventArg<'tabPress', true, undefined>) => {
             e.preventDefault();
-            Linking.openURL(KOREA_FINANCIAL_CRIME_PREVENTION_CENTER_URL).catch(
-              (err) => console.error("Couldn't open link", err),
-            );
+            handleHelpCenterPress();
           },
         }}
       />
@@ -218,6 +295,30 @@ function AppNavigator() {
             component={ArrestNewsScreen}
             options={{ title: '검거소식' }}
           />
+          <RootStack.Screen
+            name="ReviewList"
+            component={ReviewListScreen}
+            options={{ title: '크레디톡 후기' }}
+          />
+          <RootStack.Screen
+            name="ReviewDetail"
+            component={ReviewDetailScreen}
+          />
+          <RootStack.Screen
+            name="ReviewCreate"
+            component={ReviewCreateScreen}
+            options={{ title: '후기 작성' }}
+          />
+          <RootStack.Screen
+            name="IncidentPhotoList"
+            component={IncidentPhotoListScreen}
+            options={{ title: '사건 사진자료' }}
+          />
+          <RootStack.Screen
+            name="IncidentPhotoDetail"
+            component={IncidentPhotoDetailScreen}
+          />
+          {/* <RootStack.Screen name="AdminIncidentPhotoCreate" component={AdminIncidentPhotoCreateScreen} options={{ title: '사진자료 등록(관리자)' }} /> */}
         </>
       ) : (
         <>
