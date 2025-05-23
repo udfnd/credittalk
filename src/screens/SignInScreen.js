@@ -17,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 
 function SignInScreen() {
   const navigation = useNavigation();
-  const { signInWithEmail, isLoading: authIsLoading } = useAuth();
+  const { signInWithEmail } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,13 +31,43 @@ function SignInScreen() {
     }
 
     setIsSubmitting(true);
-    const result = await signInWithEmail(email.trim(), password);
-    setIsSubmitting(false);
+    console.log('[SignInScreen] Calling signInWithEmail for:', email);
+    try {
+      const result = await signInWithEmail(email.trim(), password);
+      console.log('[SignInScreen] Result from signInWithEmail:', result);
 
-    if (result.success) {
-      // 성공 시 AuthContext의 onAuthStateChange가 화면 전환 처리
+      if (result.success) {
+        // 성공 시 AuthContext의 onAuthStateChange 리스너가
+        // user 상태 업데이트 및 AppNavigator의 화면 전환을 처리합니다.
+        // 여기서 별도의 네비게이션이나 Alert는 필요 없을 수 있습니다.
+        // Alert.alert('로그인 성공', `${result.user.email}님 환영합니다!`);
+      } else {
+        // signInWithEmail 내부에서 Alert를 이미 호출했을 수 있으므로,
+        // 여기서는 추가적인 UI 피드백만 제공하거나, result.error를 사용하여
+        // 더 구체적인 오류 메시지를 표시할 수 있습니다.
+        if (result.error && result.error.message) {
+          Alert.alert('로그인 실패', result.error.message);
+        } else {
+          Alert.alert('로그인 실패', '알 수 없는 오류가 발생했습니다.');
+        }
+      }
+    } catch (unexpectedError) {
+      // signInWithEmail이 {success: false, error}를 반환하도록 설계되었으므로,
+      // 이 catch 블록은 signInWithEmail 함수 자체의 예외 또는 네트워크 문제 등 예기치 않은 상황에 도달.
+      console.error(
+        '[SignInScreen] Unexpected error during handleSignIn:',
+        unexpectedError,
+      );
+      Alert.alert(
+        '로그인 오류',
+        '예상치 못한 오류가 발생했습니다. 네트워크 연결을 확인해주세요.',
+      );
+    } finally {
+      setIsSubmitting(false);
+      console.log(
+        '[SignInScreen] handleSignIn finished, isSubmitting set to false',
+      );
     }
-    // 실패 시 Alert는 AuthContext 내부에서 처리
   };
 
   return (
@@ -55,7 +85,8 @@ function SignInScreen() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
-          autoComplete="email"
+          autoCompleteType="email" // RN 0.62 이상, 'email'로 변경
+          textContentType="emailAddress" // iOS 자동완성
         />
         <TextInput
           style={styles.input}
@@ -64,9 +95,11 @@ function SignInScreen() {
           onChangeText={setPassword}
           secureTextEntry
           autoCapitalize="none"
+          autoCompleteType="password" // 'password'로 변경
+          textContentType="password" // iOS 자동완성
         />
 
-        {isSubmitting || authIsLoading ? (
+        {isSubmitting ? (
           <ActivityIndicator
             size="large"
             color="#3d5afe"
@@ -127,7 +160,10 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   spinner: {
-    marginVertical: Platform.OS === 'ios' ? 18 : 19, // 버튼 높이와 유사하게
+    height: 50, // 버튼의 대략적인 높이와 유사하게
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Platform.OS === 'ios' ? 0 : 0, // Button 컴포넌트와의 간격 통일성
   },
 });
 

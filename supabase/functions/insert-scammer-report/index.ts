@@ -5,17 +5,17 @@ import {
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
-// 입력 데이터 타입 정의 업데이트
 interface ReportData {
-  name: string; // 필수
-  phone_number: string; // 필수 (조합된 문자열)
-  account_number: string; // 필수
-  national_id: string; // 필수 (조합된 문자열)
+  name?: string | null; // 선택 사항으로 변경
+  phone_number?: string | null; // 선택 사항으로 변경
+  account_number?: string | null; // 선택 사항으로 변경
+  national_id?: string | null; // 선택 사항으로 변경
   category: string; // 필수
-  address: string; // 필수
+  address?: string | null; // 선택 사항으로 변경
   scam_report_source: string; // 사기 경로 (필수)
   company_type: string; // 법인/개인 (필수)
-  description?: string; // 선택
+  description?: string | null;
+  nickname?: string | null; // 닉네임 추가 (선택 사항)
 }
 
 async function encryptAndInsert(
@@ -24,7 +24,7 @@ async function encryptAndInsert(
   clientIp?: string,
 ) {
   const encrypt = async (value?: string | null): Promise<string | null> => {
-    if (!value) return null;
+    if (!value || value.trim() === '') return null; // 빈 문자열도 null로 처리하여 암호화 안 함
     const { data, error } = await supabaseAdminClient.rpc('encrypt_secret', {
       data: value,
     });
@@ -37,12 +37,15 @@ async function encryptAndInsert(
     return String(data);
   };
 
+  // 암호화할 필드들만 선택적으로 암호화
   const encryptedData = {
     name: await encrypt(reportData.name),
     phone_number: await encrypt(reportData.phone_number),
     account_number: await encrypt(reportData.account_number),
     national_id: await encrypt(reportData.national_id),
     address: await encrypt(reportData.address),
+    // 닉네임도 암호화가 필요하다면 추가
+    // nickname: await encrypt(reportData.nickname),
   };
 
   const { error: insertError } = await supabaseAdminClient
@@ -53,10 +56,11 @@ async function encryptAndInsert(
       account_number: encryptedData.account_number,
       national_id: encryptedData.national_id,
       address: encryptedData.address,
-      category: reportData.category,
-      scam_report_source: reportData.scam_report_source,
-      company_type: reportData.company_type,
+      category: reportData.category, // 필수
+      scam_report_source: reportData.scam_report_source, // 필수
+      company_type: reportData.company_type, // 필수
       description: reportData.description || null,
+      nickname: reportData.nickname || null, // 닉네임 추가
       ip_address: clientIp || null,
     });
 
@@ -74,11 +78,23 @@ serve(async (req: Request) => {
 
   try {
     if (!req.body) {
-      throw new Error('Invalid request: Missing request body.');
+      return new Response(
+        JSON.stringify({ error: 'Invalid request: Missing request body.' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      );
     }
     if (!req.headers.get('content-type')?.includes('application/json')) {
-      throw new Error(
-        'Invalid request: Content-Type must be application/json.',
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid request: Content-Type must be application/json.',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 415, // Unsupported Media Type
+        },
       );
     }
 
@@ -86,37 +102,66 @@ serve(async (req: Request) => {
     try {
       reportData = (await req.json()) as ReportData;
     } catch (jsonError) {
-      throw new Error(
-        `Invalid request: Failed to parse JSON body. ${jsonError.message}`,
+      return new Response(
+        JSON.stringify({
+          error: `Invalid request: Failed to parse JSON body. ${jsonError.message}`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
       );
     }
 
+    // 필수 필드 검사: category, scam_report_source, company_type만 필수로 남김
     const requiredFields: (keyof ReportData)[] = [
-      'name',
-      'phone_number',
-      'account_number',
-      'national_id',
       'category',
-      'address',
-      'scam_report_source', // 필수 추가
-      'company_type', // 필수 추가
+      'scam_report_source',
+      'company_type',
     ];
-    const missingFields = requiredFields.filter((field) => !reportData[field]);
+    const missingFields = requiredFields.filter((field) => {
+      const value = reportData[field];
+      // undefined, null, 빈 문자열을 모두 누락으로 간주 (필수 항목에 대해서)
+      return (
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && value.trim() === '')
+      );
+    });
 
     if (missingFields.length > 0) {
-      throw new Error(
-        `Invalid request: Missing required fields: ${missingFields.join(', ')}.`,
+      return new Response(
+        JSON.stringify({
+          error: `Invalid request: Missing required fields: ${missingFields.join(', ')}.`,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
       );
     }
 
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim();
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
     if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error('Server configuration error.');
+      console.error(
+        'Server configuration error: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.',
+      );
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error.' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500,
+        },
+      );
     }
 
-    const supabaseAdminClient = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false }, // 서버리스 함수에서는 세션 유지 불필요
+    });
+
     const result = await encryptAndInsert(
       supabaseAdminClient,
       reportData,
@@ -127,11 +172,19 @@ serve(async (req: Request) => {
       status: 200,
     });
   } catch (error: any) {
+    console.error('Function Error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     let status = 500;
 
-    if (errorMessage.includes('Invalid request')) {
-      status = 400;
+    if (
+      errorMessage.includes('Invalid request') ||
+      errorMessage.includes('Encryption failed') ||
+      errorMessage.includes('Database insert failed')
+    ) {
+      status = 400; // 클라이언트 요청 오류 또는 내부 처리 오류로 인한 Bad Request
+    }
+    if (errorMessage.includes('Server configuration error')) {
+      status = 500;
     }
 
     return new Response(JSON.stringify({ error: errorMessage }), {
