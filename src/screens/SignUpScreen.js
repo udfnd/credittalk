@@ -87,16 +87,7 @@ function SignUpScreen() {
     );
     setIsSubmitting(false);
 
-    if (result.success) {
-      // 성공 시 AuthContext의 onAuthStateChange가 화면 전환을 처리
-      // Supabase에서 이메일 확인을 요구하는 경우, 사용자에게 알림
-      Alert.alert(
-        '회원가입 요청됨',
-        '가입 확인을 위해 이메일을 확인해주세요. (실제 이메일 전송은 Supabase 설정에 따름)',
-      );
-      navigation.navigate('SignIn'); // 로그인 화면으로 이동하여 로그인 유도
-    }
-    // 실패 시 Alert는 AuthContext 내부에서 처리
+    if (result.success) navigation.navigate('SignIn');
   };
 
   return (
