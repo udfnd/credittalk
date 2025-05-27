@@ -6,16 +6,23 @@ import {
 import { corsHeaders } from '../_shared/cors.ts';
 
 interface ReportData {
-  name?: string | null; // 선택 사항으로 변경
-  phone_number?: string | null; // 선택 사항으로 변경
-  account_number?: string | null; // 선택 사항으로 변경
-  national_id?: string | null; // 선택 사항으로 변경
+  name?: string | null;
+  phone_number?: string | null;
+  account_number?: string | null;
+  national_id?: string | null;
   category: string; // 필수
-  address?: string | null; // 선택 사항으로 변경
+  address?: string | null;
   scam_report_source: string; // 사기 경로 (필수)
   company_type: string; // 법인/개인 (필수)
-  description?: string | null;
-  nickname?: string | null; // 닉네임 추가 (선택 사항)
+  description?: string | null; // 사건 개요
+  nickname?: string | null;
+
+  // 새로 추가된 필드
+  perpetrator_dialogue_trigger?: string | null;
+  perpetrator_contact_path?: string | null;
+  victim_circumstances?: string[] | null; // 체크박스, 배열로 받음
+  traded_item_category?: string | null;
+  perpetrator_identified?: boolean | null; // true, false, 또는 null
 }
 
 async function encryptAndInsert(
@@ -24,7 +31,7 @@ async function encryptAndInsert(
   clientIp?: string,
 ) {
   const encrypt = async (value?: string | null): Promise<string | null> => {
-    if (!value || value.trim() === '') return null; // 빈 문자열도 null로 처리하여 암호화 안 함
+    if (!value || value.trim() === '') return null;
     const { data, error } = await supabaseAdminClient.rpc('encrypt_secret', {
       data: value,
     });
@@ -37,15 +44,14 @@ async function encryptAndInsert(
     return String(data);
   };
 
-  // 암호화할 필드들만 선택적으로 암호화
   const encryptedData = {
     name: await encrypt(reportData.name),
     phone_number: await encrypt(reportData.phone_number),
     account_number: await encrypt(reportData.account_number),
     national_id: await encrypt(reportData.national_id),
     address: await encrypt(reportData.address),
-    // 닉네임도 암호화가 필요하다면 추가
-    // nickname: await encrypt(reportData.nickname),
+    // perpetrator_dialogue_trigger, perpetrator_contact_path, traded_item_category는
+    // 민감도에 따라 암호화 여부 결정 (현재는 암호화하지 않음)
   };
 
   const { error: insertError } = await supabaseAdminClient
@@ -56,12 +62,19 @@ async function encryptAndInsert(
       account_number: encryptedData.account_number,
       national_id: encryptedData.national_id,
       address: encryptedData.address,
-      category: reportData.category, // 필수
-      scam_report_source: reportData.scam_report_source, // 필수
-      company_type: reportData.company_type, // 필수
-      description: reportData.description || null,
-      nickname: reportData.nickname || null, // 닉네임 추가
+      category: reportData.category,
+      scam_report_source: reportData.scam_report_source,
+      company_type: reportData.company_type,
+      description: reportData.description || null, // 사건 개요
+      nickname: reportData.nickname || null,
       ip_address: clientIp || null,
+      // 새로 추가된 필드 삽입
+      perpetrator_dialogue_trigger:
+        reportData.perpetrator_dialogue_trigger || null,
+      perpetrator_contact_path: reportData.perpetrator_contact_path || null,
+      victim_circumstances: reportData.victim_circumstances || null, // 배열 또는 null
+      traded_item_category: reportData.traded_item_category || null,
+      perpetrator_identified: reportData.perpetrator_identified, // boolean 또는 null
     });
 
   if (insertError) {
@@ -93,7 +106,7 @@ serve(async (req: Request) => {
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 415, // Unsupported Media Type
+          status: 415,
         },
       );
     }
@@ -113,21 +126,28 @@ serve(async (req: Request) => {
       );
     }
 
-    // 필수 필드 검사: category, scam_report_source, company_type만 필수로 남김
+    // 필수 필드 검사 (기존 + 가해자 특정 여부)
     const requiredFields: (keyof ReportData)[] = [
       'category',
       'scam_report_source',
       'company_type',
+      // 'perpetrator_identified', // perpetrator_identified는 boolean이라 null 체크로 확인
     ];
     const missingFields = requiredFields.filter((field) => {
       const value = reportData[field];
-      // undefined, null, 빈 문자열을 모두 누락으로 간주 (필수 항목에 대해서)
       return (
         value === undefined ||
         value === null ||
         (typeof value === 'string' && value.trim() === '')
       );
     });
+
+    if (
+      reportData.perpetrator_identified === undefined ||
+      reportData.perpetrator_identified === null
+    ) {
+      missingFields.push('perpetrator_identified');
+    }
 
     if (missingFields.length > 0) {
       return new Response(
@@ -159,7 +179,7 @@ serve(async (req: Request) => {
     }
 
     const supabaseAdminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false }, // 서버리스 함수에서는 세션 유지 불필요
+      auth: { persistSession: false },
     });
 
     const result = await encryptAndInsert(
@@ -181,7 +201,7 @@ serve(async (req: Request) => {
       errorMessage.includes('Encryption failed') ||
       errorMessage.includes('Database insert failed')
     ) {
-      status = 400; // 클라이언트 요청 오류 또는 내부 처리 오류로 인한 Bad Request
+      status = 400;
     }
     if (errorMessage.includes('Server configuration error')) {
       status = 500;

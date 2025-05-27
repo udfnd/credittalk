@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   TextInput,
@@ -11,20 +11,34 @@ import {
   Platform,
   Keyboard,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient'; //
 
-const categories = [
-  '노쇼',
-  '불법 사채',
-  '보이스피싱',
-  '중고나라 사기',
-  '사기',
-  '전세 사기',
-  '알바 사기',
-  '절도',
-]; //
+const companyTypes = ['법인', '개인'];
+
+// --- 수정된 카테고리 정의 ---
+const individualCategories = [
+  // 개인 선택 시
+  '보이스피싱, 전기통신금융사기, 로맨스 스캠 사기', // A
+  '불법사금융 대리구매', // B
+  '중고나라 사기', // C
+  '투자 사기, 전세 사기', // D
+  '게임 비실물', // E
+  '암호화폐', // F
+  '기타', // G
+];
+
+const corporateCategories = [
+  // 법인 선택 시
+  '노쇼 대리구매 사기', // A
+  '공갈 협박 범죄', // B
+  '알바 범죄', // C
+  '렌탈 사업', // D
+  '기타', // E
+];
+// --- 수정된 카테고리 정의 끝 ---
 
 const scamReportSources = [
   '지인소개',
@@ -32,9 +46,153 @@ const scamReportSources = [
   '문자',
   '카톡',
   '텔레그램',
-]; //
+];
 
-const companyTypes = ['법인', '개인']; //
+const victimCircumstanceOptions = [
+  '불법 추심',
+  '과도한 이자 갈취',
+  '폭력',
+  '성폭력',
+  '기타',
+];
+
+const itemCategories = [
+  {
+    name: 'MP3/PMP/전자사전',
+    image: require('../assets/images/items/MP3_PMP_전자사전.png'),
+  },
+  {
+    name: '휴대폰/주변기기',
+    image: require('../assets/images/items/휴대폰_주변기기.png'),
+  },
+  { name: '화폐', image: require('../assets/images/items/화폐.png') },
+  {
+    name: '피싱/대출/계약',
+    image: require('../assets/images/items/피싱_대출_계약.png'),
+  },
+  {
+    name: '패션/의류',
+    image: require('../assets/images/items/패션_의류.png'),
+  },
+  {
+    name: '티켓/상품권',
+    image: require('../assets/images/items/티켓_상품권.png'),
+  },
+  {
+    name: '태블릿/노트북',
+    image: require('../assets/images/items/태블릿_노트북.png'),
+  },
+  {
+    name: '컴퓨터/주변기기',
+    image: require('../assets/images/items/컴퓨터_주변기기.png'),
+  },
+  {
+    name: '카메라/주변기기',
+    image: require('../assets/images/items/카메라_주변기기.png'),
+  },
+  {
+    name: '취미/인형/피규어',
+    image: require('../assets/images/items/취미_인형_피규어.png'),
+  },
+  {
+    name: '자동차/바이크',
+    image: require('../assets/images/items/자동차_바이크.png'),
+  },
+  {
+    name: '음악/영화/주변기기',
+    image: require('../assets/images/items/음악_영화_주변기기.png'),
+  },
+  {
+    name: '유아동/출산',
+    image: require('../assets/images/items/유아동_출산.png'),
+  },
+  {
+    name: '액세서리/귀금속',
+    image: require('../assets/images/items/액세서리_귀금속.png'),
+  },
+  {
+    name: '안경/선글라스',
+    image: require('../assets/images/items/안경_선글라스.png'),
+  },
+  { name: '신발', image: require('../assets/images/items/신발.png') },
+  {
+    name: '식품/음료/의약품',
+    image: require('../assets/images/items/식품_음료_의약품.png'),
+  },
+  { name: '시계', image: require('../assets/images/items/시계.png') },
+  {
+    name: '스포츠/레저/운동',
+    image: require('../assets/images/items/스포츠_레저_운동.png'),
+  },
+  {
+    name: '소프트웨어',
+    image: require('../assets/images/items/소프트웨어.png'),
+  },
+  {
+    name: '성인/사행성',
+    image: require('../assets/images/items/성인_사행성.png'),
+  },
+  {
+    name: '생활/주방/욕실용품',
+    image: require('../assets/images/items/생활_주방_욕실용품.png'),
+  },
+  {
+    name: '뷰티/미용/화장품',
+    image: require('../assets/images/items/뷰티_미용_화장품.png'),
+  },
+  {
+    name: '배송비',
+    image: require('../assets/images/items/배송비.png'),
+  },
+  {
+    name: '문구/사무/소모품',
+    image: require('../assets/images/items/문구_사무_소모품.png'),
+  },
+  {
+    name: '동물/생물/식물/용품',
+    image: require('../assets/images/items/동물_생물_식물_용품.png'),
+  },
+  {
+    name: '도서/학습',
+    image: require('../assets/images/items/도서_학습.png'),
+  },
+  { name: '기타', image: require('../assets/images/items/기타.png') },
+  {
+    name: '공구/중장비/농기구',
+    image: require('../assets/images/items/공구_중장비_농기구.png'),
+  },
+  {
+    name: '게임기/주변기기',
+    image: require('../assets/images/items/게임기_주변기기.png'),
+  },
+  {
+    name: '가전/전자제품',
+    image: require('../assets/images/items/가전_전자제품.png'),
+  },
+  {
+    name: '가방/지갑/잡화',
+    image: require('../assets/images/items/가방_지갑_잡화.png'),
+  },
+  {
+    name: '가구/인테리어',
+    image: require('../assets/images/items/가구_인테리어.png'),
+  },
+];
+
+const gameItemCategories = [
+  {
+    name: '게임 아이템',
+    image: require('../assets/images/gameItems/게임_아이템.png'),
+  },
+  {
+    name: '아이디 계정',
+    image: require('../assets/images/gameItems/아이디_계정.png'),
+  },
+  {
+    name: '포인트 마일리지',
+    image: require('../assets/images/gameItems/포인트_마일리지.png'),
+  },
+];
 
 function ReportScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -48,9 +206,46 @@ function ReportScreen({ navigation }) {
   const [phoneLast, setPhoneLast] = useState('');
   const [nationalIdFront, setNationalIdFront] = useState('');
   const [nationalIdBack, setNationalIdBack] = useState('');
-  const [description, setDescription] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [address, setAddress] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentCategories, setCurrentCategories] = useState([]);
+
+  const [perpetratorDialogueTrigger, setPerpetratorDialogueTrigger] =
+    useState('');
+  const [perpetratorContactPath, setPerpetratorContactPath] = useState('');
+  // --- 수정: victimCircumstances는 단일 텍스트 상태로 통합 ---
+  const [victimCircumstances, setVictimCircumstances] = useState('');
+  const [showVictimCircumstanceTextInput, setShowVictimCircumstanceTextInput] =
+    useState(false); // '기타 직접입력' 선택 시 TextInput 표시 여부
+  // --- 수정 끝 ---
+  const [tradedItemCategory, setTradedItemCategory] = useState('');
+  const [isPerpetratorIdentified, setIsPerpetratorIdentified] = useState(null);
+  const [caseSummary, setCaseSummary] = useState('');
+
+  useEffect(() => {
+    if (companyType === '개인') {
+      setCurrentCategories(individualCategories);
+    } else if (companyType === '법인') {
+      setCurrentCategories(corporateCategories);
+    } else {
+      setCurrentCategories([]);
+    }
+    setCategory('');
+    setPerpetratorDialogueTrigger('');
+    setPerpetratorContactPath('');
+    setVictimCircumstances(''); // 초기화
+    setShowVictimCircumstanceTextInput(false); // 초기화
+    setTradedItemCategory('');
+    setCaseSummary('');
+  }, [companyType]);
+
+  useEffect(() => {
+    setPerpetratorDialogueTrigger('');
+    setPerpetratorContactPath('');
+    setVictimCircumstances(''); // 카테고리 변경 시 피해 정황 초기화
+    setShowVictimCircumstanceTextInput(false); // 초기화
+    setTradedItemCategory('');
+  }, [category]);
 
   const clearInputs = () => {
     setName('');
@@ -64,153 +259,509 @@ function ReportScreen({ navigation }) {
     setPhoneLast('');
     setNationalIdFront('');
     setNationalIdBack('');
-    setDescription('');
     setAddress('');
-  }; //
+    setPerpetratorDialogueTrigger('');
+    setPerpetratorContactPath('');
+    setVictimCircumstances('');
+    setShowVictimCircumstanceTextInput(false);
+    setTradedItemCategory('');
+    setIsPerpetratorIdentified(null);
+    setCaseSummary('');
+  };
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
 
-    // 필수 항목 검사: 체크박스/선택 항목들만 필수로 남김
     if (
-      !category || // 카테고리는 필수
-      !scamReportSource || // 사기 경로도 필수
-      !companyType // 법인/개인도 필수
+      !companyType ||
+      !category ||
+      !scamReportSource ||
+      isPerpetratorIdentified === null
+    ) {
+      Alert.alert('입력 오류', '필수 항목을 모두 입력/선택해주세요.');
+      return;
+    }
+
+    // "개인 - 불법사금융 대리구매" 또는 "법인 - 기타" 이면서 "기타 직접입력"이 선택되었지만, 텍스트가 비어있는 경우
+    const isCheckboxCircumstance =
+      category === individualCategories[1] ||
+      category === corporateCategories[4];
+    if (
+      isCheckboxCircumstance &&
+      victimCircumstances.includes('기타 직접입력') &&
+      victimCircumstances.replace('기타 직접입력', '').trim() === ''
     ) {
       Alert.alert(
         '입력 오류',
-        '카테고리, 사기 경로, 법인/개인 유형은 반드시 선택해주세요.',
+        '피해 정황 "기타 직접입력"을 선택하신 경우, 상세 내용을 입력해주세요.',
       );
       return;
     }
 
-    // 전화번호와 주민번호는 일부만 입력되었을 경우 경고 또는 처리 (선택적)
+    setIsLoading(true);
     const fullPhoneNumber =
       phonePrefix || phoneMiddle || phoneLast
-        ? phonePrefix + phoneMiddle + phoneLast
+        ? `${phonePrefix}${phoneMiddle}${phoneLast}`
         : null;
     const fullNationalId =
       nationalIdFront || nationalIdBack
-        ? nationalIdFront + nationalIdBack
+        ? `${nationalIdFront}${nationalIdBack}`
         : null;
 
-    // 전화번호가 입력된 경우, 전체 길이가 유효한지 확인 (선택적 강화)
-    if (
-      fullPhoneNumber &&
-      (fullPhoneNumber.length < 9 || fullPhoneNumber.length > 11) &&
-      !/^\d+$/.test(fullPhoneNumber)
-    ) {
-      // (정규식으로 숫자만 있는지 확인도 가능)
-      // Alert.alert('입력 오류', '연락처를 올바르게 입력해주세요 (9~11자리 숫자).');
-      // return;
-      // 선택 사항이므로, 여기서는 경고 없이 진행하거나 더 유연하게 처리
-    }
-    // 주민번호가 입력된 경우, 전체 길이가 유효한지 확인 (선택적 강화)
-    if (
-      fullNationalId &&
-      fullNationalId.length !== 13 &&
-      !/^\d+$/.test(fullNationalId)
-    ) {
-      // Alert.alert('입력 오류', '주민등록번호는 13자리 숫자로 입력해주세요.');
-      // return;
-    }
-
-    setIsLoading(true);
     const reportData = {
-      name: name.trim() || null, // 빈 문자열이면 null로
+      name: name.trim() || null,
       nickname: nickname.trim() || null,
       phone_number: fullPhoneNumber,
       account_number: accountNumber.trim() || null,
       national_id: fullNationalId,
-      category, // 필수
-      scam_report_source: scamReportSource, // 필수
-      company_type: companyType, // 필수
+      category,
+      scam_report_source: scamReportSource,
+      company_type: companyType,
       address: address.trim() || null,
-      description: description.trim() || null,
+      description: caseSummary.trim() || null,
+      perpetrator_dialogue_trigger: perpetratorDialogueTrigger.trim() || null,
+      perpetrator_contact_path: perpetratorContactPath.trim() || null,
+      victim_circumstances: victimCircumstances.trim() || null, // 단일 텍스트로 저장
+      traded_item_category: tradedItemCategory || null,
+      perpetrator_identified: isPerpetratorIdentified,
     };
 
     try {
-      const { data, error } = await supabase.functions.invoke(
+      const { error } = await supabase.functions.invoke(
         'insert-scammer-report',
         { body: reportData },
       );
       if (error) {
-        throw error;
+        const errorMessage =
+          error.context?.errorMessage || error.message || '알 수 없는 오류';
+        throw new Error(errorMessage);
       }
       Alert.alert('등록 완료', '사기 정보가 성공적으로 등록되었습니다.');
       clearInputs();
       navigation.goBack();
     } catch (invokeError) {
-      console.error('등록 실패:', invokeError);
-      const message =
-        invokeError?.data?.error || // Edge function에서 반환된 에러 메시지 확인
-        invokeError?.details ||
-        invokeError?.message ||
-        '알 수 없는 오류';
-      Alert.alert('등록 실패', `오류 발생: ${message}`);
+      Alert.alert('등록 실패', `오류 발생: ${invokeError.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCategoryChange = (categoryName) => {
-    if (category === categoryName) {
-      setCategory('');
-    } else {
-      setCategory(categoryName);
-    }
-  }; //
+  const handleCategoryChange = (selectedCategory) => {
+    setCategory(category === selectedCategory ? '' : selectedCategory);
+  };
 
   const handleScamReportSourceChange = (source) => {
-    setScamReportSource(source); // 단일 선택이므로 바로 설정
-  }; //
+    setScamReportSource(scamReportSource === source ? '' : source);
+  };
 
   const handleCompanyTypeChange = (type) => {
-    setCompanyType(type); // 단일 선택이므로 바로 설정
-  }; //
+    setCompanyType(type);
+  };
+
+  // 체크박스 선택 시 victimCircumstances (텍스트) 상태 업데이트
+  const toggleVictimCircumstanceSelection = (item) => {
+    let currentSelected = victimCircumstances
+      .split(', ')
+      .filter((s) => s.trim() !== '');
+    const itemIndex = currentSelected.indexOf(item);
+
+    if (item === '기타 직접입력') {
+      setShowVictimCircumstanceTextInput(itemIndex === -1); // '기타 직접입력' 선택/해제 시 TextInput 토글
+      if (itemIndex !== -1) {
+        // '기타 직접입력' 해제 시
+        currentSelected.splice(itemIndex, 1);
+        // 혹시 '기타 직접입력: 상세내용' 형태였다면, 해당 부분도 제거하는 로직 추가 가능
+      } else {
+        // '기타 직접입력' 선택 시
+        currentSelected.push(item);
+      }
+    } else {
+      if (itemIndex !== -1) {
+        currentSelected.splice(itemIndex, 1);
+      } else {
+        currentSelected.push(item);
+      }
+    }
+    setVictimCircumstances(currentSelected.join(', '));
+  };
+
+  const handleTradedItemCategorySelect = (itemName) => {
+    setTradedItemCategory(tradedItemCategory === itemName ? '' : itemName);
+  };
+
+  const renderDetailFields = () => {
+    if (!category) return null;
+
+    if (companyType === '개인') {
+      switch (category) {
+        case individualCategories[0]: // A. 보이스피싱 등
+        case individualCategories[3]: // D. 투자 사기 등
+        case individualCategories[5]: // F. 암호화폐
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
+                placeholder="예: 투자 권유 문자 수신"
+              />
+              <Text style={styles.label}>가해자의 접촉 경로</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorContactPath}
+                onChangeText={setPerpetratorContactPath}
+                placeholder={
+                  category === individualCategories[3]
+                    ? '직방, 다방, 당근부동산, 전화, 카톡, 기타...'
+                    : '전화, 카톡, 네이버, 다음, 텔레그램, 문자, 기타...'
+                }
+              />
+            </>
+          );
+        case individualCategories[1]: // B. 불법사금융 대리구매 (피해정황: 체크박스 + "기타 직접입력" 시 텍스트)
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
+              />
+              <Text style={styles.label}>가해자의 접촉 경로</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorContactPath}
+                onChangeText={setPerpetratorContactPath}
+                placeholder="전화, 카톡, 네이버, 다음, 텔레그램, 문자, 기타..."
+              />
+              <Text style={styles.label}>피해 정황 (중복 선택 가능)</Text>
+              <View style={styles.checkboxContainer}>
+                {victimCircumstanceOptions.map((item) => (
+                  <TouchableOpacity
+                    key={item}
+                    style={styles.checkboxItem}
+                    onPress={() => toggleVictimCircumstanceSelection(item)}
+                  >
+                    <Icon
+                      name={
+                        victimCircumstances.includes(item)
+                          ? 'checkbox-marked-outline'
+                          : 'checkbox-blank-outline'
+                      }
+                      size={24}
+                      color={
+                        victimCircumstances.includes(item) ? '#3d5afe' : '#555'
+                      }
+                    />
+                    <Text style={styles.checkboxLabel}>{item}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {showVictimCircumstanceTextInput && (
+                <TextInput
+                  style={[styles.input, styles.textArea, { marginTop: -10 }]}
+                  value={victimCircumstances
+                    .replace('기타 직접입력', '')
+                    .replace(/^,\s*|,$/g, '')
+                    .trim()} // "기타 직접입력" 제외한 실제 텍스트
+                  onChangeText={(text) => {
+                    const baseSelection = victimCircumstanceOptions.filter(
+                      (opt) =>
+                        victimCircumstances.includes(opt) &&
+                        opt !== '기타 직접입력',
+                    );
+                    const newText =
+                      text.trim() !== ''
+                        ? [...baseSelection, '기타 직접입력', text].join(', ')
+                        : [...baseSelection, '기타 직접입력'].join(', ');
+                    setVictimCircumstances(newText);
+                  }}
+                  placeholder="기타 피해 정황을 직접 입력해주세요."
+                  multiline
+                  numberOfLines={2}
+                />
+              )}
+            </>
+          );
+        case individualCategories[2]: // C. 중고나라 사기
+          return (
+            <>
+              <Text style={styles.label}>거래물품</Text>
+              <View style={styles.itemCategoryGrid}>
+                {itemCategories.map((item) => (
+                  <TouchableOpacity
+                    key={item.name}
+                    style={[
+                      styles.itemCategoryButton,
+                      tradedItemCategory === item.name &&
+                        styles.itemCategoryButtonSelected,
+                    ]}
+                    onPress={() => handleTradedItemCategorySelect(item.name)}
+                  >
+                    <Image
+                      source={item.image}
+                      style={styles.itemCategoryImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          );
+        case individualCategories[4]: // E. 게임 비실물
+          return (
+            <>
+              <Text style={styles.label}>거래물품</Text>
+              <View style={styles.itemCategoryGrid}>
+                {gameItemCategories.map((item) => (
+                  <TouchableOpacity
+                    key={item.name}
+                    style={[
+                      styles.itemCategoryButton,
+                      tradedItemCategory === item.name &&
+                        styles.itemCategoryButtonSelected,
+                    ]}
+                    onPress={() => handleTradedItemCategorySelect(item.name)}
+                  >
+                    <Image
+                      source={item.image}
+                      style={styles.itemCategoryImage}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          );
+        case individualCategories[6]: // G. 기타 (개인 - 피해정황: 텍스트 입력)
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
+                placeholder="예: 기타 사유"
+              />
+              <Text style={styles.label}>가해자의 접촉 경로</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorContactPath}
+                onChangeText={setPerpetratorContactPath}
+                placeholder="전화, 카톡, 네이버, 다음, 텔레그램, 문자, 기타..."
+              />
+              <Text style={styles.label}>피해 정황</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={victimCircumstances} // 단일 텍스트 상태 사용
+                onChangeText={setVictimCircumstances}
+                placeholder="피해 정황을 상세히 기술해주세요."
+                multiline
+                numberOfLines={3}
+              />
+            </>
+          );
+        default:
+          return null;
+      }
+    } else if (companyType === '법인') {
+      switch (category) {
+        case corporateCategories[4]: // E. 기타 (법인 - 피해정황: 체크박스 + "기타 직접입력" 시 텍스트)
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
+                placeholder="예: 기타 사유"
+              />
+              <Text style={styles.label}>가해자의 접촉 경로</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorContactPath}
+                onChangeText={setPerpetratorContactPath}
+                placeholder="전화, 카톡, 네이버, 다음, 텔레그램, 문자, 기타..."
+              />
+              <Text style={styles.label}>피해 정황 (중복 선택 가능)</Text>
+              <View style={styles.checkboxContainer}>
+                {victimCircumstanceOptions.map((item) => (
+                  <TouchableOpacity
+                    key={item}
+                    style={styles.checkboxItem}
+                    onPress={() => toggleVictimCircumstanceSelection(item)}
+                  >
+                    <Icon
+                      name={
+                        victimCircumstances.includes(item)
+                          ? 'checkbox-marked-outline'
+                          : 'checkbox-blank-outline'
+                      }
+                      size={24}
+                      color={
+                        victimCircumstances.includes(item) ? '#3d5afe' : '#555'
+                      }
+                    />
+                    <Text style={styles.checkboxLabel}>{item}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {showVictimCircumstanceTextInput && (
+                <TextInput
+                  style={[styles.input, styles.textArea, { marginTop: -10 }]}
+                  value={victimCircumstances
+                    .replace('기타 직접입력', '')
+                    .replace(/^,\s*|,$/g, '')
+                    .trim()}
+                  onChangeText={(text) => {
+                    const baseSelection = victimCircumstanceOptions.filter(
+                      (opt) =>
+                        victimCircumstances.includes(opt) &&
+                        opt !== '기타 직접입력',
+                    );
+                    const newText =
+                      text.trim() !== ''
+                        ? [...baseSelection, '기타 직접입력', text].join(', ')
+                        : [...baseSelection, '기타 직접입력'].join(', ');
+                    setVictimCircumstances(newText);
+                  }}
+                  placeholder="기타 피해 정황을 직접 입력해주세요."
+                  multiline
+                  numberOfLines={2}
+                />
+              )}
+            </>
+          );
+        default:
+          return null;
+      }
+    }
+    return null;
+  };
 
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>사기 정보 입력</Text>
       <Text style={styles.guidance}>* 표시된 항목은 필수 입력입니다.</Text>
+      <Text style={styles.label}>이름</Text>
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="이름 (선택)"
+      />
+      <Text style={styles.label}>
+        법인/개인 <Text style={styles.required}>*</Text>{' '}
+      </Text>
+      <View style={styles.optionSelectorContainer}>
+        {companyTypes.map((type) => (
+          <TouchableOpacity
+            key={type}
+            style={[
+              styles.optionButton,
+              companyType === type && styles.optionButtonSelected,
+            ]}
+            onPress={() => handleCompanyTypeChange(type)}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                companyType === type && styles.optionButtonTextSelected,
+              ]}
+            >
+              {' '}
+              {type}{' '}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      <View style={styles.inputRow}>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>이름</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="이름 (선택)"
-          />
-        </View>
-        <View style={styles.inputContainer}>
+      {companyType && currentCategories.length > 0 && (
+        <>
           <Text style={styles.label}>
-            법인/개인 <Text style={styles.required}>*</Text>
+            {' '}
+            카테고리 <Text style={styles.required}>*</Text>{' '}
           </Text>
-          <View style={styles.optionSelectorContainer}>
-            {companyTypes.map((type) => (
+          <View style={styles.checkboxContainer}>
+            {currentCategories.map((cat) => (
               <TouchableOpacity
-                key={type}
-                style={[
-                  styles.optionButton,
-                  companyType === type && styles.optionButtonSelected,
-                ]}
-                onPress={() => handleCompanyTypeChange(type)}
+                key={cat}
+                style={styles.checkboxItem}
+                onPress={() => handleCategoryChange(cat)}
               >
-                <Text
-                  style={[
-                    styles.optionButtonText,
-                    companyType === type && styles.optionButtonTextSelected,
-                  ]}
-                >
-                  {type}
+                <Icon
+                  name={
+                    category === cat
+                      ? 'checkbox-marked-outline'
+                      : 'checkbox-blank-outline'
+                  }
+                  size={24}
+                  color={category === cat ? '#3d5afe' : '#555'}
+                />
+                <Text style={styles.checkboxLabel} numberOfLines={2}>
+                  {cat}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </>
+      )}
+
+      {renderDetailFields()}
+
+      <Text style={styles.label}>
+        {' '}
+        가해자 특정/불특정 여부 <Text style={styles.required}>*</Text>{' '}
+      </Text>
+      <View style={styles.optionSelectorContainer}>
+        <TouchableOpacity
+          style={[
+            styles.optionButton,
+            isPerpetratorIdentified === true && styles.optionButtonSelected,
+          ]}
+          onPress={() => setIsPerpetratorIdentified(true)}
+        >
+          <Text
+            style={[
+              styles.optionButtonText,
+              isPerpetratorIdentified === true &&
+                styles.optionButtonTextSelected,
+            ]}
+          >
+            특정
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.optionButton,
+            isPerpetratorIdentified === false && styles.optionButtonSelected,
+          ]}
+          onPress={() => setIsPerpetratorIdentified(false)}
+        >
+          <Text
+            style={[
+              styles.optionButtonText,
+              isPerpetratorIdentified === false &&
+                styles.optionButtonTextSelected,
+            ]}
+          >
+            불특정
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      <Text style={styles.label}>
+        사건 개요 <Text style={styles.required}>*</Text>
+      </Text>
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        value={caseSummary}
+        onChangeText={setCaseSummary}
+        multiline
+        placeholder="사건의 개요를 상세히 적어주세요. 피해 규모, 거래하는 동안 바뀐 전화번호, 계좌번호가 있으면 적어주세요."
+        numberOfLines={5}
+      />
 
       <Text style={styles.label}>닉네임</Text>
       <TextInput
@@ -273,13 +824,13 @@ function ReportScreen({ navigation }) {
             styles.input,
             styles.splitInput,
             { letterSpacing: nationalIdBack.length > 0 ? 2 : 0 },
-          ]} // 마지막 글자 보안입력처럼
+          ]}
           value={nationalIdBack}
           onChangeText={setNationalIdBack}
           placeholder="뒤 7자리"
           keyboardType="number-pad"
           maxLength={7}
-          secureTextEntry // 뒷자리는 민감 정보
+          secureTextEntry
         />
       </View>
 
@@ -290,30 +841,6 @@ function ReportScreen({ navigation }) {
         onChangeText={setAddress}
         placeholder="전체 주소 (선택)"
       />
-
-      <Text style={styles.label}>
-        카테고리 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.checkboxContainer}>
-        {categories.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={styles.checkboxItem}
-            onPress={() => handleCategoryChange(cat)}
-          >
-            <Icon
-              name={
-                category === cat
-                  ? 'checkbox-marked-outline'
-                  : 'checkbox-blank-outline'
-              }
-              size={24}
-              color={category === cat ? '#3d5afe' : '#555'}
-            />
-            <Text style={styles.checkboxLabel}>{cat}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
       <Text style={styles.label}>
         사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
@@ -328,8 +855,8 @@ function ReportScreen({ navigation }) {
             <Icon
               name={
                 scamReportSource === source
-                  ? 'checkbox-marked-outline'
-                  : 'checkbox-blank-outline'
+                  ? 'radiobox-marked'
+                  : 'radiobox-blank'
               }
               size={24}
               color={scamReportSource === source ? '#3d5afe' : '#555'}
@@ -338,16 +865,6 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
-
-      <Text style={styles.label}>상세 내용</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        placeholder="피해 내용, 사기꾼 특징 등을 간략히 기재 (선택)"
-        numberOfLines={4}
-      />
 
       <View style={styles.buttonContainer}>
         {isLoading ? (
@@ -372,11 +889,17 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 10, // guidance text와의 간격
+    marginBottom: 10,
     color: '#343a40',
   },
-  label: { fontSize: 16, marginBottom: 8, fontWeight: '600', color: '#495057' },
-  required: { color: '#e03131', fontSize: 16, fontWeight: '600' },
+  label: {
+    fontSize: 16,
+    marginBottom: 8,
+    fontWeight: '600',
+    color: '#495057',
+    marginTop: 15,
+  },
+  required: { color: '#e03131' },
   input: {
     borderWidth: 1,
     borderColor: '#ced4da',
@@ -387,79 +910,71 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     fontSize: 16,
     color: '#212529',
-    height: 50,
+    minHeight: 50,
   },
-  textArea: { height: 100, textAlignVertical: 'top' },
+  textArea: { height: 120, textAlignVertical: 'top' },
   phoneInputContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between', // 각 필드 사이 간격
+    justifyContent: 'space-between',
   },
-  phoneInputSegment: {
-    flex: 1, // 각 필드가 공간을 균등하게 차지하도록
-    marginHorizontal: 2, // 필드 간 약간의 간격
-  },
+  phoneInputSegment: { flex: 1, marginHorizontal: 2 },
   splitInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 18, // input과 동일하게
+    marginBottom: 18,
   },
   splitInput: { flex: 1, marginBottom: 0, textAlign: 'center' },
   hyphen: { fontSize: 18, marginHorizontal: 8, color: '#868e96' },
   buttonContainer: { marginTop: 25, marginBottom: 50 },
-
-  optionSelectorContainer: {
-    // companyType 용
-    flexDirection: 'row',
-    // justifyContent: 'space-around',
-    alignItems: 'center',
-    height: 50, // input과 높이 맞춤
-    marginBottom: 18,
-  },
+  optionSelectorContainer: { flexDirection: 'row', marginBottom: 18 },
   optionButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#ced4da',
     borderRadius: 8,
-    marginRight: 8,
     backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',
+    marginRight: 5,
+    height: 50,
   },
-  optionButtonSelected: {
-    backgroundColor: '#3d5afe',
-    borderColor: '#3d5afe',
-  },
-  optionButtonText: {
-    fontSize: 16,
-    color: '#495057',
-  },
-  optionButtonTextSelected: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  checkboxContainer: {
-    flexDirection: 'row', // 가로 배치
-    flexWrap: 'wrap', // 자동 줄바꿈
-    marginBottom: 18,
-    // justifyContent: 'space-between',
-  },
+  optionButtonSelected: { backgroundColor: '#3d5afe', borderColor: '#3d5afe' },
+  optionButtonText: { fontSize: 16, color: '#495057' },
+  optionButtonTextSelected: { color: 'white', fontWeight: 'bold' },
+  checkboxContainer: { marginBottom: 10 },
   checkboxItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    marginRight: 15, // 체크박스 간 가로 간격
-    paddingVertical: 5,
+    marginBottom: 12,
+    paddingVertical: 3,
   },
-  checkboxLabel: { fontSize: 16, marginLeft: 8, color: '#333' },
-  // checkedBox, uncheckedBox 스타일 제거 (Icon으로 대체)
-  inputRow: {
+  checkboxLabel: { fontSize: 15, marginLeft: 8, color: '#333', flexShrink: 1 },
+  itemCategoryGrid: {
     flexDirection: 'row',
-    // justifyContent: 'space-between', // 아래 inputContainer에서 flex:1로 처리
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    marginBottom: 18,
   },
-  inputContainer: { flex: 1, marginRight: 5 }, // 마지막 자식은 marginRight 제거
+  itemCategoryButton: {
+    width: '31%',
+    aspectRatio: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    padding: 5,
+    backgroundColor: '#fff',
+  },
+  itemCategoryButtonSelected: {
+    borderColor: '#3d5afe',
+    borderWidth: 2,
+    backgroundColor: '#e9eaff',
+  },
+  itemCategoryImage: { width: '100%', height: '100%', marginBottom: 5 },
+  itemCategoryText: { fontSize: 11, textAlign: 'center', marginTop: 3 },
 });
 
 export default ReportScreen;
