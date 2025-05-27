@@ -13,17 +13,17 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 const ITEMS_PER_PAGE = 10;
 
 export const SEARCH_TYPES = {
-  UNIFIED: 'unified', // 이름(닉네임), 계좌(포함), 전화번호(정확히)
-  ACCOUNT: 'account', // 계좌(포함)
-  PHONE: 'phone', // 전화번호(정확히)
-  NUMERIC_UNIFIED: 'numeric_unified', // 계좌(포함), 전화번호(정확히)
+  UNIFIED: 'unified',
+  ACCOUNT: 'account',
+  PHONE: 'phone',
+  NUMERIC_UNIFIED: 'numeric_unified',
 };
 
-// 이름 마스킹 함수 (가운데 글자 마스킹)
 const maskName = (name) => {
   if (!name || typeof name !== 'string' || name.length <= 1) {
     return name || '';
@@ -31,11 +31,9 @@ const maskName = (name) => {
   if (name.length === 2) {
     return `${name[0]}*`;
   }
-  // 요청: 이름의 2번째 글자만 마스킹
   return `${name[0]}*${name.substring(2)}`;
 };
 
-// 전화번호 마스킹 함수 (중간 숫자 2개 마스킹)
 const maskPhoneNumber = (phoneNumber) => {
   if (!phoneNumber || typeof phoneNumber !== 'string') {
     return phoneNumber || '';
@@ -44,52 +42,38 @@ const maskPhoneNumber = (phoneNumber) => {
   const len = cleanNumber.length;
 
   if (len < 7) {
-    // 너무 짧은 번호는 그대로 반환
     return phoneNumber;
   }
 
   let maskedNumber = '';
-  // 010-xxxx-xxxx, 010-xxx-xxxx 형식 (10~11자리)
   if (len === 11) {
-    // 010-1234-5678
     maskedNumber = `${cleanNumber.substring(0, 5)}**${cleanNumber.substring(7)}`;
     return `${maskedNumber.substring(0, 3)}-${maskedNumber.substring(3, 7)}-${maskedNumber.substring(7)}`;
   } else if (len === 10) {
-    // 010-123-4567 또는 지역번호
     if (cleanNumber.startsWith('02')) {
-      // 서울 지역번호 (02-xxxx-xxxx 또는 02-xxx-xxxx)
-      // 02-1234-5678 -> 02-123**-78
-      // 02-123-4567 -> 02-1**-567
-      const midIndex = Math.floor(len / 2) - 1; // 중간쯤의 인덱스
+      const midIndex = Math.floor(len / 2) - 1;
       maskedNumber = `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
       if (
         cleanNumber.length === 10 &&
         cleanNumber.split('-').length === 3 &&
         cleanNumber.split('-')[1].length === 4
       ) {
-        // 02-xxxx-xxxx
         return `${maskedNumber.substring(0, 2)}-${maskedNumber.substring(2, 6)}-${maskedNumber.substring(6)}`;
       } else {
-        // 02-xxx-xxxx
         return `${maskedNumber.substring(0, 2)}-${maskedNumber.substring(2, 5)}-${maskedNumber.substring(5)}`;
       }
     } else {
-      // 기타 01x-xxx-xxxx
       maskedNumber = `${cleanNumber.substring(0, 4)}**${cleanNumber.substring(6)}`;
       return `${maskedNumber.substring(0, 3)}-${maskedNumber.substring(3, 6)}-${maskedNumber.substring(6)}`;
     }
-  }
-  // 일반적인 7~9자리 번호 (예: 123-4567, 1234-5678) - 중간 2자리
-  else if (len >= 7 && len <= 9) {
+  } else if (len >= 7 && len <= 9) {
     const midIndex = Math.floor(len / 2) - 1;
     maskedNumber = `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
-    // 하이픈 복원은 원래 하이픈이 있었다면 고려, 없다면 그대로 반환
-    return maskedNumber; // 하이픈 없이 반환하거나, 원본 phoneNumber 형식에 따라 조건부 추가
+    return maskedNumber;
   }
-  return phoneNumber; // 규칙에 맞지 않으면 원본 반환
+  return phoneNumber;
 };
 
-// 계좌번호 마스킹 함수 (중간 숫자 2개 마스킹)
 const maskAccountNumber = (accountNumber) => {
   if (!accountNumber || typeof accountNumber !== 'string') {
     return accountNumber || '';
@@ -98,23 +82,17 @@ const maskAccountNumber = (accountNumber) => {
   const len = cleanAccount.length;
 
   if (len < 5) {
-    // 너무 짧으면 그대로 반환
     return accountNumber;
   }
-
-  // 중간에서 2자리 마스킹 (앞에서 1/3 지점부터 2자리)
-  const startIndex = Math.max(1, Math.floor(len / 3)); // 최소 1번째 인덱스 이후부터 시작
+  const startIndex = Math.max(1, Math.floor(len / 3));
   if (startIndex + 1 >= len - 1) {
-    // 마스킹할 자리가 충분하지 않으면 끝에서 2개 마스킹
     return `${cleanAccount.substring(0, len - 2)}**`;
   }
-
   const maskedAccount =
     cleanAccount.substring(0, startIndex) +
     '**' +
     cleanAccount.substring(startIndex + 2);
-
-  return maskedAccount; // 하이픈 제거된 상태로 반환 (일관성)
+  return maskedAccount;
 };
 
 function SearchBaseScreen({
@@ -123,6 +101,8 @@ function SearchBaseScreen({
   searchType: propSearchType,
   title: propTitle,
 }) {
+  const { user, profile, isLoading: authIsLoading } = useAuth();
+
   const searchTypeFromParams = route?.params?.searchType;
   const initialSearchTermFromParams = route?.params?.searchTerm || '';
   const screenTitleFromParams = route?.params?.title;
@@ -133,7 +113,7 @@ function SearchBaseScreen({
 
   const [reports, setReports] = useState([]);
   const [maskedReports, setMaskedReports] = useState([]);
-  const [loading, setLoading] = useState(true); // 초기 로딩 시작
+  const [dataFetchLoading, setDataFetchLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -141,10 +121,22 @@ function SearchBaseScreen({
   const [submittedSearchTerm, setSubmittedSearchTerm] = useState(
     initialSearchTermFromParams,
   );
+  const [initialAuthCheckComplete, setInitialAuthCheckComplete] =
+    useState(false);
 
   const fetchReports = useCallback(
     async (pageNum, termToSearch) => {
-      // UNIFIED 또는 NUMERIC_UNIFIED 검색이 아니고, 검색어가 비어있다면, 검색 실행 안함
+      if (!user || !profile?.job_type) {
+        setError(
+          '사용자 정보 또는 프로필(직업 정보)을 불러올 수 없습니다. 잠시 후 다시 시도해주세요.',
+        );
+        setDataFetchLoading(false);
+        setReports([]);
+        setMaskedReports([]);
+        setTotalCount(0);
+        return;
+      }
+
       if (
         termToSearch.trim() === '' &&
         currentSearchType !== SEARCH_TYPES.UNIFIED &&
@@ -153,44 +145,42 @@ function SearchBaseScreen({
         setReports([]);
         setMaskedReports([]);
         setTotalCount(0);
-        setLoading(false);
+        setDataFetchLoading(false);
         setError(null);
         return;
       }
 
-      setLoading(true);
+      setDataFetchLoading(true);
       setError(null);
       const from = pageNum * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
       let query = supabase
-        .from('masked_scammer_reports') // 이 뷰에는 name, nickname, phone_number, account_number 등이 있어야 함
+        .from('masked_scammer_reports')
         .select('*', { count: 'exact' });
 
       const trimmedTerm = termToSearch.trim();
 
       if (trimmedTerm !== '') {
         let orConditions = [];
-
         if (currentSearchType === SEARCH_TYPES.UNIFIED) {
           orConditions.push(`name.ilike.%${trimmedTerm}%`);
-          orConditions.push(`nickname.ilike.%${trimmedTerm}%`); // 닉네임 포함 검색
-          orConditions.push(`phone_number.eq.${trimmedTerm}`); // 전화번호 정확히 일치
-          orConditions.push(`account_number.ilike.%${trimmedTerm}%`); // 계좌번호 포함 검색
+          orConditions.push(`nickname.ilike.%${trimmedTerm}%`);
+          orConditions.push(`phone_number.eq.${trimmedTerm}`);
+          orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
         } else if (currentSearchType === SEARCH_TYPES.ACCOUNT) {
           orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
         } else if (currentSearchType === SEARCH_TYPES.PHONE) {
-          orConditions.push(`phone_number.eq.${trimmedTerm}`); // 전화번호 정확히 일치
+          orConditions.push(`phone_number.eq.${trimmedTerm}`);
         } else if (currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED) {
-          orConditions.push(`phone_number.eq.${trimmedTerm}`); // 전화번호 정확히 일치
-          orConditions.push(`account_number.ilike.%${trimmedTerm}%`); // 계좌번호 포함 검색
+          orConditions.push(`phone_number.eq.${trimmedTerm}`);
+          orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
         }
 
         if (orConditions.length > 0) {
           query = query.or(orConditions.join(','));
         }
       }
-      // 검색어가 비어있으면 (trimmedTerm === ''), orConditions가 적용되지 않아 전체 데이터 조회
 
       query = query.order('created_at', { ascending: false }).range(from, to);
 
@@ -205,27 +195,53 @@ function SearchBaseScreen({
         setMaskedReports([]);
         setTotalCount(0);
       } finally {
-        setLoading(false);
+        setDataFetchLoading(false);
       }
     },
-    [currentSearchType],
+    [currentSearchType, user, profile],
   );
 
   useEffect(() => {
-    // 페이지 변경 또는 실제 검색어(submittedSearchTerm) 변경 시 데이터 요청
-    // 초기 로드 시 submittedSearchTerm은 initialSearchTermFromParams를 가지며,
-    // UNIFIED, NUMERIC_UNIFIED 타입은 빈 검색어로도 전체 조회를 실행함.
-    fetchReports(page, submittedSearchTerm);
-  }, [page, submittedSearchTerm, fetchReports]); // currentSearchType은 fetchReports의 의존성이므로 제거
+    if (currentScreenTitle && navigation) {
+      navigation.setOptions({ title: currentScreenTitle });
+    }
+  }, [currentScreenTitle, navigation]);
+
+  useEffect(() => {
+    if (!authIsLoading) {
+      if (!initialAuthCheckComplete) {
+        setInitialAuthCheckComplete(true);
+      }
+      if (user && profile?.job_type) {
+        fetchReports(page, submittedSearchTerm);
+      } else {
+        const specificError = !user
+          ? '로그인이 필요합니다.'
+          : '사용자 프로필(직업 정보)을 찾을 수 없습니다. RLS 정책 적용에 필요합니다.';
+        setError(specificError);
+        setReports([]);
+        setMaskedReports([]);
+        setTotalCount(0);
+        setDataFetchLoading(false);
+      }
+    }
+  }, [
+    authIsLoading,
+    user,
+    profile,
+    page,
+    submittedSearchTerm,
+    fetchReports,
+    initialAuthCheckComplete,
+  ]);
 
   useEffect(() => {
     if (reports.length > 0) {
       const newMaskedReports = reports.map((item) => {
-        const displayName = item.name || item.nickname; // 이름 없으면 닉네임 사용
+        const displayName = item.name || item.nickname;
         return {
           ...item,
-          displayName: maskName(displayName), // 마스킹된 이름 (또는 닉네임)
-          // phone_number와 account_number는 DB에서 가져온 원본을 마스킹
+          displayName: maskName(displayName),
           phone_number_masked: maskPhoneNumber(item.phone_number),
           account_number_masked: maskAccountNumber(item.account_number),
           categoryColor:
@@ -249,17 +265,15 @@ function SearchBaseScreen({
   const handleSearch = () => {
     Keyboard.dismiss();
     const trimmedTerm = searchTerm.trim();
-    if (trimmedTerm !== submittedSearchTerm || page !== 0) {
-      setPage(0);
-    }
+    setPage(0);
     setSubmittedSearchTerm(trimmedTerm);
   };
 
   const handleClearSearch = () => {
     Keyboard.dismiss();
     setSearchTerm('');
-    setSubmittedSearchTerm(''); // 빈 문자열로 설정하여 useEffect가 전체 목록 또는 빈 목록을 로드하도록 함
     setPage(0);
+    setSubmittedSearchTerm('');
   };
 
   const handlePreviousPage = () => {
@@ -269,7 +283,7 @@ function SearchBaseScreen({
   };
 
   const handleNextPage = () => {
-    const lastPage = Math.ceil(totalCount / ITEMS_PER_PAGE) - 1;
+    const lastPage = Math.max(0, Math.ceil(totalCount / ITEMS_PER_PAGE) - 1);
     if (page < lastPage && totalCount > (page + 1) * ITEMS_PER_PAGE) {
       setPage(page + 1);
     }
@@ -356,16 +370,25 @@ function SearchBaseScreen({
         </View>
       );
     },
-    [currentSearchType], // currentSearchType이 변경될 때 renderItem 재생성
+    [currentSearchType],
   );
 
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
 
-  useEffect(() => {
-    if (currentScreenTitle && navigation) {
-      navigation.setOptions({ title: currentScreenTitle });
-    }
-  }, [currentScreenTitle, navigation]);
+  if (authIsLoading || (!initialAuthCheckComplete && dataFetchLoading)) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" color="#3d5afe" />
+          <Text style={{ marginTop: 10 }}>
+            {authIsLoading
+              ? '사용자 정보 확인 중...'
+              : '데이터를 불러오는 중...'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -389,11 +412,11 @@ function SearchBaseScreen({
           returnKeyType="search"
           keyboardType={
             currentSearchType === SEARCH_TYPES.PHONE
-              ? 'phone-pad' // PHONE 타입은 전화번호 키패드
+              ? 'phone-pad'
               : currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
                   currentSearchType === SEARCH_TYPES.ACCOUNT
-                ? 'number-pad' // 숫자/계좌는 숫자 키패드
-                : 'default' // 통합 검색은 일반 키패드
+                ? 'number-pad'
+                : 'default'
           }
         />
         {searchTerm ? (
@@ -407,7 +430,7 @@ function SearchBaseScreen({
         <TouchableOpacity
           onPress={handleSearch}
           style={styles.searchIconTouchable}
-          disabled={loading}
+          disabled={dataFetchLoading}
         >
           <Icon name="magnify" size={28} color="white" />
         </TouchableOpacity>
@@ -415,32 +438,42 @@ function SearchBaseScreen({
 
       {error && <Text style={styles.errorText}>{error}</Text>}
 
-      {loading ? (
-        <ActivityIndicator size="large" style={styles.loader} />
+      {dataFetchLoading && !maskedReports.length ? (
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" color="#3d5afe" />
+          <Text style={{ marginTop: 10 }}>데이터를 불러오는 중...</Text>
+        </View>
       ) : (
         <FlatList
           data={maskedReports}
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Icon name="alert-circle-outline" size={50} color="#aaa" />
-              <Text style={styles.emptyText}>
-                {submittedSearchTerm.trim() !== '' ||
-                (currentSearchType !== SEARCH_TYPES.UNIFIED &&
-                  currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED &&
-                  submittedSearchTerm.trim() === '')
-                  ? '검색 결과가 없습니다.'
-                  : '등록된 정보가 없습니다.'}
-              </Text>
-            </View>
+            !dataFetchLoading && (
+              <View style={styles.emptyContainer}>
+                <Icon name="alert-circle-outline" size={50} color="#aaa" />
+                <Text style={styles.emptyText}>
+                  {submittedSearchTerm.trim() !== '' ||
+                  (currentSearchType !== SEARCH_TYPES.UNIFIED &&
+                    currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED &&
+                    submittedSearchTerm.trim() === '')
+                    ? '검색 결과가 없습니다.'
+                    : '등록된 정보가 없습니다.'}
+                </Text>
+              </View>
+            )
           }
           contentContainerStyle={{ paddingBottom: 20 }}
           keyboardShouldPersistTaps="handled"
+          ListFooterComponent={
+            dataFetchLoading && maskedReports.length > 0 ? (
+              <ActivityIndicator style={{ marginVertical: 10 }} size="small" />
+            ) : null
+          }
         />
       )}
 
-      {!loading && totalCount > ITEMS_PER_PAGE && (
+      {!dataFetchLoading && totalCount > 0 && (
         <View style={styles.paginationContainer}>
           <Button
             title="이전"
@@ -466,7 +499,6 @@ function SearchBaseScreen({
   );
 }
 
-// 스타일은 이전 답변과 동일하게 유지
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -502,7 +534,12 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
   },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 50,
+  },
   errorText: {
     color: '#e74c3c',
     textAlign: 'center',

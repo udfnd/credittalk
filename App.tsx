@@ -16,7 +16,7 @@ import {
   NavigationContainer,
   EventArg,
   useNavigation,
-} from '@react-navigation/native'; // NavigationProp 제거 (필요시 개별적으로 사용)
+} from '@react-navigation/native';
 import {
   createNativeStackNavigator,
   NativeStackNavigationProp,
@@ -66,13 +66,11 @@ export type RootStackParamList = {
   ArrestNews: undefined;
   SignIn: undefined;
   SignUp: undefined;
-  // 새로운 스크린 타입 정의
   ReviewList: undefined;
   ReviewDetail: { reviewId: number; reviewTitle: string };
   ReviewCreate: undefined;
   IncidentPhotoList: undefined;
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
-  // AdminIncidentPhotoCreate: undefined; // 관리자 기능 (필요시)
 };
 
 export type CommunityStackParamList = {
@@ -81,7 +79,6 @@ export type CommunityStackParamList = {
   CommunityPostCreate: undefined;
 };
 
-// Review 스택을 위한 타입 (CommunityStack과 유사하게)
 export type ReviewStackParamList = {
   ReviewList: undefined;
   ReviewDetail: { reviewId: number; reviewTitle: string };
@@ -91,7 +88,7 @@ export type ReviewStackParamList = {
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const CommunityNativeStack =
   createNativeStackNavigator<CommunityStackParamList>();
-const ReviewNativeStack = createNativeStackNavigator<ReviewStackParamList>(); // Review 스택용
+const ReviewNativeStack = createNativeStackNavigator<ReviewStackParamList>();
 const Tab = createBottomTabNavigator();
 
 const HELP_CENTER_PHONE_NUMBER = '010-9655-1604';
@@ -110,6 +107,7 @@ function CommunityStack() {
       <CommunityNativeStack.Screen
         name="CommunityPostDetail"
         component={CommunityPostDetailScreen}
+        // options={({ route }) => ({ title: route.params.postTitle })} // 상세 화면에서 설정
       />
       <CommunityNativeStack.Screen
         name="CommunityPostCreate"
@@ -120,7 +118,6 @@ function CommunityStack() {
   );
 }
 
-// Review 스택 네비게이터 함수
 function ReviewStack() {
   return (
     <ReviewNativeStack.Navigator id={undefined} initialRouteName="ReviewList">
@@ -132,6 +129,7 @@ function ReviewStack() {
       <ReviewNativeStack.Screen
         name="ReviewDetail"
         component={ReviewDetailScreen}
+        // options={({ route }) => ({ title: route.params.reviewTitle })} // 상세 화면에서 설정
       />
       <ReviewNativeStack.Screen
         name="ReviewCreate"
@@ -162,7 +160,6 @@ function MainTabs() {
         {
           text: '문자보내기',
           onPress: () => {
-            // iOS와 Android에서 SMS body 파라미터 처리가 다를 수 있음
             const separator = Platform.OS === 'ios' ? '&' : '?';
             Linking.openURL(
               `sms:${HELP_CENTER_PHONE_NUMBER}${separator}body=`,
@@ -223,7 +220,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="CommunityTab"
-        component={CommunityStack}
+        component={CommunityStack} // CommunityStack 네비게이터 사용
         options={{ title: '커뮤니티' }}
       />
       <Tab.Screen
@@ -233,7 +230,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="HelpCenterTab"
-        component={View}
+        component={View} // 실제 컴포넌트 없음
         options={{ title: '헬프센터' }}
         listeners={{
           tabPress: (e: EventArg<'tabPress', true, undefined>) => {
@@ -247,20 +244,28 @@ function MainTabs() {
 }
 
 function AppNavigator() {
-  const { user, isLoading } = useAuth();
+  const { user, profile, isLoading } = useAuth();
+  console.log('[AppNavigator] Auth State:', {
+    isLoading,
+    userId: user?.id,
+    profileName: profile?.name,
+    jobType: profile?.job_type,
+  });
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3d5afe" />
-        <Text>세션 확인 중...</Text>
+        <Text style={{ marginTop: 10 }}>
+          세션 및 프로필 정보를 확인 중입니다...
+        </Text>
       </View>
     );
   }
 
   return (
     <RootStack.Navigator id={undefined}>
-      {user ? (
+      {user && profile ? (
         <>
           <RootStack.Screen
             name="MainApp"
@@ -275,6 +280,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="NumericUnifiedSearch"
             component={SearchBaseScreen}
+            // options={({ route }) => ({ title: route.params.title })} // SearchBaseScreen에서 설정
           />
           <RootStack.Screen
             name="UnifiedSearch"
@@ -289,6 +295,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="NoticeDetail"
             component={NoticeDetailScreen}
+            // options={({ route }) => ({ title: route.params.noticeTitle })}
           />
           <RootStack.Screen
             name="ArrestNews"
@@ -297,12 +304,13 @@ function AppNavigator() {
           />
           <RootStack.Screen
             name="ReviewList"
-            component={ReviewListScreen}
+            component={ReviewListScreen} // ReviewStack 대신 직접 포함 또는 ReviewStack 사용
             options={{ title: '크레디톡 후기' }}
           />
           <RootStack.Screen
             name="ReviewDetail"
             component={ReviewDetailScreen}
+            // options={({ route }) => ({ title: route.params.reviewTitle })}
           />
           <RootStack.Screen
             name="ReviewCreate"
@@ -317,6 +325,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="IncidentPhotoDetail"
             component={IncidentPhotoDetailScreen}
+            // options={({ route }) => ({ title: route.params.photoTitle })}
           />
           {/* <RootStack.Screen name="AdminIncidentPhotoCreate" component={AdminIncidentPhotoCreateScreen} options={{ title: '사진자료 등록(관리자)' }} /> */}
         </>
