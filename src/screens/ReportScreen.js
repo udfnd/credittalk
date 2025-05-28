@@ -209,15 +209,12 @@ function ReportScreen({ navigation }) {
   const [address, setAddress] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentCategories, setCurrentCategories] = useState([]);
-
   const [perpetratorDialogueTrigger, setPerpetratorDialogueTrigger] =
     useState('');
   const [perpetratorContactPath, setPerpetratorContactPath] = useState('');
-  // --- 수정: victimCircumstances는 단일 텍스트 상태로 통합 ---
   const [victimCircumstances, setVictimCircumstances] = useState('');
   const [showVictimCircumstanceTextInput, setShowVictimCircumstanceTextInput] =
-    useState(false); // '기타 직접입력' 선택 시 TextInput 표시 여부
-  // --- 수정 끝 ---
+    useState(false);
   const [tradedItemCategory, setTradedItemCategory] = useState('');
   const [isPerpetratorIdentified, setIsPerpetratorIdentified] = useState(null);
   const [caseSummary, setCaseSummary] = useState('');
@@ -567,7 +564,8 @@ function ReportScreen({ navigation }) {
       }
     } else if (companyType === '법인') {
       switch (category) {
-        case corporateCategories[4]: // E. 기타 (법인 - 피해정황: 체크박스 + "기타 직접입력" 시 텍스트)
+        case corporateCategories[0]: // A. 노쇼 대리구매 사기
+        case corporateCategories[4]: // E. 기타 (법인)
           return (
             <>
               <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
@@ -575,62 +573,90 @@ function ReportScreen({ navigation }) {
                 style={styles.input}
                 value={perpetratorDialogueTrigger}
                 onChangeText={setPerpetratorDialogueTrigger}
-                placeholder="예: 기타 사유"
               />
-              <Text style={styles.label}>가해자의 접촉 경로</Text>
+              <Text style={styles.label}>피해 정황</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={victimCircumstances}
+                onChangeText={setVictimCircumstances}
+                placeholder="대리구매 사기, 예약부도, 기타 등의 형식으로 입력해주세요."
+                multiline
+                numberOfLines={3}
+              />
+            </>
+          );
+        case corporateCategories[1]: // B. 공갈 협박 범죄
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
               <TextInput
                 style={styles.input}
-                value={perpetratorContactPath}
-                onChangeText={setPerpetratorContactPath}
-                placeholder="전화, 카톡, 네이버, 다음, 텔레그램, 문자, 기타..."
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
               />
-              <Text style={styles.label}>피해 정황 (중복 선택 가능)</Text>
-              <View style={styles.checkboxContainer}>
-                {victimCircumstanceOptions.map((item) => (
-                  <TouchableOpacity
-                    key={item}
-                    style={styles.checkboxItem}
-                    onPress={() => toggleVictimCircumstanceSelection(item)}
-                  >
-                    <Icon
-                      name={
-                        victimCircumstances.includes(item)
-                          ? 'checkbox-marked-outline'
-                          : 'checkbox-blank-outline'
-                      }
-                      size={24}
-                      color={
-                        victimCircumstances.includes(item) ? '#3d5afe' : '#555'
-                      }
-                    />
-                    <Text style={styles.checkboxLabel}>{item}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {showVictimCircumstanceTextInput && (
-                <TextInput
-                  style={[styles.input, styles.textArea, { marginTop: -10 }]}
-                  value={victimCircumstances
-                    .replace('기타 직접입력', '')
-                    .replace(/^,\s*|,$/g, '')
-                    .trim()}
-                  onChangeText={(text) => {
-                    const baseSelection = victimCircumstanceOptions.filter(
-                      (opt) =>
-                        victimCircumstances.includes(opt) &&
-                        opt !== '기타 직접입력',
-                    );
-                    const newText =
-                      text.trim() !== ''
-                        ? [...baseSelection, '기타 직접입력', text].join(', ')
-                        : [...baseSelection, '기타 직접입력'].join(', ');
-                    setVictimCircumstances(newText);
-                  }}
-                  placeholder="기타 피해 정황을 직접 입력해주세요."
-                  multiline
-                  numberOfLines={2}
-                />
-              )}
+              <Text style={styles.label}>피해 정황</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={victimCircumstances}
+                onChangeText={setVictimCircumstances}
+                placeholder="피해 정황을 입력해주세요."
+                multiline
+                numberOfLines={3}
+              />
+            </>
+          );
+        case corporateCategories[2]: // C. 알바 범죄
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
+              />
+              <Text style={styles.label}>피해 물품</Text>
+              <TextInput
+                style={styles.input}
+                value={tradedItemCategory}
+                onChangeText={setTradedItemCategory}
+                placeholder="현금, 상품권, 카드충전 기타의 형식으로 입력해주세요."
+              />
+              <Text style={styles.label}>피해 정황</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={victimCircumstances}
+                onChangeText={setVictimCircumstances}
+                placeholder="피해 정황을 입력해주세요."
+                multiline
+                numberOfLines={3}
+              />
+            </>
+          );
+        case corporateCategories[3]: // D. 렌탈 사업
+          return (
+            <>
+              <Text style={styles.label}>가해자와 대화를 하게 된 계기</Text>
+              <TextInput
+                style={styles.input}
+                value={perpetratorDialogueTrigger}
+                onChangeText={setPerpetratorDialogueTrigger}
+              />
+              <Text style={styles.label}>피해 물품</Text>
+              <TextInput
+                style={styles.input}
+                value={tradedItemCategory}
+                onChangeText={setTradedItemCategory}
+                placeholder="자동차, 중장비, 명품물건, 기타의 형식으로 입력해주세요."
+              />
+              <Text style={styles.label}>피해 정황</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={victimCircumstances}
+                onChangeText={setVictimCircumstances}
+                placeholder="피해 정황을 입력해주세요."
+                multiline
+                numberOfLines={3}
+              />
             </>
           );
         default:
