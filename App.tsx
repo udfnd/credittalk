@@ -37,7 +37,9 @@ import SignInScreen from './src/screens/SignInScreen';
 import NoticeListScreen from './src/screens/NoticeListScreen';
 import NoticeDetailScreen from './src/screens/NoticeDetailScreen';
 import ArrestNewsScreen from './src/screens/ArrestNewsScreen';
-import ChatScreen from './src/screens/ChatScreen';
+import ChatListScreen from './src/screens/ChatListScreen';
+import ChatMessageScreen from './src/screens/ChatMessageScreen';
+import NewChatScreen from './src/screens/NewChatScreen'
 import CommunityListScreen from './src/screens/CommunityListScreen';
 import CommunityPostDetailScreen from './src/screens/CommunityPostDetailScreen';
 import CommunityPostCreateScreen from './src/screens/CommunityPostCreateScreen';
@@ -46,7 +48,6 @@ import ReviewDetailScreen from './src/screens/ReviewDetailScreen';
 import ReviewCreateScreen from './src/screens/ReviewCreateScreen';
 import IncidentPhotoListScreen from './src/screens/IncidentPhotoListScreen';
 import IncidentPhotoDetailScreen from './src/screens/IncidentPhotoDetailScreen';
-// import AdminIncidentPhotoCreateScreen from './src/screens/AdminIncidentPhotoCreateScreen';
 
 export type RootStackParamList = {
   MainApp: undefined;
@@ -64,6 +65,9 @@ export type RootStackParamList = {
   NoticeList: undefined;
   NoticeDetail: { noticeId: number; noticeTitle: string };
   ArrestNews: undefined;
+  ChatList: undefined;
+  ChatMessageScreen: { roomId: string; roomName: string };
+  NewChatScreen: undefined;
   SignIn: undefined;
   SignUp: undefined;
   ReviewList: undefined;
@@ -215,8 +219,8 @@ function MainTabs() {
       />
       <Tab.Screen
         name="ChatTab"
-        component={ChatScreen}
-        options={{ title: '채팅' }}
+        component={ChatListScreen}
+        options={{ title: '채팅', headerShown: true }}
       />
       <Tab.Screen
         name="CommunityTab"
@@ -327,7 +331,21 @@ function AppNavigator() {
             component={IncidentPhotoDetailScreen}
             // options={({ route }) => ({ title: route.params.photoTitle })}
           />
-          {/* <RootStack.Screen name="AdminIncidentPhotoCreate" component={AdminIncidentPhotoCreateScreen} options={{ title: '사진자료 등록(관리자)' }} /> */}
+          <RootStack.Screen
+            name="ChatList"
+            component={ChatListScreen}
+            options={{ title: '채팅 목록' }}
+          />
+          <RootStack.Screen
+            name="ChatMessageScreen"
+            component={ChatMessageScreen}
+            // options={({ route }) => ({ title: route.params.roomName })} // 상세 화면에서 설정
+          />
+          <RootStack.Screen
+            name="NewChatScreen"
+            component={NewChatScreen}
+            options={{ title: '새 채팅 시작' }}
+          />
         </>
       ) : (
         <>

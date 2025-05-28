@@ -12,7 +12,6 @@ import {
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
-// import { useAuth } from '../context/AuthContext'; // 관리자만 업로드 시 필요
 
 function IncidentPhotoListScreen() {
   const navigation = useNavigation();
