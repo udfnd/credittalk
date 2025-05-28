@@ -48,27 +48,22 @@ function ReviewListScreen() {
     try {
       // 후기와 함께 작성자 프로필 정보(이름)를 가져오기
       const { data, error: fetchError } = await supabase
-        .from('reviews') // 'reviews' 테이블 사용
-        .select(
-          `
+          .from('reviews_with_author_profile') // 변경
+          .select(
+              `
           id,
           title,
           created_at,
-          user_id,
+          author_auth_id,
           rating,
-          users ( name ) 
-        `,
-        )
-        .eq('is_published', true) // 게시된 후기만
-        .order('created_at', { ascending: false });
+          author_name     
+        `
+          )
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-
-      const formattedReviews = data.map((review) => ({
-        ...review,
-        author_name: review.users?.name || '익명',
-      }));
-      setReviews(formattedReviews || []);
+      setReviews(data || []); // data를 직접 사용
     } catch (err) {
       setError(err.message || '후기를 불러오는데 실패했습니다.');
       setReviews([]);

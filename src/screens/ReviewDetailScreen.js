@@ -54,29 +54,18 @@ function ReviewDetailScreen({ route }) {
       // 여기서는 reviews 테이블과 users 테이블을 조인하는 예시를 보여드립니다.
       // 뷰를 사용하는 것이 더 효율적일 수 있습니다.
       const { data, error: fetchError } = await supabase
-        .from('reviews')
-        .select(
-          `
-          id, title, content, created_at, user_id, rating,
-          authorProfile:users ( name )
-        `,
-        )
-        .eq('id', reviewId)
-        .eq('is_published', true) // 게시된 후기만
-        .single();
+          .from('reviews_with_author_profile') // 변경
+          .select(
+              `
+          id, title, content, created_at, author_auth_id, rating, author_name
+        ` // users(name) 대신 author_name 바로 사용
+          )
+          .eq('id', reviewId)
+          .eq('is_published', true)
+          .single();
 
-      if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          // Not found
-          throw new Error('후기를 찾을 수 없거나 접근 권한이 없습니다.');
-        }
-        throw fetchError;
-      }
-      const formattedReview = {
-        ...data,
-        author_name: data.authorProfile?.name || '익명',
-      };
-      setReview(formattedReview);
+      if (fetchError) throw fetchError;
+      setReview(data);
     } catch (err) {
       setError(err.message || '후기 상세 정보를 불러오는데 실패했습니다.');
     } finally {
