@@ -1,4 +1,4 @@
-package com.creditalk
+package com.credittalk
 
 import android.app.Application
 import com.facebook.react.PackageList

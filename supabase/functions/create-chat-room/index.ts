@@ -1,20 +1,18 @@
 // supabase/functions/create-chat-room/index.ts
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/cors.ts'; // _shared/cors.ts 파일 필요
+import { corsHeaders } from '../_shared/cors.ts'; //
 
 interface CreateChatRoomPayload {
-  otherUserId: string; // 채팅할 상대방의 auth.users.id
+  otherUserId: string;
 }
 
 serve(async (req: Request) => {
-  // OPTIONS 요청 처리 (CORS preflight)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // 요청 본문에서 상대방 사용자 ID 가져오기
     const payload: CreateChatRoomPayload = await req.json();
     const { otherUserId } = payload;
 
@@ -22,25 +20,37 @@ serve(async (req: Request) => {
       throw new Error('Missing otherUserId in request body.');
     }
 
-    // Supabase Admin 클라이언트 생성 (서비스 키 사용)
+    // Supabase Admin 클라이언트 생성 (서비스 키 사용, 사용자 컨텍스트 전달 제거)
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } } // 사용자 컨텍스트 전달
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      // { global: { headers: { Authorization: req.headers.get('Authorization')! } } } // 이 부분을 제거하거나 주석 처리!
     );
 
-    // 요청을 보낸 사용자(현재 사용자) 정보 가져오기
-    const { data: { user: currentUser }, error: userError } = await supabaseAdminClient.auth.getUser();
+    // 요청을 보낸 사용자(현재 사용자) 정보 가져오기 - 클라이언트에서 토큰을 사용한 인증이 필요
+    // 함수를 호출하는 클라이언트에서 Authorization 헤더에 유효한 JWT를 포함해야 합니다.
+    // 서비스 키로 초기화된 클라이언트와 별개로 사용자 인증을 위해 클라이언트를 하나 더 만들거나,
+    // 요청 헤더에서 직접 JWT를 파싱하여 사용자를 검증할 수 있습니다.
+    // 여기서는 클라이언트에서 보낸 JWT를 사용하여 사용자 정보를 가져옵니다.
+    const userSupabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '', // 일반적으로 anon key 사용
+      { global: { headers: { Authorization: req.headers.get('Authorization')! }}}
+    );
+
+    const { data: { user: currentUser }, error: userError } = await userSupabaseClient.auth.getUser();
+
     if (userError || !currentUser) {
       console.error('Error fetching current user:', userError);
-      throw new Error('Could not authenticate user.');
+      throw new Error('Could not authenticate user. Make sure a valid JWT is provided in Authorization header.');
     }
 
     if (currentUser.id === otherUserId) {
       throw new Error('Cannot create a chat room with yourself.');
     }
 
-    // 1. 기존 1:1 채팅방이 있는지 확인 (이전에 만든 RPC 함수 사용)
+    // (기존 RPC 함수 호출, 채팅방 생성, 참여자 추가 로직은 동일 - supabaseAdminClient 사용)
+    // 1. 기존 1:1 채팅방이 있는지 확인 (supabaseAdminClient 사용)
     const { data: existingRooms, error: rpcError } = await supabaseAdminClient.rpc(
       'find_existing_dm_room',
       { user1_id: currentUser.id, user2_id: otherUserId }
@@ -52,7 +62,6 @@ serve(async (req: Request) => {
     }
 
     if (existingRooms && existingRooms.length > 0) {
-      // 기존 채팅방 정보 반환
       return new Response(
         JSON.stringify({ roomId: existingRooms[0].room_id, isNew: false }),
         {
@@ -62,10 +71,10 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. 새 채팅방 생성 (서비스 키를 사용하므로 RLS 제약 없음)
+    // 2. 새 채팅방 생성 (supabaseAdminClient 사용 - 서비스 키 권한)
     const { data: newRoom, error: newRoomError } = await supabaseAdminClient
       .from('chat_rooms')
-      .insert({}) // 1:1 채팅은 이름이 없을 수 있음
+      .insert({})
       .select()
       .single();
 
@@ -77,7 +86,7 @@ serve(async (req: Request) => {
       throw new Error('Failed to create new chat room record.');
     }
 
-    // 3. 두 사용자를 새 채팅방에 참여자로 추가 (서비스 키 사용)
+    // 3. 두 사용자를 새 채팅방에 참여자로 추가 (supabaseAdminClient 사용 - 서비스 키 권한)
     const participantsData = [
       { user_id: currentUser.id, room_id: newRoom.id },
       { user_id: otherUserId, room_id: newRoom.id },
@@ -89,7 +98,6 @@ serve(async (req: Request) => {
 
     if (participantsError) {
       console.error('Error inserting chat_room_participants:', participantsError);
-      // 생성된 채팅방 롤백 (선택적이지만 권장)
       await supabaseAdminClient.from('chat_rooms').delete().eq('id', newRoom.id);
       throw participantsError;
     }
@@ -98,14 +106,16 @@ serve(async (req: Request) => {
       JSON.stringify({ roomId: newRoom.id, isNew: true, message: 'Chat room created successfully.' }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 201, // 201 Created
+        status: 201,
       }
     );
   } catch (error: any) {
     console.error('Function error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: error.message.includes('authenticate user') || error.message.includes('Forbidden') ? 401 : 400,
+      status: error.message.includes('authenticate user') || error.message.includes('Forbidden') ? 401
+        : error.message.includes('Missing') || error.message.includes('Cannot create a chat room with yourself') ? 400
+          : 500,
     });
   }
 });
