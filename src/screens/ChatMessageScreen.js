@@ -1,52 +1,58 @@
 // src/screens/ChatMessageScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, Alert, Platform, KeyboardAvoidingView } from 'react-native';
-import { GiftedChat } from 'react-native-gifted-chat';
-import { supabase } from '../lib/supabaseClient';
-import { useAuth } from '../context/AuthContext';
+import { View, StyleSheet, Alert, Platform, KeyboardAvoidingView, Text } // Text 임포트 추가
+    from 'react-native';
+import { GiftedChat, InputToolbar } from 'react-native-gifted-chat'; // InputToolbar 임포트 추가
+import { supabase } from '../lib/supabaseClient'; //
+import { useAuth } from '../context/AuthContext'; //
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 function ChatMessageScreen() {
     const { user, profile } = useAuth();
     const navigation = useNavigation();
     const route = useRoute();
-    const { roomId, roomName } = route.params;
+    const roomId = route.params?.roomId;
+    const roomName = route.params?.roomName;
 
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [text, setText] = useState(''); // 현재 입력 중인 텍스트 상태 추가
 
     useEffect(() => {
         navigation.setOptions({ title: roomName || '채팅' });
     }, [navigation, roomName]);
 
     const fetchMessages = useCallback(async () => {
-        if (!roomId) return;
+        if (!roomId) {
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
-        // RLS 정책에 의해 해당 방의 메시지만 가져옴
+
         const { data, error } = await supabase
-            .from('chat_messages')
+            .from('chat_messages_with_sender_profile') // 뷰 사용
             .select(`
-        id,
-        content,
-        created_at,
-        sender_id,
-        sender_profile:users!chat_messages_sender_id_fkey (name)
-      `)
+                id,
+                content,
+                created_at,
+                sender_id, 
+                sender_name
+            `)
             .eq('room_id', roomId)
-            .order('created_at', { ascending: false }); // 최신 메시지가 아래로 오도록 정렬
+            .order('created_at', { ascending: false });
 
         if (error) {
             Alert.alert('오류', '메시지를 불러오는데 실패했습니다.');
-            console.error(error);
+            console.error('Fetch messages error:', error);
+            setMessages([]);
         } else {
             const giftedChatMessages = data?.map(msg => ({
-                _id: msg.id,
+                _id: msg.id.toString(),
                 text: msg.content,
                 createdAt: new Date(msg.created_at),
                 user: {
                     _id: msg.sender_id,
-                    name: msg.sender_profile?.name || '알 수 없는 사용자',
-                    // avatar: 'url_to_avatar_if_available'
+                    name: msg.sender_name || '알 수 없는 사용자',
                 },
             })) || [];
             setMessages(giftedChatMessages);
@@ -55,69 +61,94 @@ function ChatMessageScreen() {
     }, [roomId]);
 
     useEffect(() => {
-        fetchMessages();
+        if (roomId) { // roomId가 있을 때만 fetchMessages 및 구독 실행
+            fetchMessages();
 
-        // 실시간 메시지 구독
-        const channel = supabase
-            .channel(`chat_room_${roomId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'chat_messages',
-                    filter: `room_id=eq.${roomId}`,
-                },
-                async (payload) => {
-                    console.log('New message received via realtime!', payload);
-                    // 새로 받은 메시지 처리 (sender_profile 정보 함께 가져오기)
-                    const newMessage = payload.new;
-                    if (newMessage) {
-                        const { data: senderData, error: senderError } = await supabase
-                            .from('users')
-                            .select('name')
-                            .eq('auth_user_id', newMessage.sender_id)
-                            .single();
+            const channel = supabase
+                .channel(`chat_room_${roomId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'chat_messages',
+                        filter: `room_id=eq.${roomId}`,
+                    },
+                    async (payload) => {
+                        console.log('New message received via realtime!', payload);
+                        const newMessageData = payload.new;
+                        if (newMessageData && newMessageData.sender_id !== user?.id) { // 내가 보낸 메시지는 onSend에서 처리
+                            const { data: senderProfile, error: profileError } = await supabase
+                                .from('users')
+                                .select('name')
+                                .eq('auth_user_id', newMessageData.sender_id)
+                                .single();
 
-                        const giftedNewMessage = {
-                            _id: newMessage.id,
-                            text: newMessage.content,
-                            createdAt: new Date(newMessage.created_at),
-                            user: {
-                                _id: newMessage.sender_id,
-                                name: senderData?.name || '알 수 없는 사용자',
-                            },
-                        };
-                        setMessages(previousMessages =>
-                            GiftedChat.append(previousMessages, [giftedNewMessage])
-                        );
+                            if (profileError) {
+                                console.error('Error fetching sender profile for new message:', profileError);
+                            }
+
+                            const giftedNewMessage = {
+                                _id: newMessageData.id.toString(),
+                                text: newMessageData.content,
+                                createdAt: new Date(newMessageData.created_at),
+                                user: {
+                                    _id: newMessageData.sender_id,
+                                    name: senderProfile?.name || '알 수 없는 사용자',
+                                },
+                            };
+                            setMessages(previousMessages =>
+                                GiftedChat.append(previousMessages, [giftedNewMessage])
+                            );
+                        }
                     }
-                }
-            )
-            .subscribe();
+                )
+                .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [roomId, fetchMessages]);
+            return () => {
+                supabase.removeChannel(channel);
+            };
+        }
+    }, [roomId, fetchMessages, user?.id]); // user.id를 의존성 배열에 추가
 
     const onSend = useCallback(async (newMessages = []) => {
-        if (!user || !roomId) return;
-        const text = newMessages[0].text;
+        if (!user || !profile || !roomId) return; // profile도 확인
+
+        const messageToSend = newMessages[0];
+        setText(''); // 입력창 비우기
+
+        setMessages(previousMessages =>
+            GiftedChat.append(previousMessages, [messageToSend])
+        );
 
         const { error } = await supabase
             .from('chat_messages')
             .insert({
                 room_id: roomId,
                 sender_id: user.id,
-                content: text,
+                content: messageToSend.text,
             });
 
         if (error) {
             Alert.alert('전송 실패', error.message);
             console.error('Send message error:', error);
+            setMessages(previousMessages =>
+                previousMessages.filter(msg => msg._id !== messageToSend._id)
+            );
         }
-    }, [user, roomId]);
+    }, [user, profile, roomId]); // profile을 의존성 배열에 추가
+
+    const renderInputToolbar = (props) => (
+        <InputToolbar
+            {...props}
+            containerStyle={{
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: '#b2b2b2',
+                backgroundColor: 'white',
+            }}
+            primaryStyle={{ alignItems: 'center' }}
+        />
+    );
 
 
     if (!user || !profile) {
@@ -125,7 +156,15 @@ function ChatMessageScreen() {
             <View style={styles.centered}>
                 <Text>사용자 정보를 불러오는 중이거나 로그인이 필요합니다.</Text>
             </View>
-        )
+        );
+    }
+
+    if (!roomId) {
+        return (
+            <View style={styles.centered}>
+                <Text>채팅방 정보를 찾을 수 없습니다.</Text>
+            </View>
+        );
     }
 
     return (
@@ -133,16 +172,20 @@ function ChatMessageScreen() {
             <GiftedChat
                 messages={messages}
                 onSend={newMessages => onSend(newMessages)}
-                user={{
-                    _id: user.id, // 현재 로그인한 사용자 ID
-                    name: profile.name || user.email, // 현재 로그인한 사용자 이름
+                user={{ // GiftedChat에 현재 사용자 정보 전달
+                    _id: user.id,
+                    name: profile.name || user.email || '나',
                 }}
-                isLoadingEarlier={isLoading} // 이전 메시지 로딩 상태 (페이징 시 사용)
+                text={text} // 현재 입력창의 텍스트 상태 연결
+                onInputTextChanged={setText} // 입력창 텍스트 변경 시 상태 업데이트
+                isLoadingEarlier={isLoading}
                 placeholder="메시지를 입력하세요..."
-                renderUsernameOnMessage // 메시지 옆에 이름 표시
-                // 기타 GiftedChat 옵션들...
+                renderUsernameOnMessage
+                renderInputToolbar={renderInputToolbar} // 키보드 자동 올림 동작 개선 시도 (필요시)
+                bottomOffset={Platform.OS === 'ios' ? 30 : 0} // iOS 특정 하단 여백 (노치 등 고려)
+                messagesContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 20 : 0 }} // 메시지 목록 하단 여백
             />
-            {Platform.OS === 'android' && <KeyboardAvoidingView behavior="padding" />}
+            {Platform.OS === 'android' && <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={Platform.select({ios: 0, android: 50})} enabled />}
         </View>
     );
 }
@@ -153,3 +196,4 @@ const styles = StyleSheet.create({
 });
 
 export default ChatMessageScreen;
+
