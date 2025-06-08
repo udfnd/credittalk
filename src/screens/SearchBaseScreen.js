@@ -457,8 +457,8 @@ function SearchBaseScreen({
                   (currentSearchType !== SEARCH_TYPES.UNIFIED &&
                     currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED &&
                     submittedSearchTerm.trim() === '')
-                    ? '검색 결과가 없습니다.'
-                    : '등록된 정보가 없습니다.'}
+                    ? '아직 피해 사실이 없습니다.'
+                    : '아직 피해 사실이 없습니다.'}
                 </Text>
               </View>
             )
