@@ -171,6 +171,30 @@ $$;
 
 ALTER FUNCTION "public"."encrypt_secret"("data" "text") OWNER TO "postgres";
 
+
+CREATE OR REPLACE FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") RETURNS TABLE("room_id" "uuid")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  RETURN QUERY
+  SELECT crp1.room_id
+  FROM public.chat_room_participants crp1
+  JOIN public.chat_room_participants crp2 ON crp1.room_id = crp2.room_id
+  LEFT JOIN public.chat_rooms cr ON crp1.room_id = cr.id -- chat_rooms 테이블 조인
+  WHERE
+    crp1.user_id = user1_id AND crp2.user_id = user2_id
+    AND ( -- 해당 채팅방의 참여자가 정확히 2명인지 확인
+      SELECT COUNT(*)
+      FROM public.chat_room_participants crp_count
+      WHERE crp_count.room_id = crp1.room_id
+    ) = 2
+    AND cr.name IS NULL; -- 1:1 채팅방은 보통 이름이 없음 (그룹채팅과 구분)
+END;
+$$;
+
+
+ALTER FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -181,12 +205,10 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "name" "bytea",
     "phone_number" "bytea",
-    "national_id" "bytea",
     "account_number" "bytea",
     "category" "text" NOT NULL,
     "description" "text",
     "ip_address" "inet",
-    "address" "bytea",
     "company_type" "text",
     "scam_report_source" "text",
     "nickname" "text",
@@ -195,8 +217,14 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "victim_circumstances" "text",
     "traded_item_category" "text",
     "perpetrator_identified" boolean,
-    CONSTRAINT "scammer_reports_category_check" CHECK (("category" = ANY (ARRAY['노쇼'::"text", '불법 사채'::"text", '보이스피싱'::"text", '중고나라 사기'::"text", '사기'::"text", '전세 사기'::"text", '알바 사기'::"text", '절도'::"text", '보이스피싱, 전기통신금융사기, 로맨스 스캠 사기'::"text", '불법사금융 대리구매'::"text", '중고나라 사기'::"text", '투자 사기, 전세 사기'::"text", '게임 비실물'::"text", '암호화폐'::"text", '노쇼, 대리구매, 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text", '기타'::"text"]))),
-    CONSTRAINT "scammer_reports_company_type_check" CHECK (("company_type" = ANY (ARRAY['법인'::"text", '개인'::"text"]))),
+    "analysis_result" "text",
+    "analysis_message" "text",
+    "analyzed_at" timestamp with time zone,
+    "analyzer_id" "uuid",
+    "gender" "text",
+    CONSTRAINT "scammer_reports_category_check" CHECK (("category" = ANY (ARRAY['보이스피싱, 전기통신금융사기, 로맨스 스캠 사기'::"text", '불법사금융'::"text", '중고물품 사기'::"text", '투자 사기, 전세 사기'::"text", '게임 비실물'::"text", '암호화폐'::"text", '노쇼'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text", '기타'::"text"]))),
+    CONSTRAINT "scammer_reports_company_type_check" CHECK (("company_type" = ANY (ARRAY['사업자'::"text", '개인'::"text"]))),
+    CONSTRAINT "scammer_reports_gender_check" CHECK (("gender" = ANY (ARRAY['남성'::"text", '여성'::"text", '모름'::"text"]))),
     CONSTRAINT "scammer_reports_scam_report_source_check" CHECK (("scam_report_source" = ANY (ARRAY['지인소개'::"text", '포털사이트'::"text", '문자'::"text", '카톡'::"text", '텔레그램'::"text"])))
 );
 
@@ -218,11 +246,23 @@ COMMENT ON COLUMN "public"."scammer_reports"."phone_number" IS '신고 대상 �
 
 
 
-COMMENT ON COLUMN "public"."scammer_reports"."national_id" IS '!!! 극도의 주의 필요 !!! 신고 대상 주민등록번호 (pgcrypto AES-256 암호화)';
-
-
-
 COMMENT ON COLUMN "public"."scammer_reports"."account_number" IS '신고 대상 계좌번호 (pgcrypto AES-256 암호화)';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."analysis_result" IS '관리자 분석 결과';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."analysis_message" IS '관리자 분석 상세 메시지';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."analyzed_at" IS '분석 완료 시간';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."analyzer_id" IS '분석 수행 관리자 ID';
 
 
 
@@ -328,6 +368,193 @@ $$;
 ALTER FUNCTION "public"."handle_updated_at"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."is_current_user_admin"() RETURNS boolean
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  is_admin_result boolean;
+BEGIN
+  -- 현재 인증된 사용자의 auth.uid()를 사용하여 users 테이블에서 is_admin 값을 찾습니다.
+  SELECT u.is_admin INTO is_admin_result
+  FROM public.users u
+  WHERE u.auth_user_id = auth.uid();
+
+  -- 결과가 NULL이면 false를 반환하고, 그렇지 않으면 is_admin 값을 반환합니다.
+  RETURN COALESCE(is_admin_result, false);
+END;
+$$;
+
+
+ALTER FUNCTION "public"."is_current_user_admin"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_room_last_message_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  UPDATE public.chat_rooms
+  SET last_message_at = NEW.created_at
+  WHERE id = NEW.room_id;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_room_last_message_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
+ SELECT "scammer_reports"."id",
+    "public"."decrypt_secret"("scammer_reports"."name") AS "name",
+    "public"."decrypt_secret"("scammer_reports"."phone_number") AS "phone_number",
+    "public"."decrypt_secret"("scammer_reports"."account_number") AS "account_number",
+    "scammer_reports"."category",
+    "scammer_reports"."description",
+    "scammer_reports"."ip_address",
+    "scammer_reports"."company_type",
+    "scammer_reports"."scam_report_source",
+    "scammer_reports"."nickname",
+    "scammer_reports"."gender",
+    "scammer_reports"."perpetrator_identified",
+    "scammer_reports"."created_at"
+   FROM "public"."scammer_reports";
+
+
+ALTER TABLE "public"."admin_scammer_reports_view" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."chat_messages" (
+    "id" bigint NOT NULL,
+    "room_id" "uuid" NOT NULL,
+    "sender_id" "uuid" NOT NULL,
+    "content" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "is_read" boolean DEFAULT false
+);
+
+
+ALTER TABLE "public"."chat_messages" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."chat_messages" IS '각 채팅방의 메시지를 저장합니다.';
+
+
+
+COMMENT ON COLUMN "public"."chat_messages"."sender_id" IS '메시지를 보낸 사용자의 ID (auth.users.id 참조)';
+
+
+
+COMMENT ON COLUMN "public"."chat_messages"."content" IS '메시지 내용';
+
+
+
+ALTER TABLE "public"."chat_messages" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."chat_messages_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."users" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "name" "text" NOT NULL,
+    "phone_number" "text" NOT NULL,
+    "national_id" "text" NOT NULL,
+    "job_type" "text" NOT NULL,
+    "auth_user_id" "uuid",
+    "is_admin" boolean DEFAULT false,
+    CONSTRAINT "users_job_type_check" CHECK (("job_type" = ANY (ARRAY['일반'::"text", '대부업 종사자'::"text", '자영업 종사자'::"text"])))
+);
+
+
+ALTER TABLE "public"."users" OWNER TO "postgres";
+
+
+CREATE OR REPLACE VIEW "public"."chat_messages_with_sender_profile" AS
+ SELECT "cm"."id",
+    "cm"."room_id",
+    "cm"."sender_id",
+    "cm"."content",
+    "cm"."created_at",
+    "cm"."is_read",
+    "u"."name" AS "sender_name",
+    "u"."id" AS "sender_profile_id"
+   FROM ("public"."chat_messages" "cm"
+     LEFT JOIN "public"."users" "u" ON (("cm"."sender_id" = "u"."auth_user_id")));
+
+
+ALTER TABLE "public"."chat_messages_with_sender_profile" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."chat_room_participants" (
+    "id" bigint NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "room_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "joined_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "public"."chat_room_participants" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."chat_room_participants" IS '사용자와 채팅방의 참여 관계를 정의합니다.';
+
+
+
+ALTER TABLE "public"."chat_room_participants" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."chat_room_participants_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE OR REPLACE VIEW "public"."chat_room_participants_with_profile" AS
+ SELECT "crp"."id",
+    "crp"."room_id",
+    "crp"."user_id" AS "author_auth_id",
+    "crp"."created_at" AS "participant_created_at",
+    "crp"."joined_at",
+    "u"."id" AS "user_profile_id",
+    "u"."name" AS "user_name",
+    "u"."job_type" AS "user_job_type"
+   FROM ("public"."chat_room_participants" "crp"
+     LEFT JOIN "public"."users" "u" ON (("crp"."user_id" = "u"."auth_user_id")));
+
+
+ALTER TABLE "public"."chat_room_participants_with_profile" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."chat_rooms" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "last_message_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "name" "text"
+);
+
+
+ALTER TABLE "public"."chat_rooms" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."chat_rooms" IS '채팅방 정보를 저장합니다.';
+
+
+
+COMMENT ON COLUMN "public"."chat_rooms"."last_message_at" IS '채팅방의 마지막 메시지 수신/발신 시간입니다.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."community_posts" (
     "id" bigint NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -352,21 +579,6 @@ ALTER TABLE "public"."community_posts" ALTER COLUMN "id" ADD GENERATED BY DEFAUL
     CACHE 1
 );
 
-
-
-CREATE TABLE IF NOT EXISTS "public"."users" (
-    "id" bigint NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "name" "text" NOT NULL,
-    "phone_number" "text" NOT NULL,
-    "national_id" "text" NOT NULL,
-    "job_type" "text" NOT NULL,
-    "auth_user_id" "uuid",
-    CONSTRAINT "users_job_type_check" CHECK (("job_type" = ANY (ARRAY['일반'::"text", '대부업 종사자'::"text", '자영업 종사자'::"text"])))
-);
-
-
-ALTER TABLE "public"."users" OWNER TO "postgres";
 
 
 CREATE OR REPLACE VIEW "public"."community_posts_with_author_profile" AS
@@ -421,15 +633,13 @@ CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
     "sr"."nickname",
     "public"."decrypt_secret"("sr"."phone_number") AS "phone_number",
     "public"."decrypt_secret"("sr"."account_number") AS "account_number",
-    "public"."decrypt_secret"("sr"."national_id") AS "national_id",
-    "public"."decrypt_secret"("sr"."address") AS "address",
     "sr"."category",
     "sr"."description",
     "sr"."ip_address",
     "sr"."created_at",
     "sr"."company_type",
     "sr"."scam_report_source"
-   FROM "public"."get_allowed_scammer_reports_for_user"() "sr"("id", "created_at", "name", "phone_number", "national_id", "account_number", "category", "description", "ip_address", "address", "company_type", "scam_report_source", "nickname");
+   FROM "public"."get_allowed_scammer_reports_for_user"() "sr"("id", "created_at", "name", "phone_number", "account_number", "category", "description", "ip_address", "company_type", "scam_report_source", "nickname", "perpetrator_dialogue_trigger", "perpetrator_contact_path", "victim_circumstances", "traded_item_category", "perpetrator_identified", "analysis_result", "analysis_message", "analyzed_at", "analyzer_id", "gender");
 
 
 ALTER TABLE "public"."masked_scammer_reports" OWNER TO "postgres";
@@ -487,6 +697,24 @@ ALTER TABLE "public"."reviews" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDE
 
 
 
+CREATE OR REPLACE VIEW "public"."reviews_with_author_profile" AS
+ SELECT "r"."id",
+    "r"."created_at",
+    "r"."updated_at",
+    "r"."title",
+    "r"."content",
+    "r"."user_id" AS "author_auth_id",
+    "r"."rating",
+    "r"."is_published",
+    "u"."name" AS "author_name",
+    "u"."job_type" AS "author_job_type"
+   FROM ("public"."reviews" "r"
+     LEFT JOIN "public"."users" "u" ON (("r"."user_id" = "u"."auth_user_id")));
+
+
+ALTER TABLE "public"."reviews_with_author_profile" OWNER TO "postgres";
+
+
 ALTER TABLE "public"."scammer_reports" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME "public"."scammer_reports_id_seq"
     START WITH 1
@@ -506,6 +734,26 @@ ALTER TABLE "public"."users" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENT
     NO MAXVALUE
     CACHE 1
 );
+
+
+
+ALTER TABLE ONLY "public"."chat_messages"
+    ADD CONSTRAINT "chat_messages_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."chat_room_participants"
+    ADD CONSTRAINT "chat_room_participants_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."chat_room_participants"
+    ADD CONSTRAINT "chat_room_participants_user_id_room_id_key" UNIQUE ("user_id", "room_id");
+
+
+
+ALTER TABLE ONLY "public"."chat_rooms"
+    ADD CONSTRAINT "chat_rooms_pkey" PRIMARY KEY ("id");
 
 
 
@@ -544,6 +792,10 @@ ALTER TABLE ONLY "public"."users"
 
 
 
+CREATE OR REPLACE TRIGGER "handle_chat_rooms_updated_at" BEFORE UPDATE ON "public"."chat_rooms" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+
+
 CREATE OR REPLACE TRIGGER "on_community_posts_updated" BEFORE UPDATE ON "public"."community_posts" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
 
@@ -552,7 +804,31 @@ CREATE OR REPLACE TRIGGER "on_incident_photos_updated" BEFORE UPDATE ON "public"
 
 
 
+CREATE OR REPLACE TRIGGER "on_new_message_update_room_timestamp" AFTER INSERT ON "public"."chat_messages" FOR EACH ROW EXECUTE FUNCTION "public"."update_room_last_message_at"();
+
+
+
 CREATE OR REPLACE TRIGGER "on_reviews_updated" BEFORE UPDATE ON "public"."reviews" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+
+
+ALTER TABLE ONLY "public"."chat_messages"
+    ADD CONSTRAINT "chat_messages_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "public"."chat_rooms"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."chat_messages"
+    ADD CONSTRAINT "chat_messages_sender_id_fkey" FOREIGN KEY ("sender_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."chat_room_participants"
+    ADD CONSTRAINT "chat_room_participants_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "public"."chat_rooms"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."chat_room_participants"
+    ADD CONSTRAINT "chat_room_participants_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 
 
@@ -571,7 +847,16 @@ ALTER TABLE ONLY "public"."reviews"
 
 
 
+ALTER TABLE ONLY "public"."scammer_reports"
+    ADD CONSTRAINT "scammer_reports_analyzer_id_fkey" FOREIGN KEY ("analyzer_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
 CREATE POLICY "Admins can manage incident photos." ON "public"."incident_photos" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
+
+
+
+CREATE POLICY "Admins can manage notices" ON "public"."notices" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
 
 
 
@@ -595,6 +880,10 @@ CREATE POLICY "Authenticated users can create reviews." ON "public"."reviews" FO
 
 
 
+CREATE POLICY "Authenticated users can list other users for chat" ON "public"."users" FOR SELECT TO "authenticated" USING (true);
+
+
+
 CREATE POLICY "Public community posts are viewable by everyone." ON "public"."community_posts" FOR SELECT USING (true);
 
 
@@ -611,7 +900,15 @@ CREATE POLICY "Public reviews are viewable by everyone." ON "public"."reviews" F
 
 
 
+CREATE POLICY "TEST Allow all authenticated to insert chat rooms" ON "public"."chat_rooms" FOR INSERT WITH CHECK (true);
+
+
+
 CREATE POLICY "Users can delete their own community posts." ON "public"."community_posts" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can delete their own participation." ON "public"."chat_room_participants" FOR DELETE USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -619,7 +916,17 @@ CREATE POLICY "Users can delete their own reviews." ON "public"."reviews" FOR DE
 
 
 
+CREATE POLICY "Users can insert their own participation." ON "public"."chat_room_participants" FOR INSERT WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
 CREATE POLICY "Users can insert their own profile." ON "public"."users" FOR INSERT WITH CHECK (("auth"."uid"() = "auth_user_id"));
+
+
+
+CREATE POLICY "Users can send messages in rooms they are part of." ON "public"."chat_messages" FOR INSERT WITH CHECK ((("sender_id" = "auth"."uid"()) AND (EXISTS ( SELECT 1
+   FROM "public"."chat_room_participants" "crp"
+  WHERE (("crp"."room_id" = "chat_messages"."room_id") AND ("crp"."user_id" = "auth"."uid"()))))));
 
 
 
@@ -631,8 +938,29 @@ CREATE POLICY "Users can update their own reviews." ON "public"."reviews" FOR UP
 
 
 
-CREATE POLICY "Users can view their own profile." ON "public"."users" FOR SELECT USING (("auth"."uid"() = "auth_user_id"));
+CREATE POLICY "Users can view chat rooms they are part of." ON "public"."chat_rooms" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."chat_room_participants" "crp"
+  WHERE (("crp"."room_id" = "chat_rooms"."id") AND ("crp"."user_id" = "auth"."uid"())))));
 
+
+
+CREATE POLICY "Users can view messages in rooms they are part of." ON "public"."chat_messages" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."chat_room_participants" "crp"
+  WHERE (("crp"."room_id" = "chat_messages"."room_id") AND ("crp"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "Users can view their own participation." ON "public"."chat_room_participants" FOR SELECT USING (("user_id" = "auth"."uid"()));
+
+
+
+ALTER TABLE "public"."chat_messages" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."chat_room_participants" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."chat_rooms" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."community_posts" ENABLE ROW LEVEL SECURITY;
@@ -858,6 +1186,12 @@ GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "service_role"
 
 
 
+GRANT ALL ON FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."scammer_reports" TO "anon";
 GRANT ALL ON TABLE "public"."scammer_reports" TO "authenticated";
 GRANT ALL ON TABLE "public"."scammer_reports" TO "service_role";
@@ -869,10 +1203,6 @@ GRANT INSERT("name"),UPDATE("name") ON TABLE "public"."scammer_reports" TO "auth
 
 
 GRANT INSERT("phone_number"),UPDATE("phone_number") ON TABLE "public"."scammer_reports" TO "authenticated";
-
-
-
-GRANT INSERT("national_id"),UPDATE("national_id") ON TABLE "public"."scammer_reports" TO "authenticated";
 
 
 
@@ -912,6 +1242,15 @@ GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."is_current_user_admin"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_current_user_admin"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_current_user_admin"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_room_last_message_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_room_last_message_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_room_last_message_at"() TO "service_role";
 
 
 
@@ -933,6 +1272,63 @@ GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "service_role";
 
 
 
+
+
+
+
+
+
+GRANT ALL ON TABLE "public"."admin_scammer_reports_view" TO "anon";
+GRANT ALL ON TABLE "public"."admin_scammer_reports_view" TO "authenticated";
+GRANT ALL ON TABLE "public"."admin_scammer_reports_view" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."chat_messages" TO "anon";
+GRANT ALL ON TABLE "public"."chat_messages" TO "authenticated";
+GRANT ALL ON TABLE "public"."chat_messages" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."chat_messages_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."chat_messages_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."chat_messages_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."users" TO "anon";
+GRANT ALL ON TABLE "public"."users" TO "authenticated";
+GRANT ALL ON TABLE "public"."users" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."chat_messages_with_sender_profile" TO "anon";
+GRANT ALL ON TABLE "public"."chat_messages_with_sender_profile" TO "authenticated";
+GRANT ALL ON TABLE "public"."chat_messages_with_sender_profile" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."chat_room_participants" TO "anon";
+GRANT ALL ON TABLE "public"."chat_room_participants" TO "authenticated";
+GRANT ALL ON TABLE "public"."chat_room_participants" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."chat_room_participants_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."chat_room_participants_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."chat_room_participants_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."chat_room_participants_with_profile" TO "anon";
+GRANT ALL ON TABLE "public"."chat_room_participants_with_profile" TO "authenticated";
+GRANT ALL ON TABLE "public"."chat_room_participants_with_profile" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."chat_rooms" TO "anon";
+GRANT ALL ON TABLE "public"."chat_rooms" TO "authenticated";
+GRANT ALL ON TABLE "public"."chat_rooms" TO "service_role";
 
 
 
@@ -945,12 +1341,6 @@ GRANT ALL ON TABLE "public"."community_posts" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."community_posts_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."community_posts_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."community_posts_id_seq" TO "service_role";
-
-
-
-GRANT ALL ON TABLE "public"."users" TO "anon";
-GRANT ALL ON TABLE "public"."users" TO "authenticated";
-GRANT ALL ON TABLE "public"."users" TO "service_role";
 
 
 
@@ -999,6 +1389,12 @@ GRANT ALL ON TABLE "public"."reviews" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."reviews_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."reviews_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."reviews_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."reviews_with_author_profile" TO "anon";
+GRANT ALL ON TABLE "public"."reviews_with_author_profile" TO "authenticated";
+GRANT ALL ON TABLE "public"."reviews_with_author_profile" TO "service_role";
 
 
 
