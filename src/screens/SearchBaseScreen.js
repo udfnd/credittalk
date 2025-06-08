@@ -24,54 +24,54 @@ export const SEARCH_TYPES = {
   NUMERIC_UNIFIED: 'numeric_unified',
 };
 
-const maskName = (name) => {
+const maskNameMiddle = (name) => {
   if (!name || typeof name !== 'string' || name.length <= 1) {
     return name || '';
   }
   if (name.length === 2) {
     return `${name[0]}*`;
   }
-  return `${name[0]}*${name.substring(2)}`;
+  const middleIndex = Math.floor(name.length / 2);
+  return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
 };
 
-const maskPhoneNumber = (phoneNumber) => {
+const maskPhoneNumberCustom = (phoneNumber) => {
   if (!phoneNumber || typeof phoneNumber !== 'string') {
     return phoneNumber || '';
   }
   const cleanNumber = phoneNumber.replace(/-/g, '');
   const len = cleanNumber.length;
 
-  if (len < 7) {
-    return phoneNumber;
+  if (len === 11) {
+    const p1 = cleanNumber.substring(0, 3);
+    const p2 = cleanNumber.substring(3, 7);
+    const p3 = cleanNumber.substring(7, 11);
+    const maskedP2 = `${p2.substring(0, 1)}*${p2.substring(2)}`;
+    const maskedP3 = `${p3.substring(0, 1)}*${p3.substring(2)}`;
+    return `${p1}-${maskedP2}-${maskedP3}`;
+  }
+  if (len === 10) {
+    if (cleanNumber.startsWith('02')) {
+      const p1 = cleanNumber.substring(0, 2);
+      const p2 = cleanNumber.substring(2, 6);
+      const p3 = cleanNumber.substring(6, 10);
+      const maskedP2 = `${p2.substring(0, 2)}*${p2.substring(3)}`;
+      const maskedP3 = `${p3.substring(0, 1)}*${p3.substring(2)}`;
+      return `${p1}-${maskedP2}-${maskedP3}`;
+    }
+    const p1 = cleanNumber.substring(0, 3);
+    const p2 = cleanNumber.substring(3, 6);
+    const p3 = cleanNumber.substring(6, 10);
+    const maskedP2 = `${p2.substring(0, 1)}*${p2.substring(2)}`;
+    const maskedP3 = `${p3.substring(0, 1)}*${p3.substring(2)}`;
+    return `${p1}-${maskedP2}-${maskedP3}`;
   }
 
-  let maskedNumber = '';
-  if (len === 11) {
-    maskedNumber = `${cleanNumber.substring(0, 5)}**${cleanNumber.substring(7)}`;
-    return `${maskedNumber.substring(0, 3)}-${maskedNumber.substring(3, 7)}-${maskedNumber.substring(7)}`;
-  } else if (len === 10) {
-    if (cleanNumber.startsWith('02')) {
-      const midIndex = Math.floor(len / 2) - 1;
-      maskedNumber = `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
-      if (
-        cleanNumber.length === 10 &&
-        cleanNumber.split('-').length === 3 &&
-        cleanNumber.split('-')[1].length === 4
-      ) {
-        return `${maskedNumber.substring(0, 2)}-${maskedNumber.substring(2, 6)}-${maskedNumber.substring(6)}`;
-      } else {
-        return `${maskedNumber.substring(0, 2)}-${maskedNumber.substring(2, 5)}-${maskedNumber.substring(5)}`;
-      }
-    } else {
-      maskedNumber = `${cleanNumber.substring(0, 4)}**${cleanNumber.substring(6)}`;
-      return `${maskedNumber.substring(0, 3)}-${maskedNumber.substring(3, 6)}-${maskedNumber.substring(6)}`;
-    }
-  } else if (len >= 7 && len <= 9) {
-    const midIndex = Math.floor(len / 2) - 1;
-    maskedNumber = `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
-    return maskedNumber;
-  }
-  return phoneNumber;
+  const midIndex = Math.floor(len / 2) - 1;
+  if (midIndex <= 0) return cleanNumber;
+  return `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(
+    midIndex + 2,
+  )}`;
 };
 
 const maskAccountNumber = (accountNumber) => {
@@ -112,7 +112,6 @@ function SearchBaseScreen({
   const currentScreenTitle = screenTitleFromParams || propTitle || '검색';
 
   const [reports, setReports] = useState([]);
-  const [maskedReports, setMaskedReports] = useState([]);
   const [dataFetchLoading, setDataFetchLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
@@ -132,18 +131,15 @@ function SearchBaseScreen({
         );
         setDataFetchLoading(false);
         setReports([]);
-        setMaskedReports([]);
         setTotalCount(0);
         return;
       }
 
       if (
         termToSearch.trim() === '' &&
-        currentSearchType !== SEARCH_TYPES.UNIFIED &&
-        currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED
+        currentSearchType !== SEARCH_TYPES.UNIFIED
       ) {
         setReports([]);
-        setMaskedReports([]);
         setTotalCount(0);
         setDataFetchLoading(false);
         setError(null);
@@ -192,7 +188,6 @@ function SearchBaseScreen({
       } catch (err) {
         setError(`데이터 조회 실패: ${err.message || '알 수 없는 오류'}`);
         setReports([]);
-        setMaskedReports([]);
         setTotalCount(0);
       } finally {
         setDataFetchLoading(false);
@@ -217,10 +212,9 @@ function SearchBaseScreen({
       } else {
         const specificError = !user
           ? '로그인이 필요합니다.'
-          : '사용자 프로필(직업 정보)을 찾을 수 없습니다. RLS 정책 적용에 필요합니다.';
+          : '사용자 프로필(직업 정보)을 찾을 수 없습니다.';
         setError(specificError);
         setReports([]);
-        setMaskedReports([]);
         setTotalCount(0);
         setDataFetchLoading(false);
       }
@@ -234,33 +228,6 @@ function SearchBaseScreen({
     fetchReports,
     initialAuthCheckComplete,
   ]);
-
-  useEffect(() => {
-    if (reports.length > 0) {
-      const newMaskedReports = reports.map((item) => {
-        const displayName = item.name || item.nickname;
-        return {
-          ...item,
-          displayName: maskName(displayName),
-          phone_number_masked: maskPhoneNumber(item.phone_number),
-          account_number_masked: maskAccountNumber(item.account_number),
-          categoryColor:
-            item.category === '노쇼'
-              ? '#3498db'
-              : item.category === '보이스피싱'
-                ? '#e74c3c'
-                : item.category === '중고나라 사기'
-                  ? '#f39c12'
-                  : item.category === '불법 사채'
-                    ? '#8e44ad'
-                    : '#34495e',
-        };
-      });
-      setMaskedReports(newMaskedReports);
-    } else {
-      setMaskedReports([]);
-    }
-  }, [reports]);
 
   const handleSearch = () => {
     Keyboard.dismiss();
@@ -289,89 +256,80 @@ function SearchBaseScreen({
     }
   };
 
-  const renderItem = useCallback(
-    ({ item }) => {
-      const commonInfo = (
-        <>
-          <Text style={styles.itemText}>
-            카테고리:{' '}
-            <Text style={{ color: item.categoryColor, fontWeight: 'bold' }}>
-              {item.category || 'N/A'}
-            </Text>
-          </Text>
-          <Text style={styles.itemText}>
-            이름:{' '}
-            <Text style={styles.maskedText}>{item.displayName || 'N/A'}</Text>
-          </Text>
-        </>
-      );
+  const renderItem = useCallback(({ item }) => {
+    const categoryColor =
+      item.category === '노쇼'
+        ? '#3498db'
+        : item.category.includes('보이스피싱')
+          ? '#e74c3c'
+          : item.category === '중고물품 사기'
+            ? '#f39c12'
+            : item.category === '불법 사채' || item.category === '불법사금융'
+              ? '#8e44ad'
+              : '#34495e';
 
-      let screenSpecificInfo;
-      if (
-        currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
-        currentSearchType === SEARCH_TYPES.UNIFIED
-      ) {
-        screenSpecificInfo = (
-          <>
-            <Text style={styles.itemText}>
-              연락처:{' '}
-              <Text style={styles.maskedText}>
-                {item.phone_number_masked || 'N/A'}
-              </Text>
-            </Text>
-            <Text style={styles.itemText}>
-              계좌:{' '}
-              <Text style={styles.maskedText}>
-                {item.account_number_masked || 'N/A'}
-              </Text>
-            </Text>
-            {item.description && (
-              <Text style={styles.itemDesc}>내용: {item.description}</Text>
-            )}
-          </>
-        );
-      } else if (currentSearchType === SEARCH_TYPES.ACCOUNT) {
-        screenSpecificInfo = (
-          <>
-            <Text style={styles.itemText}>
-              계좌:{' '}
-              <Text style={styles.maskedText}>
-                {item.account_number_masked || 'N/A'}
-              </Text>
-            </Text>
-            {item.description && (
-              <Text style={styles.itemDesc}>내용: {item.description}</Text>
-            )}
-          </>
-        );
-      } else if (currentSearchType === SEARCH_TYPES.PHONE) {
-        screenSpecificInfo = (
-          <>
-            <Text style={styles.itemText}>
-              연락처:{' '}
-              <Text style={styles.maskedText}>
-                {item.phone_number_masked || 'N/A'}
-              </Text>
-            </Text>
-            {item.description && (
-              <Text style={styles.itemDesc}>내용: {item.description}</Text>
-            )}
-          </>
-        );
-      }
+    let circumstanceContent = null;
+    let circumstanceLabel = '피해 정황';
 
-      return (
-        <View style={styles.itemContainer}>
-          {commonInfo}
-          {screenSpecificInfo}
-          <Text style={styles.dateText}>
-            등록일: {new Date(item.created_at).toLocaleDateString()}
+    if (item.category.includes('보이스피싱') && item.impersonated_person) {
+      circumstanceLabel = '사칭 인물';
+      circumstanceContent = item.impersonated_person;
+    } else if (item.category === '불법사금융' && item.victim_circumstances) {
+      circumstanceLabel = '피해 정황';
+      circumstanceContent = Array.isArray(item.victim_circumstances)
+        ? item.victim_circumstances.join(', ')
+        : item.victim_circumstances;
+    }
+
+    return (
+      <View style={styles.itemContainer}>
+        <Text style={styles.itemText}>
+          카테고리:{' '}
+          <Text style={{ color: categoryColor, fontWeight: 'bold' }}>
+            {item.category || 'N/A'}
           </Text>
-        </View>
-      );
-    },
-    [currentSearchType],
-  );
+        </Text>
+        {item.name && (
+          <Text style={styles.itemText}>
+            예금주명:{' '}
+            <Text style={styles.maskedText}>{maskNameMiddle(item.name)}</Text>
+          </Text>
+        )}
+        {item.phone_number && (
+          <Text style={styles.itemText}>
+            연락처:{' '}
+            <Text style={styles.maskedText}>
+              {maskPhoneNumberCustom(item.phone_number)}
+            </Text>
+          </Text>
+        )}
+        {item.account_number && (
+          <Text style={styles.itemText}>
+            계좌번호:{' '}
+            <Text style={styles.maskedText}>
+              {maskAccountNumber(item.account_number)}
+            </Text>
+          </Text>
+        )}
+        {item.nickname && (
+          <Text style={styles.itemText}>
+            닉네임: <Text>{item.nickname}</Text>
+          </Text>
+        )}
+
+        {/* 조건부로 피해 정황/사칭 인물 표시 */}
+        {circumstanceContent && (
+          <Text style={styles.itemDesc}>
+            {circumstanceLabel}: {circumstanceContent}
+          </Text>
+        )}
+
+        <Text style={styles.dateText}>
+          등록일: {new Date(item.created_at).toLocaleDateString()}
+        </Text>
+      </View>
+    );
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
 
@@ -397,13 +355,13 @@ function SearchBaseScreen({
           style={styles.searchInput}
           placeholder={
             currentSearchType === SEARCH_TYPES.UNIFIED
-              ? '이름, 닉네임, 전화번호(정확히), 계좌번호(포함)'
+              ? '이름, 닉네임, 전화번호, 계좌번호'
               : currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED
-                ? '연락처(정확히) 또는 계좌번호(포함)'
+                ? '연락처 또는 계좌번호'
                 : currentSearchType === SEARCH_TYPES.ACCOUNT
-                  ? '계좌번호(포함) 입력'
+                  ? '계좌번호 입력'
                   : currentSearchType === SEARCH_TYPES.PHONE
-                    ? '전화번호(정확히) 입력'
+                    ? '전화번호 입력'
                     : '검색어 입력'
           }
           value={searchTerm}
@@ -411,12 +369,11 @@ function SearchBaseScreen({
           onSubmitEditing={handleSearch}
           returnKeyType="search"
           keyboardType={
-            currentSearchType === SEARCH_TYPES.PHONE
-              ? 'phone-pad'
-              : currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
-                  currentSearchType === SEARCH_TYPES.ACCOUNT
-                ? 'number-pad'
-                : 'default'
+            currentSearchType === SEARCH_TYPES.PHONE ||
+            currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
+            currentSearchType === SEARCH_TYPES.ACCOUNT
+              ? 'numeric'
+              : 'default'
           }
         />
         {searchTerm ? (
@@ -438,35 +395,28 @@ function SearchBaseScreen({
 
       {error && <Text style={styles.errorText}>{error}</Text>}
 
-      {dataFetchLoading && !maskedReports.length ? (
+      {dataFetchLoading && !reports.length ? (
         <View style={styles.loader}>
           <ActivityIndicator size="large" color="#3d5afe" />
           <Text style={{ marginTop: 10 }}>데이터를 불러오는 중...</Text>
         </View>
       ) : (
         <FlatList
-          data={maskedReports}
+          data={reports}
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           ListEmptyComponent={
             !dataFetchLoading && (
               <View style={styles.emptyContainer}>
                 <Icon name="alert-circle-outline" size={50} color="#aaa" />
-                <Text style={styles.emptyText}>
-                  {submittedSearchTerm.trim() !== '' ||
-                  (currentSearchType !== SEARCH_TYPES.UNIFIED &&
-                    currentSearchType !== SEARCH_TYPES.NUMERIC_UNIFIED &&
-                    submittedSearchTerm.trim() === '')
-                    ? '아직 피해 사실이 없습니다.'
-                    : '아직 피해 사실이 없습니다.'}
-                </Text>
+                <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
               </View>
             )
           }
           contentContainerStyle={{ paddingBottom: 20 }}
           keyboardShouldPersistTaps="handled"
           ListFooterComponent={
-            dataFetchLoading && maskedReports.length > 0 ? (
+            dataFetchLoading && reports.length > 0 ? (
               <ActivityIndicator style={{ marginVertical: 10 }} size="small" />
             ) : null
           }
@@ -573,7 +523,7 @@ const styles = StyleSheet.create({
   },
   itemText: { fontSize: 16, marginBottom: 7, color: '#495057', lineHeight: 22 },
   maskedText: {
-    /* 스타일 필요시 추가 */
+    color: '#212529',
   },
   itemDesc: {
     fontSize: 14,

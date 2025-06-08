@@ -15,7 +15,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
-const jobTypes = ['일반', '대부업 종사자', '자영업 종사자'];
+const jobTypes = ['일반', '사업자'];
 
 function SignUpScreen() {
   const navigation = useNavigation();
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   },
   jobTypeButton: {
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 20, // 양옆 간격 조정
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#adb5bd',
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     borderColor: '#3d5afe',
   },
   jobTypeButtonText: {
-    fontSize: 14,
+    fontSize: 16, // 폰트 크기 조정
     color: '#495057',
   },
   jobTypeButtonTextSelected: {
