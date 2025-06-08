@@ -11,6 +11,8 @@ interface ReportData {
   name?: string | null;
   phone_number?: string | null;
   account_number?: string | null;
+  bank_name?: string | null; // 은행 이름 필드 추가
+  site_name?: string | null; // 사이트 이름 필드 추가
   category: string;
   scam_report_source: string;
   company_type: string;
@@ -25,7 +27,6 @@ interface ReportData {
   damaged_item?: string | null;
   impersonated_person?: string | null;
   nickname_evidence_url?: string | null;
-  // 불법 추심 증거 사진 URL 배열 필드 추가
   illegal_collection_evidence_urls?: string[] | null;
 }
 
@@ -66,6 +67,8 @@ async function encryptAndInsert(
       name: encryptedData.name,
       phone_number: encryptedData.phone_number,
       account_number: encryptedData.account_number,
+      bank_name: reportData.bank_name || null, // 은행 이름 추가
+      site_name: reportData.site_name || null, // 사이트 이름 추가
       category: reportData.category,
       scam_report_source: reportData.scam_report_source,
       company_type: reportData.company_type,
@@ -81,8 +84,8 @@ async function encryptAndInsert(
       damaged_item: reportData.damaged_item || null,
       impersonated_person: reportData.impersonated_person || null,
       nickname_evidence_url: reportData.nickname_evidence_url || null,
-      // 불법 추심 증거 사진 URL 배열 저장
-      illegal_collection_evidence_urls: reportData.illegal_collection_evidence_urls || null,
+      illegal_collection_evidence_urls:
+        reportData.illegal_collection_evidence_urls || null,
     });
 
   if (insertError) {
@@ -101,7 +104,13 @@ serve(async (req: Request) => {
   try {
     const authorization = req.headers.get('Authorization');
     if (!authorization) {
-      return new Response(JSON.stringify({ error: 'Forbidden: Missing Authorization header.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: Missing Authorization header.' }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
     const userSupabaseClient = createClient(
@@ -109,34 +118,78 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authorization } } },
     );
-    const { data: { user }, error: userError } = await userSupabaseClient.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await userSupabaseClient.auth.getUser();
 
     if (userError || !user) {
       console.error('User auth error:', userError?.message);
-      return new Response(JSON.stringify({ error: 'Authentication failed.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Authentication failed.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (!req.body) {
-      return new Response(JSON.stringify({ error: 'Invalid request: Missing request body.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({ error: 'Invalid request: Missing request body.' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
     if (!req.headers.get('content-type')?.includes('application/json')) {
-      return new Response(JSON.stringify({ error: 'Invalid request: Content-Type must be application/json.' }), { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          error: 'Invalid request: Content-Type must be application/json.',
+        }),
+        {
+          status: 415,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
     const reportData: ReportData = await req.json();
 
-    const requiredFields: (keyof ReportData)[] = ['category', 'scam_report_source', 'company_type', 'gender'];
-    const missingFields = requiredFields.filter(field => reportData[field] === undefined || reportData[field] === null || reportData[field] === '');
+    const requiredFields: (keyof ReportData)[] = [
+      'category',
+      'scam_report_source',
+      'company_type',
+      'gender',
+    ];
+    const missingFields = requiredFields.filter(
+      (field) =>
+        reportData[field] === undefined ||
+        reportData[field] === null ||
+        reportData[field] === '',
+    );
 
-    if (reportData.perpetrator_identified === undefined || reportData.perpetrator_identified === null) {
+    if (
+      reportData.perpetrator_identified === undefined ||
+      reportData.perpetrator_identified === null
+    ) {
       missingFields.push('perpetrator_identified');
     }
-    if (reportData.attempted_fraud === undefined || reportData.attempted_fraud === null) {
+    if (
+      reportData.attempted_fraud === undefined ||
+      reportData.attempted_fraud === null
+    ) {
       missingFields.push('attempted_fraud');
     }
 
     if (missingFields.length > 0) {
-      return new Response(JSON.stringify({ error: `Invalid request: Missing required fields: ${missingFields.join(', ')}.` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          error: `Invalid request: Missing required fields: ${missingFields.join(', ')}.`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim();
@@ -146,7 +199,12 @@ serve(async (req: Request) => {
       { auth: { persistSession: false } },
     );
 
-    const result = await encryptAndInsert(supabaseAdminClient, reportData, user.id, clientIp);
+    const result = await encryptAndInsert(
+      supabaseAdminClient,
+      reportData,
+      user.id,
+      clientIp,
+    );
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -156,10 +214,16 @@ serve(async (req: Request) => {
     console.error('Function Error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     let status = 500;
-    if (errorMessage.includes('Invalid request') || errorMessage.includes('failed')) {
+    if (
+      errorMessage.includes('Invalid request') ||
+      errorMessage.includes('failed')
+    ) {
       status = 400;
     }
-    if (errorMessage.includes('Forbidden') || errorMessage.includes('Authentication')) {
+    if (
+      errorMessage.includes('Forbidden') ||
+      errorMessage.includes('Authentication')
+    ) {
       status = 401;
     }
     return new Response(JSON.stringify({ error: errorMessage }), {
