@@ -5,31 +5,32 @@ import {
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// 전송받을 데이터의 타입을 정의합니다.
 interface ReportData {
-  name?: string | null;
+  name?: string | null; // 예금주명
   phone_number?: string | null;
   account_number?: string | null;
-  national_id?: string | null;
-  category: string; // 필수
-  address?: string | null;
-  scam_report_source: string; // 사기 경로 (필수)
-  company_type: string; // 법인/개인 (필수)
-  description?: string | null; // 사건 개요
+  category: string;
+  scam_report_source: string;
+  company_type: string; // 계좌여부 (사업자/개인)
+  description?: string | null;
   nickname?: string | null;
-
-  // 새로 추가된 필드
+  gender: string; // 용의자 성별
   perpetrator_dialogue_trigger?: string | null;
   perpetrator_contact_path?: string | null;
-  victim_circumstances?: string[] | null; // 체크박스, 배열로 받음
+  victim_circumstances?: string[] | null;
   traded_item_category?: string | null;
-  perpetrator_identified?: boolean | null; // true, false, 또는 null
+  perpetrator_identified?: boolean | null;
 }
 
+// 데이터를 암호화하고 DB에 삽입하는 함수입니다.
 async function encryptAndInsert(
   supabaseAdminClient: SupabaseClient,
   reportData: ReportData,
+  reporterId: string, // 신고자 ID를 인자로 받습니다.
   clientIp?: string,
 ) {
+  // 민감 정보를 암호화하는 내부 함수입니다.
   const encrypt = async (value?: string | null): Promise<string | null> => {
     if (!value || value.trim() === '') return null;
     const { data, error } = await supabaseAdminClient.rpc('encrypt_secret', {
@@ -37,44 +38,44 @@ async function encryptAndInsert(
     });
     if (error) {
       console.error(
-        `Encryption failed for value starting with "${String(value).substring(0, 5)}...": ${error.message}`,
+        `Encryption failed for value starting with "${String(value).substring(
+          0,
+          5,
+        )}...": ${error.message}`,
       );
       throw new Error(`Encryption failed: ${error.message}`);
     }
     return String(data);
   };
 
+  // 암호화가 필요한 필드들을 처리합니다.
   const encryptedData = {
     name: await encrypt(reportData.name),
     phone_number: await encrypt(reportData.phone_number),
     account_number: await encrypt(reportData.account_number),
-    national_id: await encrypt(reportData.national_id),
-    address: await encrypt(reportData.address),
-    // perpetrator_dialogue_trigger, perpetrator_contact_path, traded_item_category는
-    // 민감도에 따라 암호화 여부 결정 (현재는 암호화하지 않음)
   };
 
+  // 최종적으로 데이터베이스에 데이터를 삽입합니다.
   const { error: insertError } = await supabaseAdminClient
     .from('scammer_reports')
     .insert({
+      reporter_id: reporterId, // `reporter_id`를 함께 저장합니다.
       name: encryptedData.name,
       phone_number: encryptedData.phone_number,
       account_number: encryptedData.account_number,
-      national_id: encryptedData.national_id,
-      address: encryptedData.address,
       category: reportData.category,
       scam_report_source: reportData.scam_report_source,
       company_type: reportData.company_type,
-      description: reportData.description || null, // 사건 개요
+      description: reportData.description || null,
       nickname: reportData.nickname || null,
       ip_address: clientIp || null,
-      // 새로 추가된 필드 삽입
+      gender: reportData.gender,
       perpetrator_dialogue_trigger:
         reportData.perpetrator_dialogue_trigger || null,
       perpetrator_contact_path: reportData.perpetrator_contact_path || null,
-      victim_circumstances: reportData.victim_circumstances || null, // 배열 또는 null
+      victim_circumstances: reportData.victim_circumstances || null,
       traded_item_category: reportData.traded_item_category || null,
-      perpetrator_identified: reportData.perpetrator_identified, // boolean 또는 null
+      perpetrator_identified: reportData.perpetrator_identified,
     });
 
   if (insertError) {
@@ -84,129 +85,92 @@ async function encryptAndInsert(
   return { success: true, message: 'Report submitted successfully.' };
 }
 
+// Edge Function의 메인 로직입니다.
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    if (!req.body) {
+    // 요청 헤더에서 'Authorization'을 통해 사용자 인증 토큰을 확인합니다.
+    const authorization = req.headers.get('Authorization');
+    if (!authorization) {
       return new Response(
-        JSON.stringify({ error: 'Invalid request: Missing request body.' }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        },
+        JSON.stringify({ error: 'Forbidden: Missing Authorization header.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
+    }
+
+    // 사용자 전용 Supabase 클라이언트를 생성하여 사용자 정보를 가져옵니다.
+    const userSupabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authorization } } },
+    );
+    const {
+      data: { user },
+      error: userError,
+    } = await userSupabaseClient.auth.getUser();
+
+    if (userError || !user) {
+      console.error('User auth error:', userError?.message);
+      return new Response(JSON.stringify({ error: 'Authentication failed.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // --- 이하 로직은 이전과 유사하나, `reporterId`를 전달하는 부분이 핵심입니다. ---
+
+    if (!req.body) {
+      return new Response(JSON.stringify({ error: 'Invalid request: Missing request body.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (!req.headers.get('content-type')?.includes('application/json')) {
-      return new Response(
-        JSON.stringify({
-          error: 'Invalid request: Content-Type must be application/json.',
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 415,
-        },
-      );
+      return new Response(JSON.stringify({ error: 'Invalid request: Content-Type must be application/json.' }), { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    let reportData: ReportData;
-    try {
-      reportData = (await req.json()) as ReportData;
-    } catch (jsonError) {
-      return new Response(
-        JSON.stringify({
-          error: `Invalid request: Failed to parse JSON body. ${jsonError.message}`,
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        },
-      );
-    }
+    const reportData: ReportData = await req.json();
 
-    // 필수 필드 검사 (기존 + 가해자 특정 여부)
-    const requiredFields: (keyof ReportData)[] = [
-      'category',
-      'scam_report_source',
-      'company_type',
-      // 'perpetrator_identified', // perpetrator_identified는 boolean이라 null 체크로 확인
-    ];
-    const missingFields = requiredFields.filter((field) => {
-      const value = reportData[field];
-      return (
-        value === undefined ||
-        value === null ||
-        (typeof value === 'string' && value.trim() === '')
-      );
-    });
-
-    if (
-      reportData.perpetrator_identified === undefined ||
-      reportData.perpetrator_identified === null
-    ) {
+    const requiredFields: (keyof ReportData)[] = ['category', 'scam_report_source', 'company_type', 'gender'];
+    const missingFields = requiredFields.filter(field => !reportData[field]);
+    if (reportData.perpetrator_identified === undefined || reportData.perpetrator_identified === null) {
       missingFields.push('perpetrator_identified');
     }
-
     if (missingFields.length > 0) {
-      return new Response(
-        JSON.stringify({
-          error: `Invalid request: Missing required fields: ${missingFields.join(', ')}.`,
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        },
-      );
+      return new Response(JSON.stringify({ error: `Invalid request: Missing required fields: ${missingFields.join(', ')}.` }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim();
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    // 관리자 권한 클라이언트를 생성하여 DB에 데이터를 삽입합니다.
+    const supabaseAdminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } },
+    );
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error(
-        'Server configuration error: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.',
-      );
-      return new Response(
-        JSON.stringify({ error: 'Server configuration error.' }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        },
-      );
-    }
-
-    const supabaseAdminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
-
+    // encryptAndInsert 함수 호출 시 인증된 사용자 ID(user.id)를 전달합니다.
     const result = await encryptAndInsert(
       supabaseAdminClient,
       reportData,
+      user.id,
       clientIp,
     );
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
+
   } catch (error: any) {
     console.error('Function Error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     let status = 500;
-
-    if (
-      errorMessage.includes('Invalid request') ||
-      errorMessage.includes('Encryption failed') ||
-      errorMessage.includes('Database insert failed')
-    ) {
+    if (errorMessage.includes('Invalid request') || errorMessage.includes('failed')) {
       status = 400;
     }
-    if (errorMessage.includes('Server configuration error')) {
-      status = 500;
+    if (errorMessage.includes('Forbidden') || errorMessage.includes('Authentication')) {
+      status = 401;
     }
-
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: status,

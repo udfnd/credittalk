@@ -39,7 +39,7 @@ import NoticeDetailScreen from './src/screens/NoticeDetailScreen';
 import ArrestNewsScreen from './src/screens/ArrestNewsScreen';
 import ChatListScreen from './src/screens/ChatListScreen';
 import ChatMessageScreen from './src/screens/ChatMessageScreen';
-import NewChatScreen from './src/screens/NewChatScreen'
+import NewChatScreen from './src/screens/NewChatScreen';
 import CommunityListScreen from './src/screens/CommunityListScreen';
 import CommunityPostDetailScreen from './src/screens/CommunityPostDetailScreen';
 import CommunityPostCreateScreen from './src/screens/CommunityPostCreateScreen';
@@ -48,10 +48,12 @@ import ReviewDetailScreen from './src/screens/ReviewDetailScreen';
 import ReviewCreateScreen from './src/screens/ReviewCreateScreen';
 import IncidentPhotoListScreen from './src/screens/IncidentPhotoListScreen';
 import IncidentPhotoDetailScreen from './src/screens/IncidentPhotoDetailScreen';
+import MyReportsScreen from './src/screens/MyReportsScreen';
 
 export type RootStackParamList = {
   MainApp: undefined;
   Report: undefined;
+  MyReports: undefined;
   NumericUnifiedSearch: {
     searchTerm: string;
     searchType: string;
@@ -148,26 +150,17 @@ function MainTabs() {
   const rootNavigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
-  const handleHelpCenterPress = () => {
+  const handleHelpCenterLink = () => {
     Alert.alert(
-      '헬프센터 연결',
-      `${HELP_CENTER_PHONE_NUMBER}\n어떤 방법으로 연결하시겠습니까?`,
+      '헬프센터 안내',
+      '한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.',
       [
         {
-          text: '전화걸기',
+          text: '확인',
           onPress: () => {
-            Linking.openURL(`tel:${HELP_CENTER_PHONE_NUMBER}`).catch((err) =>
-              Alert.alert('오류', '전화 앱을 열 수 없습니다.'),
+            Linking.openURL('https://naver.me/GhSYIDyA').catch(() =>
+              Alert.alert('오류', '링크를 열 수 없습니다.'),
             );
-          },
-        },
-        {
-          text: '문자보내기',
-          onPress: () => {
-            const separator = Platform.OS === 'ios' ? '&' : '?';
-            Linking.openURL(
-              `sms:${HELP_CENTER_PHONE_NUMBER}${separator}body=`,
-            ).catch((err) => Alert.alert('오류', '문자 앱을 열 수 없습니다.'));
           },
         },
         {
@@ -224,7 +217,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="CommunityTab"
-        component={CommunityStack} // CommunityStack 네비게이터 사용
+        component={CommunityStack}
         options={{ title: '커뮤니티' }}
       />
       <Tab.Screen
@@ -239,7 +232,7 @@ function MainTabs() {
         listeners={{
           tabPress: (e: EventArg<'tabPress', true, undefined>) => {
             e.preventDefault();
-            handleHelpCenterPress();
+            handleHelpCenterLink(); // 새로운 함수로 교체
           },
         }}
       />
@@ -275,6 +268,11 @@ function AppNavigator() {
             name="MainApp"
             component={MainTabs}
             options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="MyReports"
+            component={MyReportsScreen}
+            options={{ title: '나의 피해사례' }}
           />
           <RootStack.Screen
             name="Report"
