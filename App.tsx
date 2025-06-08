@@ -36,7 +36,8 @@ import SignUpScreen from './src/screens/SignUpScreen';
 import SignInScreen from './src/screens/SignInScreen';
 import NoticeListScreen from './src/screens/NoticeListScreen';
 import NoticeDetailScreen from './src/screens/NoticeDetailScreen';
-import ArrestNewsScreen from './src/screens/ArrestNewsScreen';
+import ArrestNewsListScreen from './src/screens/ArrestNewsListScreen';
+import ArrestNewsDetailScreen from './src/screens/ArrestNewsDetailScreen';
 import ChatListScreen from './src/screens/ChatListScreen';
 import ChatMessageScreen from './src/screens/ChatMessageScreen';
 import NewChatScreen from './src/screens/NewChatScreen';
@@ -49,6 +50,8 @@ import ReviewCreateScreen from './src/screens/ReviewCreateScreen';
 import IncidentPhotoListScreen from './src/screens/IncidentPhotoListScreen';
 import IncidentPhotoDetailScreen from './src/screens/IncidentPhotoDetailScreen';
 import MyReportsScreen from './src/screens/MyReportsScreen';
+import NewCrimeCaseListScreen from './src/screens/NewCrimeCaseListScreen';
+import NewCrimeCaseCreateScreen from './src/screens/NewCrimeCaseCreateScreen';
 
 export type RootStackParamList = {
   MainApp: undefined;
@@ -66,7 +69,8 @@ export type RootStackParamList = {
   };
   NoticeList: undefined;
   NoticeDetail: { noticeId: number; noticeTitle: string };
-  ArrestNews: undefined;
+  ArrestNewsList: undefined;
+  ArrestNewsDetail: { newsId: number; newsTitle: string };
   ChatList: undefined;
   ChatMessageScreen: { roomId: string; roomName: string };
   NewChatScreen: undefined;
@@ -77,6 +81,8 @@ export type RootStackParamList = {
   ReviewCreate: undefined;
   IncidentPhotoList: undefined;
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
+  NewCrimeCaseList: undefined;
+  NewCrimeCaseCreate: undefined;
 };
 
 export type CommunityStackParamList = {
@@ -97,8 +103,6 @@ const CommunityNativeStack =
 const ReviewNativeStack = createNativeStackNavigator<ReviewStackParamList>();
 const Tab = createBottomTabNavigator();
 
-const HELP_CENTER_PHONE_NUMBER = '010-9655-1604';
-
 function CommunityStack() {
   return (
     <CommunityNativeStack.Navigator
@@ -113,7 +117,6 @@ function CommunityStack() {
       <CommunityNativeStack.Screen
         name="CommunityPostDetail"
         component={CommunityPostDetailScreen}
-        // options={({ route }) => ({ title: route.params.postTitle })} // 상세 화면에서 설정
       />
       <CommunityNativeStack.Screen
         name="CommunityPostCreate"
@@ -135,7 +138,6 @@ function ReviewStack() {
       <ReviewNativeStack.Screen
         name="ReviewDetail"
         component={ReviewDetailScreen}
-        // options={({ route }) => ({ title: route.params.reviewTitle })} // 상세 화면에서 설정
       />
       <ReviewNativeStack.Screen
         name="ReviewCreate"
@@ -227,12 +229,12 @@ function MainTabs() {
       />
       <Tab.Screen
         name="HelpCenterTab"
-        component={View} // 실제 컴포넌트 없음
+        component={View}
         options={{ title: '헬프센터' }}
         listeners={{
           tabPress: (e: EventArg<'tabPress', true, undefined>) => {
             e.preventDefault();
-            handleHelpCenterLink(); // 새로운 함수로 교체
+            handleHelpCenterLink();
           },
         }}
       />
@@ -242,12 +244,6 @@ function MainTabs() {
 
 function AppNavigator() {
   const { user, profile, isLoading } = useAuth();
-  console.log('[AppNavigator] Auth State:', {
-    isLoading,
-    userId: user?.id,
-    profileName: profile?.name,
-    jobType: profile?.job_type,
-  });
 
   if (isLoading) {
     return (
@@ -270,6 +266,16 @@ function AppNavigator() {
             options={{ headerShown: false }}
           />
           <RootStack.Screen
+            name="NewCrimeCaseList"
+            component={NewCrimeCaseListScreen}
+            options={{ title: '신종범죄 피해사례' }}
+          />
+          <RootStack.Screen
+            name="NewCrimeCaseCreate"
+            component={NewCrimeCaseCreateScreen}
+            options={{ title: '사례 등록' }}
+          />
+          <RootStack.Screen
             name="MyReports"
             component={MyReportsScreen}
             options={{ title: '나의 피해사례' }}
@@ -282,7 +288,6 @@ function AppNavigator() {
           <RootStack.Screen
             name="NumericUnifiedSearch"
             component={SearchBaseScreen}
-            // options={({ route }) => ({ title: route.params.title })} // SearchBaseScreen에서 설정
           />
           <RootStack.Screen
             name="UnifiedSearch"
@@ -297,22 +302,25 @@ function AppNavigator() {
           <RootStack.Screen
             name="NoticeDetail"
             component={NoticeDetailScreen}
-            // options={({ route }) => ({ title: route.params.noticeTitle })}
           />
           <RootStack.Screen
-            name="ArrestNews"
-            component={ArrestNewsScreen}
+            name="ArrestNewsList"
+            component={ArrestNewsListScreen}
             options={{ title: '검거소식' }}
           />
           <RootStack.Screen
+            name="ArrestNewsDetail"
+            component={ArrestNewsDetailScreen}
+            options={({ route }) => ({ title: route.params.newsTitle })}
+          />
+          <RootStack.Screen
             name="ReviewList"
-            component={ReviewListScreen} // ReviewStack 대신 직접 포함 또는 ReviewStack 사용
+            component={ReviewListScreen}
             options={{ title: '크레디톡 후기' }}
           />
           <RootStack.Screen
             name="ReviewDetail"
             component={ReviewDetailScreen}
-            // options={({ route }) => ({ title: route.params.reviewTitle })}
           />
           <RootStack.Screen
             name="ReviewCreate"
@@ -327,7 +335,6 @@ function AppNavigator() {
           <RootStack.Screen
             name="IncidentPhotoDetail"
             component={IncidentPhotoDetailScreen}
-            // options={({ route }) => ({ title: route.params.photoTitle })}
           />
           <RootStack.Screen
             name="ChatList"
@@ -337,7 +344,6 @@ function AppNavigator() {
           <RootStack.Screen
             name="ChatMessageScreen"
             component={ChatMessageScreen}
-            // options={({ route }) => ({ title: route.params.roomName })} // 상세 화면에서 설정
           />
           <RootStack.Screen
             name="NewChatScreen"

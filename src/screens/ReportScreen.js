@@ -18,6 +18,11 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
+// 새로 추가된 컴포넌트 및 데이터 임포트
+import ImageSelectionModal from '../components/ImageSelectionModal';
+import { bankImages } from '../assets/images/banks';
+import { siteImages } from '../assets/images/sites';
+
 const accountTypes = ['사업자', '개인'];
 const genders = ['남성', '여성', '모름'];
 
@@ -26,7 +31,6 @@ const individualCategories = [
   '불법사금융',
   '중고물품 사기',
   '투자 사기, 전세 사기',
-  '게임 비실물',
   '암호화폐',
   '노쇼',
   '기타',
@@ -236,6 +240,12 @@ function ReportScreen({ navigation }) {
     useState(false);
   const [illegalCollectionPhotos, setIllegalCollectionPhotos] = useState([]);
 
+  // 새롭게 추가된 상태 변수
+  const [bankName, setBankName] = useState('');
+  const [siteName, setSiteName] = useState('');
+  const [isBankModalVisible, setIsBankModalVisible] = useState(false);
+  const [isSiteModalVisible, setIsSiteModalVisible] = useState(false);
+
   // 타입이나 카테고리 변경 시 관련 상태 초기화
   useEffect(() => {
     if (companyType === '개인') setCurrentCategories(individualCategories);
@@ -255,6 +265,7 @@ function ReportScreen({ navigation }) {
     setImpersonatedPersonOther('');
     setShowImpersonatedPersonTextInput(false);
     setIllegalCollectionPhotos([]);
+    setSiteName('');
   }, [category]);
 
   const clearInputs = () => {
@@ -283,6 +294,8 @@ function ReportScreen({ navigation }) {
     setIllegalCollectionPhotos([]);
     setIsLoading(false);
     setIsUploading(false);
+    setBankName('');
+    setSiteName('');
   };
 
   const handleChooseNicknamePhoto = () => {
@@ -390,13 +403,20 @@ function ReportScreen({ navigation }) {
           ? `기타: ${impersonatedPersonOther.trim()}`
           : impersonatedPerson;
 
+      const finalScamReportSource =
+        scamReportSource === '포털사이트 또는 SNS' && siteName
+          ? `${scamReportSource}: ${siteName}`
+          : scamReportSource;
+
       const reportData = {
         name: accountHolderName.trim() || null,
         nickname: nickname.trim() || null,
         phone_number: fullPhoneNumber,
         account_number: accountNumber.trim() || null,
+        bank_name: bankName || null,
+        site_name: siteName || null,
         category,
-        scam_report_source: scamReportSource,
+        scam_report_source: finalScamReportSource,
         company_type: companyType,
         gender: gender,
         description: caseSummary.trim() || null,
@@ -437,8 +457,12 @@ function ReportScreen({ navigation }) {
   // UI 렌더링을 위한 핸들러들
   const handleCategoryChange = (selectedCategory) =>
     setCategory((cat) => (cat === selectedCategory ? '' : selectedCategory));
-  const handleScamReportSourceChange = (source) =>
+  const handleScamReportSourceChange = (source) => {
     setScamReportSource((src) => (src === source ? '' : source));
+    if (source !== '포털사이트 또는 SNS') {
+      setSiteName('');
+    }
+  };
   const handleAccountTypeChange = (type) => setCompanyType(type);
   const handleImpersonatedPersonChange = (type) => {
     const newType = impersonatedPerson === type ? '' : type;
@@ -459,6 +483,7 @@ function ReportScreen({ navigation }) {
   const handleTradedItemCategorySelect = (itemName) =>
     setTradedItemCategory((cat) => (cat === itemName ? '' : itemName));
 
+  // ### 로직 수정 부분 ###
   const renderDetailFields = () => {
     if (!category) return null;
     if (companyType === '개인') {
@@ -466,16 +491,14 @@ function ReportScreen({ navigation }) {
         case individualCategories[0]: // 보이스피싱
           return (
             <>
-              <Text style={styles.label}>사칭 인물 기입</Text>{' '}
+              <Text style={styles.label}>사칭 인물 기입</Text>
               <View style={styles.checkboxContainer}>
-                {' '}
                 {impersonationTypes.map((type) => (
                   <TouchableOpacity
                     key={type}
                     style={styles.checkboxItem}
                     onPress={() => handleImpersonatedPersonChange(type)}
                   >
-                    {' '}
                     <Icon
                       name={
                         impersonatedPerson === type
@@ -484,11 +507,11 @@ function ReportScreen({ navigation }) {
                       }
                       size={24}
                       color={impersonatedPerson === type ? '#3d5afe' : '#555'}
-                    />{' '}
-                    <Text style={styles.checkboxLabel}>{type}</Text>{' '}
+                    />
+                    <Text style={styles.checkboxLabel}>{type}</Text>
                   </TouchableOpacity>
-                ))}{' '}
-              </View>{' '}
+                ))}
+              </View>
               {showImpersonatedPersonTextInput && (
                 <TextInput
                   style={[styles.input, { marginTop: -10 }]}
@@ -496,7 +519,7 @@ function ReportScreen({ navigation }) {
                   onChangeText={setImpersonatedPersonOther}
                   placeholder="사칭 인물을 직접 적어주세요."
                 />
-              )}{' '}
+              )}
             </>
           );
         case individualCategories[1]: // 불법사금융
@@ -510,7 +533,6 @@ function ReportScreen({ navigation }) {
                     style={styles.checkboxItem}
                     onPress={() => toggleVictimCircumstanceSelection(item)}
                   >
-                    {' '}
                     <Icon
                       name={
                         victimCircumstances.includes(item)
@@ -521,8 +543,8 @@ function ReportScreen({ navigation }) {
                       color={
                         victimCircumstances.includes(item) ? '#3d5afe' : '#555'
                       }
-                    />{' '}
-                    <Text style={styles.checkboxLabel}>{item}</Text>{' '}
+                    />
+                    <Text style={styles.checkboxLabel}>{item}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -565,28 +587,25 @@ function ReportScreen({ navigation }) {
               </View>
             </>
           );
-        case individualCategories[2]:
-        case individualCategories[5]:
+        case individualCategories[2]: // 중고물품 사기
           return (
             <>
-              {' '}
-              <Text style={styles.label}>피해 경로</Text>{' '}
+              <Text style={styles.label}>피해 경로</Text>
               <TextInput
                 style={styles.input}
                 value={damagePath}
                 onChangeText={setDamagePath}
-                placeholder="예: 중고나라, 코인거래소 등"
-              />{' '}
-              <Text style={styles.label}>피해 물품</Text>{' '}
+                placeholder="예: 중고나라, 번개장터 등"
+              />
+              <Text style={styles.label}>피해 물품</Text>
               <TextInput
                 style={styles.input}
                 value={damagedItem}
                 onChangeText={setDamagedItem}
-                placeholder="예: 아이폰 15, 비트코인 등"
-              />{' '}
-              <Text style={styles.label}>거래물품</Text>{' '}
+                placeholder="예: 아이폰 15, 명품 가방 등"
+              />
+              <Text style={styles.label}>거래물품</Text>
               <View style={styles.itemCategoryGrid}>
-                {' '}
                 {itemCategories.map((item) => (
                   <TouchableOpacity
                     key={item.name}
@@ -597,15 +616,33 @@ function ReportScreen({ navigation }) {
                     ]}
                     onPress={() => handleTradedItemCategorySelect(item.name)}
                   >
-                    {' '}
                     <Image
                       source={item.image}
                       style={styles.itemCategoryImage}
                       resizeMode="contain"
-                    />{' '}
+                    />
                   </TouchableOpacity>
-                ))}{' '}
-              </View>{' '}
+                ))}
+              </View>
+            </>
+          );
+        case individualCategories[4]: // 암호화폐
+          return (
+            <>
+              <Text style={styles.label}>피해 경로</Text>
+              <TextInput
+                style={styles.input}
+                value={damagePath}
+                onChangeText={setDamagePath}
+                placeholder="예: 코인거래소, 텔레그램 등"
+              />
+              <Text style={styles.label}>피해 물품</Text>
+              <TextInput
+                style={styles.input}
+                value={damagedItem}
+                onChangeText={setDamagedItem}
+                placeholder="예: 비트코인, 이더리움 등"
+              />
             </>
           );
         default:
@@ -617,10 +654,24 @@ function ReportScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <ImageSelectionModal
+        visible={isBankModalVisible}
+        onClose={() => setIsBankModalVisible(false)}
+        items={bankImages}
+        onSelect={setBankName}
+        title="은행 선택"
+      />
+      <ImageSelectionModal
+        visible={isSiteModalVisible}
+        onClose={() => setIsSiteModalVisible(false)}
+        items={siteImages}
+        onSelect={setSiteName}
+        title="사이트 선택"
+      />
+
       <Text style={styles.title}>사기 정보 입력</Text>
       <Text style={styles.guidance}>* 표시된 항목은 필수 입력입니다.</Text>
 
-      {/* 계좌여부, 카테고리 등 기본 정보 UI */}
       <Text style={styles.label}>
         계좌여부 <Text style={styles.required}>*</Text>
       </Text>
@@ -647,10 +698,9 @@ function ReportScreen({ navigation }) {
       </View>
       {companyType && currentCategories.length > 0 && (
         <>
-          {' '}
           <Text style={styles.label}>
             카테고리 <Text style={styles.required}>*</Text>
-          </Text>{' '}
+          </Text>
           <View style={styles.checkboxContainer}>
             {currentCategories.map((cat) => (
               <TouchableOpacity
@@ -672,7 +722,7 @@ function ReportScreen({ navigation }) {
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>{' '}
+          </View>
         </>
       )}
 
@@ -856,6 +906,29 @@ function ReportScreen({ navigation }) {
         />
       </View>
       <Text style={styles.label}>피해금 송금 정보 (선택)</Text>
+      <View style={styles.inputWithButtonContainer}>
+        <TextInput
+          style={[
+            styles.input,
+            {
+              marginRight: 0,
+              borderRightWidth: 0,
+              borderTopRightRadius: 0,
+              borderBottomRightRadius: 0,
+            },
+          ]}
+          value={bankName}
+          placeholder="은행 선택"
+          editable={false}
+          pointerEvents="none"
+        />
+        <TouchableOpacity
+          style={styles.inlineButton}
+          onPress={() => setIsBankModalVisible(true)}
+        >
+          <Text style={styles.inlineButtonText}>선택</Text>
+        </TouchableOpacity>
+      </View>
       <TextInput
         style={styles.input}
         value={accountNumber}
@@ -893,6 +966,32 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {scamReportSource === '포털사이트 또는 SNS' && (
+        <View style={styles.inputWithButtonContainer}>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                marginRight: 0,
+                borderRightWidth: 0,
+                borderTopRightRadius: 0,
+                borderBottomRightRadius: 0,
+              },
+            ]}
+            value={siteName}
+            placeholder="사이트 선택"
+            editable={false}
+            pointerEvents="none"
+          />
+          <TouchableOpacity
+            style={styles.inlineButton}
+            onPress={() => setIsSiteModalVisible(true)}
+          >
+            <Text style={styles.inlineButtonText}>선택</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.buttonContainer}>
         {isLoading ? (
@@ -938,7 +1037,6 @@ const styles = StyleSheet.create({
     borderColor: '#ced4da',
     paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     paddingHorizontal: 12,
-    marginBottom: 18,
     borderRadius: 8,
     backgroundColor: 'white',
     fontSize: 16,
@@ -1061,6 +1159,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderStyle: 'dashed',
+  },
+  inputWithButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  inlineButton: {
+    height: 50,
+    paddingHorizontal: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e9ecef',
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    borderWidth: 1,
+    borderLeftWidth: 0,
+    borderColor: '#ced4da',
+  },
+  inlineButtonText: {
+    color: '#3d5afe',
+    fontWeight: 'bold',
   },
 });
 
