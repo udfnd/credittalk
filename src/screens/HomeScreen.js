@@ -29,6 +29,7 @@ const crimeListBannerImg = require("../assets/images/crime_list_banner.jpg");
 const reviewBannerImg = require("../assets/images/review_banner.jpg");
 const incidentPhotosBannerImg = require("../assets/images/incident_photos_banner.jpg");
 const freeBoardBannerImg = require("../assets/images/free_board_banner.jpg");
+const helpCenterBannerImg = require("../assets/images/help_center_banner.jpg");
 
 function HomeScreen() {
   const navigation = useNavigation();
@@ -135,7 +136,6 @@ function HomeScreen() {
         </View>
 
         <View style={styles.bannerSection}>
-          {/* ----- 기존 배너들 ----- */}
           {renderImageBanner(
             "공지사항",
             "크레디톡의 새로운 소식을 확인하세요.",
@@ -178,6 +178,12 @@ function HomeScreen() {
                 screen: "CommunityTab",
                 params: { screen: "CommunityList" },
               }),
+          )}
+          {renderImageBanner(
+            "헬프 상담게시판",
+            "궁금한 사항들을 작성해주세요.",
+            helpCenterBannerImg,
+            () => navigation.navigate("HelpDeskList"),
           )}
         </View>
       </ScrollView>
