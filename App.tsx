@@ -1,7 +1,7 @@
-import 'react-native-get-random-values';
-import 'react-native-url-polyfill/auto';
+import "react-native-get-random-values";
+import "react-native-url-polyfill/auto";
 
-import React from 'react';
+import React from "react";
 import {
   Linking,
   Platform,
@@ -11,47 +11,48 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
-} from 'react-native';
+} from "react-native";
 import {
   NavigationContainer,
   EventArg,
   useNavigation,
-} from '@react-navigation/native';
+} from "@react-navigation/native";
 import {
   createNativeStackNavigator,
   NativeStackNavigationProp,
-} from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+} from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
-import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from "./src/context/AuthContext";
 
 // Screens
-import HomeScreen from './src/screens/HomeScreen';
-import ReportScreen from './src/screens/ReportScreen';
-import UnifiedSearchScreen from './src/screens/UnifiedSearchScreen';
-import SearchBaseScreen from './src/screens/SearchBaseScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
-import SignUpScreen from './src/screens/SignUpScreen';
-import SignInScreen from './src/screens/SignInScreen';
-import NoticeListScreen from './src/screens/NoticeListScreen';
-import NoticeDetailScreen from './src/screens/NoticeDetailScreen';
-import ArrestNewsListScreen from './src/screens/ArrestNewsListScreen';
-import ArrestNewsDetailScreen from './src/screens/ArrestNewsDetailScreen';
-import ChatListScreen from './src/screens/ChatListScreen';
-import ChatMessageScreen from './src/screens/ChatMessageScreen';
-import NewChatScreen from './src/screens/NewChatScreen';
-import CommunityListScreen from './src/screens/CommunityListScreen';
-import CommunityPostDetailScreen from './src/screens/CommunityPostDetailScreen';
-import CommunityPostCreateScreen from './src/screens/CommunityPostCreateScreen';
-import ReviewListScreen from './src/screens/ReviewListScreen';
-import ReviewDetailScreen from './src/screens/ReviewDetailScreen';
-import ReviewCreateScreen from './src/screens/ReviewCreateScreen';
-import IncidentPhotoListScreen from './src/screens/IncidentPhotoListScreen';
-import IncidentPhotoDetailScreen from './src/screens/IncidentPhotoDetailScreen';
-import MyReportsScreen from './src/screens/MyReportsScreen';
-import NewCrimeCaseListScreen from './src/screens/NewCrimeCaseListScreen';
-import NewCrimeCaseCreateScreen from './src/screens/NewCrimeCaseCreateScreen';
+import HomeScreen from "./src/screens/HomeScreen";
+import ReportScreen from "./src/screens/ReportScreen";
+import UnifiedSearchScreen from "./src/screens/UnifiedSearchScreen";
+import SearchBaseScreen from "./src/screens/SearchBaseScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
+import SignUpScreen from "./src/screens/SignUpScreen";
+import SignInScreen from "./src/screens/SignInScreen";
+import NoticeListScreen from "./src/screens/NoticeListScreen";
+import NoticeDetailScreen from "./src/screens/NoticeDetailScreen";
+import ArrestNewsListScreen from "./src/screens/ArrestNewsListScreen";
+import ArrestNewsDetailScreen from "./src/screens/ArrestNewsDetailScreen";
+import ChatListScreen from "./src/screens/ChatListScreen";
+import ChatMessageScreen from "./src/screens/ChatMessageScreen";
+import NewChatScreen from "./src/screens/NewChatScreen";
+import CommunityListScreen from "./src/screens/CommunityListScreen";
+import CommunityPostDetailScreen from "./src/screens/CommunityPostDetailScreen";
+import CommunityPostCreateScreen from "./src/screens/CommunityPostCreateScreen";
+import ReviewListScreen from "./src/screens/ReviewListScreen";
+import ReviewDetailScreen from "./src/screens/ReviewDetailScreen";
+import ReviewCreateScreen from "./src/screens/ReviewCreateScreen";
+import IncidentPhotoListScreen from "./src/screens/IncidentPhotoListScreen";
+import IncidentPhotoDetailScreen from "./src/screens/IncidentPhotoDetailScreen";
+import MyReportsScreen from "./src/screens/MyReportsScreen";
+import NewCrimeCaseListScreen from "./src/screens/NewCrimeCaseListScreen";
+import NewCrimeCaseCreateScreen from "./src/screens/NewCrimeCaseCreateScreen";
+import VoiceAnalysisScreen from "./src/screens/VoiceAnalysisScreen";
 
 export type RootStackParamList = {
   MainApp: undefined;
@@ -83,6 +84,7 @@ export type RootStackParamList = {
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
   NewCrimeCaseList: undefined;
   NewCrimeCaseCreate: undefined;
+  VoiceAnalysis: undefined;
 };
 
 export type CommunityStackParamList = {
@@ -112,7 +114,7 @@ function CommunityStack() {
       <CommunityNativeStack.Screen
         name="CommunityList"
         component={CommunityListScreen}
-        options={{ title: '커뮤니티' }}
+        options={{ title: "커뮤니티" }}
       />
       <CommunityNativeStack.Screen
         name="CommunityPostDetail"
@@ -121,7 +123,7 @@ function CommunityStack() {
       <CommunityNativeStack.Screen
         name="CommunityPostCreate"
         component={CommunityPostCreateScreen}
-        options={{ title: '새 글 작성' }}
+        options={{ title: "새 글 작성" }}
       />
     </CommunityNativeStack.Navigator>
   );
@@ -133,7 +135,7 @@ function ReviewStack() {
       <ReviewNativeStack.Screen
         name="ReviewList"
         component={ReviewListScreen}
-        options={{ title: '크레디톡 후기' }}
+        options={{ title: "크레디톡 후기" }}
       />
       <ReviewNativeStack.Screen
         name="ReviewDetail"
@@ -142,7 +144,7 @@ function ReviewStack() {
       <ReviewNativeStack.Screen
         name="ReviewCreate"
         component={ReviewCreateScreen}
-        options={{ title: '후기 작성' }}
+        options={{ title: "후기 작성" }}
       />
     </ReviewNativeStack.Navigator>
   );
@@ -154,20 +156,20 @@ function MainTabs() {
 
   const handleHelpCenterLink = () => {
     Alert.alert(
-      '헬프센터 안내',
-      '한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.',
+      "헬프센터 안내",
+      "한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.",
       [
         {
-          text: '확인',
+          text: "확인",
           onPress: () => {
-            Linking.openURL('https://naver.me/GhSYIDyA').catch(() =>
-              Alert.alert('오류', '링크를 열 수 없습니다.'),
+            Linking.openURL("https://naver.me/GhSYIDyA").catch(() =>
+              Alert.alert("오류", "링크를 열 수 없습니다."),
             );
           },
         },
         {
-          text: '취소',
-          style: 'cancel',
+          text: "취소",
+          style: "cancel",
         },
       ],
       { cancelable: true },
@@ -179,60 +181,60 @@ function MainTabs() {
       id={undefined}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName = '';
-          if (route.name === 'SearchTab') {
-            iconName = focused ? 'magnify' : 'magnify';
-          } else if (route.name === 'ChatTab') {
-            iconName = focused ? 'chat-processing' : 'chat-processing-outline';
-          } else if (route.name === 'CommunityTab') {
-            iconName = focused ? 'forum' : 'forum-outline';
-          } else if (route.name === 'MyTab') {
-            iconName = focused ? 'account-circle' : 'account-circle-outline';
-          } else if (route.name === 'HelpCenterTab') {
-            iconName = focused ? 'help-circle' : 'help-circle-outline';
+          let iconName = "";
+          if (route.name === "SearchTab") {
+            iconName = focused ? "magnify" : "magnify";
+          } else if (route.name === "ChatTab") {
+            iconName = focused ? "chat-processing" : "chat-processing-outline";
+          } else if (route.name === "CommunityTab") {
+            iconName = focused ? "forum" : "forum-outline";
+          } else if (route.name === "MyTab") {
+            iconName = focused ? "account-circle" : "account-circle-outline";
+          } else if (route.name === "HelpCenterTab") {
+            iconName = focused ? "help-circle" : "help-circle-outline";
           }
           return <Icon name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#3d5afe',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: "#3d5afe",
+        tabBarInactiveTintColor: "gray",
         tabBarStyle: {
-          height: Platform.OS === 'ios' ? 90 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 30 : 10,
+          height: Platform.OS === "ios" ? 90 : 65,
+          paddingBottom: Platform.OS === "ios" ? 30 : 10,
           paddingTop: 5,
         },
         headerShown: false,
         tabBarLabelStyle: {
           fontSize: 11,
-          paddingBottom: Platform.OS === 'ios' ? 0 : 5,
+          paddingBottom: Platform.OS === "ios" ? 0 : 5,
         },
       })}
     >
       <Tab.Screen
         name="SearchTab"
         component={HomeScreen}
-        options={{ title: '검색' }}
+        options={{ title: "검색" }}
       />
       <Tab.Screen
         name="ChatTab"
         component={ChatListScreen}
-        options={{ title: '채팅', headerShown: true }}
+        options={{ title: "채팅", headerShown: true }}
       />
       <Tab.Screen
         name="CommunityTab"
         component={CommunityStack}
-        options={{ title: '커뮤니티' }}
+        options={{ title: "커뮤니티" }}
       />
       <Tab.Screen
         name="MyTab"
         component={SettingsScreen}
-        options={{ title: 'MY' }}
+        options={{ title: "MY" }}
       />
       <Tab.Screen
         name="HelpCenterTab"
         component={View}
-        options={{ title: '헬프센터' }}
+        options={{ title: "헬프센터" }}
         listeners={{
-          tabPress: (e: EventArg<'tabPress', true, undefined>) => {
+          tabPress: (e: EventArg<"tabPress", true, undefined>) => {
             e.preventDefault();
             handleHelpCenterLink();
           },
@@ -268,22 +270,22 @@ function AppNavigator() {
           <RootStack.Screen
             name="NewCrimeCaseList"
             component={NewCrimeCaseListScreen}
-            options={{ title: '신종범죄 피해사례' }}
+            options={{ title: "신종범죄 피해사례" }}
           />
           <RootStack.Screen
             name="NewCrimeCaseCreate"
             component={NewCrimeCaseCreateScreen}
-            options={{ title: '사례 등록' }}
+            options={{ title: "사례 등록" }}
           />
           <RootStack.Screen
             name="MyReports"
             component={MyReportsScreen}
-            options={{ title: '나의 피해사례' }}
+            options={{ title: "나의 피해사례" }}
           />
           <RootStack.Screen
             name="Report"
             component={ReportScreen}
-            options={{ title: '사기 정보 입력' }}
+            options={{ title: "사기 정보 입력" }}
           />
           <RootStack.Screen
             name="NumericUnifiedSearch"
@@ -292,12 +294,12 @@ function AppNavigator() {
           <RootStack.Screen
             name="UnifiedSearch"
             component={UnifiedSearchScreen}
-            options={{ title: '통합 검색' }}
+            options={{ title: "통합 검색" }}
           />
           <RootStack.Screen
             name="NoticeList"
             component={NoticeListScreen}
-            options={{ title: '공지사항' }}
+            options={{ title: "공지사항" }}
           />
           <RootStack.Screen
             name="NoticeDetail"
@@ -306,7 +308,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="ArrestNewsList"
             component={ArrestNewsListScreen}
-            options={{ title: '검거소식' }}
+            options={{ title: "검거소식" }}
           />
           <RootStack.Screen
             name="ArrestNewsDetail"
@@ -316,7 +318,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="ReviewList"
             component={ReviewListScreen}
-            options={{ title: '크레디톡 후기' }}
+            options={{ title: "크레디톡 후기" }}
           />
           <RootStack.Screen
             name="ReviewDetail"
@@ -325,12 +327,12 @@ function AppNavigator() {
           <RootStack.Screen
             name="ReviewCreate"
             component={ReviewCreateScreen}
-            options={{ title: '후기 작성' }}
+            options={{ title: "후기 작성" }}
           />
           <RootStack.Screen
             name="IncidentPhotoList"
             component={IncidentPhotoListScreen}
-            options={{ title: '사건 사진자료' }}
+            options={{ title: "사건 사진자료" }}
           />
           <RootStack.Screen
             name="IncidentPhotoDetail"
@@ -339,7 +341,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="ChatList"
             component={ChatListScreen}
-            options={{ title: '채팅 목록' }}
+            options={{ title: "채팅 목록" }}
           />
           <RootStack.Screen
             name="ChatMessageScreen"
@@ -348,7 +350,12 @@ function AppNavigator() {
           <RootStack.Screen
             name="NewChatScreen"
             component={NewChatScreen}
-            options={{ title: '새 채팅 시작' }}
+            options={{ title: "새 채팅 시작" }}
+          />
+          <RootStack.Screen
+            name="VoiceAnalysis"
+            component={VoiceAnalysisScreen}
+            options={{ title: "통화 녹음 파일 분석" }}
           />
         </>
       ) : (
@@ -382,9 +389,9 @@ function App(): React.JSX.Element {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
   },
 });
 

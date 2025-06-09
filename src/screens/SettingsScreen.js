@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   View,
   Text,
@@ -7,11 +7,10 @@ import {
   ScrollView,
   Linking,
   Alert,
-  Platform,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { useAuth } from "../context/AuthContext";
+import { useNavigation } from "@react-navigation/native";
 
 function SettingsScreen() {
   const { user, profile, signOutUser, isLoading: authIsLoading } = useAuth();
@@ -19,203 +18,220 @@ function SettingsScreen() {
 
   const handleHelpCenterLink = () => {
     Alert.alert(
-        '헬프센터 안내',
-        '한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.',
-        [
-          {
-            text: '확인',
-            onPress: () => {
-              Linking.openURL('https://naver.me/GhSYIDyA').catch(() =>
-                  Alert.alert('오류', '링크를 열 수 없습니다.'),
-              );
-            },
+      "헬프센터 안내",
+      "한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.",
+      [
+        {
+          text: "확인",
+          onPress: () => {
+            Linking.openURL("https://naver.me/GhSYIDyA").catch(() =>
+              Alert.alert("오류", "링크를 열 수 없습니다."),
+            );
           },
-          {
-            text: '취소',
-            style: 'cancel',
-          },
-        ],
-        { cancelable: true },
+        },
+        {
+          text: "취소",
+          style: "cancel",
+        },
+      ],
+      { cancelable: true },
     );
   };
 
   const menuItems = [
     {
-      id: 'myReports',
-      title: '나의 피해사례',
-      icon: 'file-document-outline',
-      action: () => navigation.navigate('MyReports'),
-      requiresAuth: true,
+      id: "myReports",
+      title: "내 신고 내역",
+      icon: "file-document-outline",
+      screen: "MyReports",
     },
     {
-      id: 'notices',
-      title: '공지사항',
-      icon: 'bullhorn-outline',
-      action: () => navigation.navigate('NoticeList'),
-      requiresAuth: true,
+      id: "notices",
+      title: "공지사항",
+      icon: "bullhorn-outline",
+      screen: "Notices",
     },
     {
-      id: 'reportScam',
-      title: '피해사례 등록',
-      icon: 'alert-plus-outline',
-      action: () => navigation.navigate('Report'),
-      requiresAuth: true,
+      id: "reportScam",
+      title: "신종 사기 수법 제보",
+      icon: "lightbulb-on-outline",
+      screen: "NewCrimeCaseCreate",
     },
     {
-      id: 'helpCenter',
-      title: '헬프센터 (한국금융범죄예방연구센터)',
-      icon: 'face-agent',
-      action: handleHelpCenterLink, // 새로운 함수로 교체
-      requiresAuth: false,
+      id: "community",
+      title: "피해 사례 공유",
+      icon: "account-group-outline",
+      screen: "Community",
     },
     {
-      id: 'appInfo',
-      title: '앱 정보',
-      icon: 'information-outline',
-      action: () =>
-          Alert.alert(
-              '앱 정보',
-              'CreditTalk v1.0.0\n안전한 금융 거래를 위한 앱입니다.',
-          ),
-      requiresAuth: false,
+      id: "helpCenter",
+      title: "고객센터",
+      icon: "help-circle-outline",
+      onPress: handleHelpCenterLink,
     },
   ];
 
-  const renderMenuItem = (item) => {
-    if (item.requiresAuth && !user) return null;
-
-    return (
-        <TouchableOpacity
-            key={item.id}
-            style={styles.menuItem}
-            onPress={item.action}
-            activeOpacity={0.7}
-        >
-          <Icon name={item.icon} size={24} color="#555" style={styles.menuIcon} />
-          <Text style={styles.menuText}>{item.title}</Text>
-          <Icon name="chevron-right" size={24} color="#ccc" />
-        </TouchableOpacity>
-    );
-  };
+  const renderMenuItem = (item) => (
+    <TouchableOpacity
+      key={item.id}
+      style={styles.menuItem}
+      onPress={() =>
+        item.onPress ? item.onPress() : navigation.navigate(item.screen)
+      }
+    >
+      <Icon name={item.icon} size={24} color="#555" style={styles.menuIcon} />
+      <Text style={styles.menuText}>{item.title}</Text>
+      <Icon name="chevron-right" size={24} color="#ccc" />
+    </TouchableOpacity>
+  );
 
   return (
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.container}>
-          <View style={styles.profileSection}>
-            <Icon name="account-circle" size={80} color="#3d5afe" />
+    <ScrollView style={styles.scrollView}>
+      <View style={styles.container}>
+        <View style={styles.profileSection}>
+          <Icon name="account-circle" size={60} color="#3d5afe" />
+          <View style={styles.profileInfo}>
             <Text style={styles.profileName}>
-              {profile?.name || user?.email || '게스트'}
+              {authIsLoading ? "로딩중..." : profile?.name || "사용자"}
             </Text>
-            {user && <Text style={styles.profileEmail}>{user.email}</Text>}
+            <Text style={styles.profileEmail}>
+              {authIsLoading ? "" : user?.email}
+            </Text>
           </View>
-
-          <View style={styles.menuGroup}>
-            <Text style={styles.menuGroupTitle}>서비스</Text>
-            {menuItems
-                .filter((item) =>
-                    ['myReports', 'notices', 'reportScam'].includes(item.id),
-                )
-                .map(renderMenuItem)}
-          </View>
-
-          <View style={styles.menuGroup}>
-            <Text style={styles.menuGroupTitle}>고객지원</Text>
-            {menuItems
-                .filter((item) => ['helpCenter', 'appInfo'].includes(item.id))
-                .map(renderMenuItem)}
-          </View>
-
-          {user && (
-              <TouchableOpacity
-                  style={[styles.menuItem, styles.logoutButton]}
-                  onPress={signOutUser}
-                  disabled={authIsLoading}
-              >
-                <Icon
-                    name="logout"
-                    size={24}
-                    color="#e74c3c"
-                    style={styles.menuIcon}
-                />
-                <Text style={[styles.menuText, styles.logoutText]}>로그아웃</Text>
-              </TouchableOpacity>
-          )}
         </View>
-      </ScrollView>
+
+        {/* 새로운 보안 도구 섹션 */}
+        <View style={styles.menuGroup}>
+          <Text style={styles.menuGroupTitle}>보안 도구</Text>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate("VoiceAnalysis")}
+          >
+            <Icon
+              name="shield-sound-outline"
+              size={24}
+              color="#555"
+              style={styles.menuIcon}
+            />
+            <Text style={styles.menuText}>AI 통화 분석</Text>
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>NEW</Text>
+            </View>
+            <Icon name="chevron-right" size={24} color="#ccc" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.menuGroup}>
+          <Text style={styles.menuGroupTitle}>서비스</Text>
+          {menuItems
+            .filter((item) =>
+              ["myReports", "notices", "reportScam"].includes(item.id),
+            )
+            .map(renderMenuItem)}
+        </View>
+
+        <View style={styles.menuGroup}>
+          <Text style={styles.menuGroupTitle}>커뮤니티</Text>
+          {menuItems
+            .filter((item) => ["community"].includes(item.id))
+            .map(renderMenuItem)}
+        </View>
+
+        <View style={styles.menuGroup}>
+          <Text style={styles.menuGroupTitle}>지원</Text>
+          {menuItems
+            .filter((item) => ["helpCenter"].includes(item.id))
+            .map(renderMenuItem)}
+        </View>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={signOutUser}>
+          <Text style={styles.logoutButtonText}>로그아웃</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: '#f0f2f5',
+    backgroundColor: "#f8f9fa",
   },
   container: {
-    flex: 1,
-    paddingVertical: 20,
+    paddingBottom: 30,
   },
   profileSection: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    backgroundColor: 'white',
-    marginBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: "#eee",
+  },
+  profileInfo: {
+    marginLeft: 15,
   },
   profileName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginTop: 15,
-    color: '#333',
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
   },
   profileEmail: {
-    fontSize: 16,
-    color: '#777',
-    marginTop: 5,
+    fontSize: 14,
+    color: "#777",
+    marginTop: 4,
   },
   menuGroup: {
-    backgroundColor: 'white',
-    marginBottom: 20,
-    borderRadius: Platform.OS === 'ios' ? 10 : 0,
-    overflow: 'hidden',
+    marginTop: 20,
   },
   menuGroupTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#888',
+    fontWeight: "600",
+    color: "#888",
     paddingHorizontal: 20,
-    paddingTop: 15,
-    paddingBottom: 8,
-    backgroundColor: '#f0f2f5',
-    borderTopWidth: Platform.OS === 'android' ? 1 : 0,
-    borderBottomWidth: 1,
-    borderColor: '#e0e0e0',
+    marginBottom: 10,
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
     paddingHorizontal: 20,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   menuIcon: {
     marginRight: 15,
   },
   menuText: {
     flex: 1,
-    fontSize: 17,
-    color: '#333',
+    fontSize: 16,
+    color: "#333",
   },
   logoutButton: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    marginTop: 30,
+    marginHorizontal: 20,
+    padding: 15,
+    backgroundColor: "#f1f3f5",
+    borderRadius: 10,
+    alignItems: "center",
   },
-  logoutText: {
-    color: '#e74c3c',
-    fontWeight: '600',
+  logoutButtonText: {
+    color: "#adb5bd",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  newBadge: {
+    backgroundColor: "#e74c3c",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  newBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "bold",
   },
 });
 
