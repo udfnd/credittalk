@@ -18,7 +18,6 @@ import { launchImageLibrary } from "react-native-image-picker";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
-// 새로 추가된 컴포넌트 및 데이터 임포트
 import ImageSelectionModal from "../components/ImageSelectionModal";
 import { bankImages } from "../assets/images/banks";
 import { siteImages } from "../assets/images/sites";
@@ -193,21 +192,6 @@ const itemCategories = [
   },
 ];
 
-const gameItemCategories = [
-  {
-    name: "게임 아이템",
-    image: require("../assets/images/gameItems/게임_아이템.png"),
-  },
-  {
-    name: "아이디 계정",
-    image: require("../assets/images/gameItems/아이디_계정.png"),
-  },
-  {
-    name: "포인트 마일리지",
-    image: require("../assets/images/gameItems/포인트_마일리지.png"),
-  },
-];
-
 function ReportScreen({ navigation }) {
   const { user } = useAuth();
 
@@ -240,6 +224,8 @@ function ReportScreen({ navigation }) {
   const [showVictimCircumstanceTextInput, setShowVictimCircumstanceTextInput] =
     useState(false);
   const [illegalCollectionPhotos, setIllegalCollectionPhotos] = useState([]);
+  const [isPhoneUnknown, setIsPhoneUnknown] = useState(false);
+  const [isCashTransaction, setIsCashTransaction] = useState(false);
 
   // 새롭게 추가된 상태 변수
   const [bankName, setBankName] = useState("");
@@ -344,6 +330,13 @@ function ReportScreen({ navigation }) {
       Alert.alert("입력 오류", "필수 항목(*)을 모두 입력/선택해주세요.");
       return;
     }
+    if (isPhoneUnknown && (!nickname.trim() || !nicknameEvidencePhoto)) {
+      Alert.alert(
+        "입력 오류",
+        "전화번호를 입력하지 않을 경우 SNS 닉네임과 증거 사진을 반드시 업로드해야 합니다.",
+      );
+      return;
+    }
     if (
       category === individualCategories[0] &&
       impersonatedPerson === "기타" &&
@@ -396,9 +389,9 @@ function ReportScreen({ navigation }) {
       setIsUploading(false);
 
       const fullPhoneNumber =
-        phonePrefix || phoneMiddle || phoneLast
-          ? `${phonePrefix}${phoneMiddle}${phoneLast}`
-          : null;
+        isPhoneUnknown || (!phonePrefix && !phoneMiddle && !phoneLast)
+          ? null
+          : `${phonePrefix}${phoneMiddle}${phoneLast}`;
       const finalImpersonatedPerson =
         impersonatedPerson === "기타"
           ? `기타: ${impersonatedPersonOther.trim()}`
@@ -410,11 +403,11 @@ function ReportScreen({ navigation }) {
           : scamReportSource;
 
       const reportData = {
-        name: accountHolderName.trim() || null,
+        name: isCashTransaction ? null : accountHolderName.trim() || null,
         nickname: nickname.trim() || null,
         phone_number: fullPhoneNumber,
-        account_number: accountNumber.trim() || null,
-        bank_name: bankName || null,
+        account_number: isCashTransaction ? null : accountNumber.trim() || null,
+        bank_name: isCashTransaction ? null : bankName || null,
         site_name: siteName || null,
         category,
         scam_report_source: finalScamReportSource,
@@ -431,6 +424,7 @@ function ReportScreen({ navigation }) {
         nickname_evidence_url: nicknameEvidenceUrl,
         illegal_collection_evidence_urls:
           illegalCollectionEvidenceUrls.filter(Boolean),
+        is_cash_transaction: isCashTransaction, // [요청 3] 값 전달
       };
 
       const { error: functionError } = await supabase.functions.invoke(
@@ -455,7 +449,6 @@ function ReportScreen({ navigation }) {
     }
   };
 
-  // UI 렌더링을 위한 핸들러들
   const handleCategoryChange = (selectedCategory) =>
     setCategory((cat) => (cat === selectedCategory ? "" : selectedCategory));
   const handleScamReportSourceChange = (source) => {
@@ -484,7 +477,26 @@ function ReportScreen({ navigation }) {
   const handleTradedItemCategorySelect = (itemName) =>
     setTradedItemCategory((cat) => (cat === itemName ? "" : itemName));
 
-  // ### 로직 수정 부분 ###
+  const handlePhoneUnknownToggle = () => {
+    const nextState = !isPhoneUnknown;
+    setIsPhoneUnknown(nextState);
+    if (nextState) {
+      setPhonePrefix("");
+      setPhoneMiddle("");
+      setPhoneLast("");
+    }
+  };
+
+  const handleCashTransactionToggle = () => {
+    const nextState = !isCashTransaction;
+    setIsCashTransaction(nextState);
+    if (nextState) {
+      setBankName("");
+      setAccountNumber("");
+      setAccountHolderName("");
+    }
+  };
+
   const renderDetailFields = () => {
     if (!category) return null;
     if (companyType === "개인") {
@@ -879,7 +891,26 @@ function ReportScreen({ navigation }) {
         </View>
       )}
 
-      <Text style={styles.label}>나에게 피해를 입혔던 전화번호</Text>
+      <View style={styles.labelContainer}>
+        <Text style={styles.label}>나에게 피해를 입혔던 전화번호</Text>
+        <TouchableOpacity
+          style={styles.checkboxItem}
+          onPress={handlePhoneUnknownToggle}
+        >
+          <Icon
+            name={isPhoneUnknown ? "checkbox-marked" : "checkbox-blank-outline"}
+            size={24}
+            color={isPhoneUnknown ? "#3d5afe" : "#555"}
+          />
+          <Text style={styles.checkboxLabel}>없음</Text>
+        </TouchableOpacity>
+      </View>
+      {isPhoneUnknown && (
+        <Text style={styles.guidanceText}>
+          전화번호를 입력하지 않을 경우 SNS 닉네임과 이미지를 필수 업로드 해야
+          합니다.
+        </Text>
+      )}
       <View style={styles.phoneInputContainer}>
         <TextInput
           style={[styles.input, styles.phoneInputSegment]}
@@ -906,43 +937,67 @@ function ReportScreen({ navigation }) {
           maxLength={4}
         />
       </View>
-      <Text style={styles.label}>피해금 송금 정보 (선택)</Text>
-      <View style={styles.inputWithButtonContainer}>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              marginRight: 0,
-              borderRightWidth: 0,
-              borderTopRightRadius: 0,
-              borderBottomRightRadius: 0,
-            },
-          ]}
-          value={bankName}
-          placeholder="은행 선택"
-          editable={false}
-          pointerEvents="none"
-        />
-        <TouchableOpacity
-          style={styles.inlineButton}
-          onPress={() => setIsBankModalVisible(true)}
-        >
-          <Text style={styles.inlineButtonText}>선택</Text>
-        </TouchableOpacity>
+      <View style={styles.labelContainer}>
+        <Text style={styles.label}>피해금 송금 정보 (선택)</Text>
+        {(category === "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기" ||
+          category === "불법사금융") && (
+          <TouchableOpacity
+            style={styles.checkboxItem}
+            onPress={handleCashTransactionToggle}
+          >
+            <Icon
+              name={
+                isCashTransaction ? "checkbox-marked" : "checkbox-blank-outline"
+              }
+              size={24}
+              color={isCashTransaction ? "#3d5afe" : "#555"}
+            />
+            <Text style={styles.checkboxLabel}>현금 전달</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <TextInput
-        style={styles.input}
-        value={accountNumber}
-        onChangeText={setAccountNumber}
-        placeholder="계좌번호 (- 제외)"
-        keyboardType="number-pad"
-      />
-      <TextInput
-        style={styles.input}
-        value={accountHolderName}
-        onChangeText={setAccountHolderName}
-        placeholder="예금주명"
-      />
+      {!isCashTransaction && category !== "암호화폐" && (
+        <>
+          <View style={styles.inputWithButtonContainer}>
+            <TextInput
+              style={[
+                styles.input,
+                styles.inputWithButton,
+                isCashTransaction && styles.disabledInput,
+              ]}
+              value={bankName}
+              placeholder="은행 선택"
+              editable={false}
+            />
+            <TouchableOpacity
+              style={styles.inlineButton}
+              onPress={() => setIsBankModalVisible(true)}
+              disabled={isCashTransaction}
+            >
+              <Text style={styles.inlineButtonText}>선택</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={[styles.input, isCashTransaction && styles.disabledInput]}
+            value={accountHolderName}
+            onChangeText={setAccountHolderName}
+            placeholder="예금주명"
+            editable={!isCashTransaction}
+          />
+        </>
+      )}
+      {!isCashTransaction && (
+        <TextInput
+          style={[styles.input, isCashTransaction && styles.disabledInput]}
+          value={accountNumber}
+          onChangeText={setAccountNumber}
+          placeholder={
+            category === "암호화폐" ? "전자지갑주소" : "계좌번호 (- 제외)"
+          }
+          keyboardType={category === "암호화폐" ? "default" : "number-pad"}
+          editable={!isCashTransaction}
+        />
+      )}
 
       <Text style={styles.label}>
         사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
@@ -1181,6 +1236,28 @@ const styles = StyleSheet.create({
   inlineButtonText: {
     color: "#3d5afe",
     fontWeight: "bold",
+  },
+  labelContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 15,
+  },
+  guidanceText: {
+    fontSize: 12,
+    color: "#868e96",
+    marginTop: 5,
+    marginBottom: 10,
+  },
+  disabledInput: {
+    backgroundColor: "#e9ecef",
+    color: "#adb5bd",
+  },
+  inputWithButton: {
+    marginRight: 0,
+    borderRightWidth: 0,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
   },
 });
 
