@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   TextInput,
@@ -12,198 +12,199 @@ import {
   Keyboard,
   TouchableOpacity,
   Image,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { launchImageLibrary } from 'react-native-image-picker';
-import { supabase } from '../lib/supabaseClient';
-import { useAuth } from '../context/AuthContext';
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { launchImageLibrary } from "react-native-image-picker";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 
 // 새로 추가된 컴포넌트 및 데이터 임포트
-import ImageSelectionModal from '../components/ImageSelectionModal';
-import { bankImages } from '../assets/images/banks';
-import { siteImages } from '../assets/images/sites';
+import ImageSelectionModal from "../components/ImageSelectionModal";
+import { bankImages } from "../assets/images/banks";
+import { siteImages } from "../assets/images/sites";
 
-const accountTypes = ['사업자', '개인'];
-const genders = ['남성', '여성', '모름'];
+const accountTypes = ["사업자", "개인"];
+const genders = ["남성", "여성", "모름"];
 
 const individualCategories = [
-  '보이스피싱, 전기통신금융사기, 로맨스 스캠 사기',
-  '불법사금융',
-  '중고물품 사기',
-  '투자 사기, 전세 사기',
-  '암호화폐',
-  '노쇼',
-  '기타',
+  "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기",
+  "불법사금융",
+  "중고물품 사기",
+  "투자 사기, 전세 사기",
+  "암호화폐",
+  "기타",
 ];
 
 const corporateCategories = [
-  '노쇼 대리구매 사기',
-  '공갈 협박 범죄',
-  '알바 범죄',
-  '렌탈 사업',
-  '기타',
+  "노쇼 대리구매 사기",
+  "공갈 협박 범죄",
+  "알바 범죄",
+  "렌탈 사업",
+  "기타",
 ];
 
 const scamReportSources = [
-  '지인소개',
-  '포털사이트 또는 SNS',
-  '문자',
-  '카톡',
-  '텔레그램',
-  '기타',
+  "지인소개",
+  "포털사이트 또는 SNS",
+  "문자",
+  "카톡",
+  "텔레그램",
+  "기타",
 ];
 
 const impersonationTypes = [
-  '검사 사칭',
-  '경찰 사칭',
-  '가족 사칭',
-  '금감원 사칭',
-  '은행직원 사칭',
-  '지인 사칭',
-  '협박',
-  '기타',
+  "검사 사칭",
+  "경찰 사칭",
+  "가족 사칭",
+  "금감원 사칭",
+  "은행직원 사칭",
+  "지인 사칭",
+  "SNS로 특수직업 사칭 (로맨스 스캠 투자사기)",
+  "기타",
 ];
 
 const victimCircumstanceOptions = [
-  '불법 추심',
-  '과도한 이자 갈취',
-  '폭력',
-  '성폭력',
-  '기타',
+  "불법 추심",
+  "과도한 이자 갈취",
+  "허위 해외문자 발신",
+  "SNS 불법 업로드",
+  "욕설 및 폭언 협박",
+  "과도한 이자 갈축",
+  "기타",
 ];
 
 const itemCategories = [
   {
-    name: 'MP3/PMP/전자사전',
-    image: require('../assets/images/items/MP3_PMP_전자사전.png'),
+    name: "MP3/PMP/전자사전",
+    image: require("../assets/images/items/MP3_PMP_전자사전.png"),
   },
   {
-    name: '휴대폰/주변기기',
-    image: require('../assets/images/items/휴대폰_주변기기.png'),
+    name: "휴대폰/주변기기",
+    image: require("../assets/images/items/휴대폰_주변기기.png"),
   },
-  { name: '화폐', image: require('../assets/images/items/화폐.png') },
+  { name: "화폐", image: require("../assets/images/items/화폐.png") },
   {
-    name: '피싱/대출/계약',
-    image: require('../assets/images/items/피싱_대출_계약.png'),
-  },
-  {
-    name: '패션/의류',
-    image: require('../assets/images/items/패션_의류.png'),
+    name: "피싱/대출/계약",
+    image: require("../assets/images/items/피싱_대출_계약.png"),
   },
   {
-    name: '티켓/상품권',
-    image: require('../assets/images/items/티켓_상품권.png'),
+    name: "패션/의류",
+    image: require("../assets/images/items/패션_의류.png"),
   },
   {
-    name: '태블릿/노트북',
-    image: require('../assets/images/items/태블릿_노트북.png'),
+    name: "티켓/상품권",
+    image: require("../assets/images/items/티켓_상품권.png"),
   },
   {
-    name: '컴퓨터/주변기기',
-    image: require('../assets/images/items/컴퓨터_주변기기.png'),
+    name: "태블릿/노트북",
+    image: require("../assets/images/items/태블릿_노트북.png"),
   },
   {
-    name: '카메라/주변기기',
-    image: require('../assets/images/items/카메라_주변기기.png'),
+    name: "컴퓨터/주변기기",
+    image: require("../assets/images/items/컴퓨터_주변기기.png"),
   },
   {
-    name: '취미/인형/피규어',
-    image: require('../assets/images/items/취미_인형_피규어.png'),
+    name: "카메라/주변기기",
+    image: require("../assets/images/items/카메라_주변기기.png"),
   },
   {
-    name: '자동차/바이크',
-    image: require('../assets/images/items/자동차_바이크.png'),
+    name: "취미/인형/피규어",
+    image: require("../assets/images/items/취미_인형_피규어.png"),
   },
   {
-    name: '음악/영화/주변기기',
-    image: require('../assets/images/items/음악_영화_주변기기.png'),
+    name: "자동차/바이크",
+    image: require("../assets/images/items/자동차_바이크.png"),
   },
   {
-    name: '유아동/출산',
-    image: require('../assets/images/items/유아동_출산.png'),
+    name: "음악/영화/주변기기",
+    image: require("../assets/images/items/음악_영화_주변기기.png"),
   },
   {
-    name: '액세서리/귀금속',
-    image: require('../assets/images/items/액세서리_귀금속.png'),
+    name: "유아동/출산",
+    image: require("../assets/images/items/유아동_출산.png"),
   },
   {
-    name: '안경/선글라스',
-    image: require('../assets/images/items/안경_선글라스.png'),
-  },
-  { name: '신발', image: require('../assets/images/items/신발.png') },
-  {
-    name: '식품/음료/의약품',
-    image: require('../assets/images/items/식품_음료_의약품.png'),
-  },
-  { name: '시계', image: require('../assets/images/items/시계.png') },
-  {
-    name: '스포츠/레저/운동',
-    image: require('../assets/images/items/스포츠_레저_운동.png'),
+    name: "액세서리/귀금속",
+    image: require("../assets/images/items/액세서리_귀금속.png"),
   },
   {
-    name: '소프트웨어',
-    image: require('../assets/images/items/소프트웨어.png'),
+    name: "안경/선글라스",
+    image: require("../assets/images/items/안경_선글라스.png"),
+  },
+  { name: "신발", image: require("../assets/images/items/신발.png") },
+  {
+    name: "식품/음료/의약품",
+    image: require("../assets/images/items/식품_음료_의약품.png"),
+  },
+  { name: "시계", image: require("../assets/images/items/시계.png") },
+  {
+    name: "스포츠/레저/운동",
+    image: require("../assets/images/items/스포츠_레저_운동.png"),
   },
   {
-    name: '성인/사행성',
-    image: require('../assets/images/items/성인_사행성.png'),
+    name: "소프트웨어",
+    image: require("../assets/images/items/소프트웨어.png"),
   },
   {
-    name: '생활/주방/욕실용품',
-    image: require('../assets/images/items/생활_주방_욕실용품.png'),
+    name: "성인/사행성",
+    image: require("../assets/images/items/성인_사행성.png"),
   },
   {
-    name: '뷰티/미용/화장품',
-    image: require('../assets/images/items/뷰티_미용_화장품.png'),
-  },
-  { name: '배송비', image: require('../assets/images/items/배송비.png') },
-  {
-    name: '문구/사무/소모품',
-    image: require('../assets/images/items/문구_사무_소모품.png'),
+    name: "생활/주방/욕실용품",
+    image: require("../assets/images/items/생활_주방_욕실용품.png"),
   },
   {
-    name: '동물/생물/식물/용품',
-    image: require('../assets/images/items/동물_생물_식물_용품.png'),
+    name: "뷰티/미용/화장품",
+    image: require("../assets/images/items/뷰티_미용_화장품.png"),
+  },
+  { name: "배송비", image: require("../assets/images/items/배송비.png") },
+  {
+    name: "문구/사무/소모품",
+    image: require("../assets/images/items/문구_사무_소모품.png"),
   },
   {
-    name: '도서/학습',
-    image: require('../assets/images/items/도서_학습.png'),
-  },
-  { name: '기타', image: require('../assets/images/items/기타.png') },
-  {
-    name: '공구/중장비/농기구',
-    image: require('../assets/images/items/공구_중장비_농기구.png'),
+    name: "동물/생물/식물/용품",
+    image: require("../assets/images/items/동물_생물_식물_용품.png"),
   },
   {
-    name: '게임기/주변기기',
-    image: require('../assets/images/items/게임기_주변기기.png'),
+    name: "도서/학습",
+    image: require("../assets/images/items/도서_학습.png"),
+  },
+  { name: "기타", image: require("../assets/images/items/기타.png") },
+  {
+    name: "공구/중장비/농기구",
+    image: require("../assets/images/items/공구_중장비_농기구.png"),
   },
   {
-    name: '가전/전자제품',
-    image: require('../assets/images/items/가전_전자제품.png'),
+    name: "게임기/주변기기",
+    image: require("../assets/images/items/게임기_주변기기.png"),
   },
   {
-    name: '가방/지갑/잡화',
-    image: require('../assets/images/items/가방_지갑_잡화.png'),
+    name: "가전/전자제품",
+    image: require("../assets/images/items/가전_전자제품.png"),
   },
   {
-    name: '가구/인테리어',
-    image: require('../assets/images/items/가구_인테리어.png'),
+    name: "가방/지갑/잡화",
+    image: require("../assets/images/items/가방_지갑_잡화.png"),
+  },
+  {
+    name: "가구/인테리어",
+    image: require("../assets/images/items/가구_인테리어.png"),
   },
 ];
 
 const gameItemCategories = [
   {
-    name: '게임 아이템',
-    image: require('../assets/images/gameItems/게임_아이템.png'),
+    name: "게임 아이템",
+    image: require("../assets/images/gameItems/게임_아이템.png"),
   },
   {
-    name: '아이디 계정',
-    image: require('../assets/images/gameItems/아이디_계정.png'),
+    name: "아이디 계정",
+    image: require("../assets/images/gameItems/아이디_계정.png"),
   },
   {
-    name: '포인트 마일리지',
-    image: require('../assets/images/gameItems/포인트_마일리지.png'),
+    name: "포인트 마일리지",
+    image: require("../assets/images/gameItems/포인트_마일리지.png"),
   },
 ];
 
@@ -211,98 +212,98 @@ function ReportScreen({ navigation }) {
   const { user } = useAuth();
 
   // 상태 변수 정의
-  const [accountHolderName, setAccountHolderName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [category, setCategory] = useState('');
-  const [scamReportSource, setScamReportSource] = useState('');
-  const [companyType, setCompanyType] = useState('');
-  const [gender, setGender] = useState('');
-  const [phonePrefix, setPhonePrefix] = useState('');
-  const [phoneMiddle, setPhoneMiddle] = useState('');
-  const [phoneLast, setPhoneLast] = useState('');
+  const [accountHolderName, setAccountHolderName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [category, setCategory] = useState("");
+  const [scamReportSource, setScamReportSource] = useState("");
+  const [companyType, setCompanyType] = useState("");
+  const [gender, setGender] = useState("");
+  const [phonePrefix, setPhonePrefix] = useState("");
+  const [phoneMiddle, setPhoneMiddle] = useState("");
+  const [phoneLast, setPhoneLast] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [currentCategories, setCurrentCategories] = useState([]);
-  const [tradedItemCategory, setTradedItemCategory] = useState('');
+  const [tradedItemCategory, setTradedItemCategory] = useState("");
   const [isPerpetratorIdentified, setIsPerpetratorIdentified] = useState(null);
-  const [caseSummary, setCaseSummary] = useState('');
+  const [caseSummary, setCaseSummary] = useState("");
   const [attemptedFraud, setAttemptedFraud] = useState(null);
-  const [damagePath, setDamagePath] = useState('');
-  const [damagedItem, setDamagedItem] = useState('');
-  const [impersonatedPerson, setImpersonatedPerson] = useState('');
-  const [impersonatedPersonOther, setImpersonatedPersonOther] = useState('');
+  const [damagePath, setDamagePath] = useState("");
+  const [damagedItem, setDamagedItem] = useState("");
+  const [impersonatedPerson, setImpersonatedPerson] = useState("");
+  const [impersonatedPersonOther, setImpersonatedPersonOther] = useState("");
   const [showImpersonatedPersonTextInput, setShowImpersonatedPersonTextInput] =
     useState(false);
   const [nicknameEvidencePhoto, setNicknameEvidencePhoto] = useState(null);
-  const [victimCircumstances, setVictimCircumstances] = useState('');
+  const [victimCircumstances, setVictimCircumstances] = useState("");
   const [showVictimCircumstanceTextInput, setShowVictimCircumstanceTextInput] =
     useState(false);
   const [illegalCollectionPhotos, setIllegalCollectionPhotos] = useState([]);
 
   // 새롭게 추가된 상태 변수
-  const [bankName, setBankName] = useState('');
-  const [siteName, setSiteName] = useState('');
+  const [bankName, setBankName] = useState("");
+  const [siteName, setSiteName] = useState("");
   const [isBankModalVisible, setIsBankModalVisible] = useState(false);
   const [isSiteModalVisible, setIsSiteModalVisible] = useState(false);
 
   // 타입이나 카테고리 변경 시 관련 상태 초기화
   useEffect(() => {
-    if (companyType === '개인') setCurrentCategories(individualCategories);
-    else if (companyType === '사업자')
+    if (companyType === "개인") setCurrentCategories(individualCategories);
+    else if (companyType === "사업자")
       setCurrentCategories(corporateCategories);
     else setCurrentCategories([]);
-    setCategory('');
+    setCategory("");
   }, [companyType]);
 
   useEffect(() => {
-    setVictimCircumstances('');
+    setVictimCircumstances("");
     setShowVictimCircumstanceTextInput(false);
-    setTradedItemCategory('');
-    setDamagePath('');
-    setDamagedItem('');
-    setImpersonatedPerson('');
-    setImpersonatedPersonOther('');
+    setTradedItemCategory("");
+    setDamagePath("");
+    setDamagedItem("");
+    setImpersonatedPerson("");
+    setImpersonatedPersonOther("");
     setShowImpersonatedPersonTextInput(false);
     setIllegalCollectionPhotos([]);
-    setSiteName('');
+    setSiteName("");
   }, [category]);
 
   const clearInputs = () => {
-    setAccountHolderName('');
-    setAccountNumber('');
-    setNickname('');
-    setCategory('');
-    setScamReportSource('');
-    setCompanyType('');
-    setGender('');
-    setPhonePrefix('');
-    setPhoneMiddle('');
-    setPhoneLast('');
-    setVictimCircumstances('');
+    setAccountHolderName("");
+    setAccountNumber("");
+    setNickname("");
+    setCategory("");
+    setScamReportSource("");
+    setCompanyType("");
+    setGender("");
+    setPhonePrefix("");
+    setPhoneMiddle("");
+    setPhoneLast("");
+    setVictimCircumstances("");
     setShowVictimCircumstanceTextInput(false);
-    setTradedItemCategory('');
+    setTradedItemCategory("");
     setIsPerpetratorIdentified(null);
-    setCaseSummary('');
+    setCaseSummary("");
     setAttemptedFraud(null);
-    setDamagePath('');
-    setDamagedItem('');
-    setImpersonatedPerson('');
-    setImpersonatedPersonOther('');
+    setDamagePath("");
+    setDamagedItem("");
+    setImpersonatedPerson("");
+    setImpersonatedPersonOther("");
     setShowImpersonatedPersonTextInput(false);
     setNicknameEvidencePhoto(null);
     setIllegalCollectionPhotos([]);
     setIsLoading(false);
     setIsUploading(false);
-    setBankName('');
-    setSiteName('');
+    setBankName("");
+    setSiteName("");
   };
 
   const handleChooseNicknamePhoto = () => {
-    launchImageLibrary({ mediaType: 'photo' }, (response) => {
+    launchImageLibrary({ mediaType: "photo" }, (response) => {
       if (response.didCancel) return;
       if (response.errorCode)
-        Alert.alert('오류', `사진 선택 오류: ${response.errorMessage}`);
+        Alert.alert("오류", `사진 선택 오류: ${response.errorMessage}`);
       else if (response.assets && response.assets.length > 0)
         setNicknameEvidencePhoto(response.assets[0]);
     });
@@ -311,13 +312,13 @@ function ReportScreen({ navigation }) {
   const handleChooseIllegalCollectionPhotos = () => {
     const selectionLimit = 3 - illegalCollectionPhotos.length;
     if (selectionLimit <= 0) {
-      Alert.alert('알림', '사진은 최대 3장까지 등록할 수 있습니다.');
+      Alert.alert("알림", "사진은 최대 3장까지 등록할 수 있습니다.");
       return;
     }
-    launchImageLibrary({ mediaType: 'photo', selectionLimit }, (response) => {
+    launchImageLibrary({ mediaType: "photo", selectionLimit }, (response) => {
       if (response.didCancel) return;
       if (response.errorCode)
-        Alert.alert('오류', `사진 선택 오류: ${response.errorMessage}`);
+        Alert.alert("오류", `사진 선택 오류: ${response.errorMessage}`);
       else if (response.assets && response.assets.length > 0)
         setIllegalCollectionPhotos((prev) => [...prev, ...response.assets]);
     });
@@ -340,21 +341,21 @@ function ReportScreen({ navigation }) {
       !gender ||
       attemptedFraud === null
     ) {
-      Alert.alert('입력 오류', '필수 항목(*)을 모두 입력/선택해주세요.');
+      Alert.alert("입력 오류", "필수 항목(*)을 모두 입력/선택해주세요.");
       return;
     }
     if (
       category === individualCategories[0] &&
-      impersonatedPerson === '기타' &&
+      impersonatedPerson === "기타" &&
       !impersonatedPersonOther.trim()
     ) {
-      Alert.alert('입력 오류', '사칭 인물 "기타" 상세 내용을 입력해주세요.');
+      Alert.alert("입력 오류", '사칭 인물 "기타" 상세 내용을 입력해주세요.');
       return;
     }
     if (nickname.trim() && !nicknameEvidencePhoto) {
       Alert.alert(
-        '입력 오류',
-        '닉네임 관련 증거 사진을 반드시 업로드해야 합니다.',
+        "입력 오류",
+        "닉네임 관련 증거 사진을 반드시 업로드해야 합니다.",
       );
       return;
     }
@@ -364,7 +365,7 @@ function ReportScreen({ navigation }) {
     try {
       const uploadFile = async (asset, folder) => {
         if (!asset) return null;
-        const fileExt = asset.fileName.split('.').pop();
+        const fileExt = asset.fileName.split(".").pop();
         const fileName = `${folder}-${user.id}-${Date.now()}-${Math.random()}.${fileExt}`;
         const filePath = `public/${fileName}`;
 
@@ -372,13 +373,13 @@ function ReportScreen({ navigation }) {
         const blob = await response.blob();
 
         const { error } = await supabase.storage
-          .from('report-evidence')
+          .from("report-evidence")
           .upload(filePath, blob, { contentType: asset.type });
         if (error)
           throw new Error(`${folder} 사진 업로드 실패: ${error.message}`);
 
         const { data: urlData } = supabase.storage
-          .from('report-evidence')
+          .from("report-evidence")
           .getPublicUrl(filePath);
         return urlData.publicUrl;
       };
@@ -386,10 +387,10 @@ function ReportScreen({ navigation }) {
       setIsUploading(true);
       const nicknameEvidenceUrl = await uploadFile(
         nicknameEvidencePhoto,
-        'nickname',
+        "nickname",
       );
       const uploadPromises = illegalCollectionPhotos.map((photo) =>
-        uploadFile(photo, 'illegal-collection'),
+        uploadFile(photo, "illegal-collection"),
       );
       const illegalCollectionEvidenceUrls = await Promise.all(uploadPromises);
       setIsUploading(false);
@@ -399,12 +400,12 @@ function ReportScreen({ navigation }) {
           ? `${phonePrefix}${phoneMiddle}${phoneLast}`
           : null;
       const finalImpersonatedPerson =
-        impersonatedPerson === '기타'
+        impersonatedPerson === "기타"
           ? `기타: ${impersonatedPersonOther.trim()}`
           : impersonatedPerson;
 
       const finalScamReportSource =
-        scamReportSource === '포털사이트 또는 SNS' && siteName
+        scamReportSource === "포털사이트 또는 SNS" && siteName
           ? `${scamReportSource}: ${siteName}`
           : scamReportSource;
 
@@ -433,21 +434,21 @@ function ReportScreen({ navigation }) {
       };
 
       const { error: functionError } = await supabase.functions.invoke(
-        'insert-scammer-report',
+        "insert-scammer-report",
         { body: reportData },
       );
       if (functionError)
         throw new Error(
           functionError.context?.errorMessage ||
             functionError.message ||
-            '알 수 없는 오류',
+            "알 수 없는 오류",
         );
 
-      Alert.alert('등록 완료', '사기 정보가 성공적으로 등록되었습니다.');
+      Alert.alert("등록 완료", "사기 정보가 성공적으로 등록되었습니다.");
       clearInputs();
       navigation.goBack();
     } catch (error) {
-      Alert.alert('등록 실패', `오류 발생: ${error.message}`);
+      Alert.alert("등록 실패", `오류 발생: ${error.message}`);
     } finally {
       setIsLoading(false);
       setIsUploading(false);
@@ -456,37 +457,37 @@ function ReportScreen({ navigation }) {
 
   // UI 렌더링을 위한 핸들러들
   const handleCategoryChange = (selectedCategory) =>
-    setCategory((cat) => (cat === selectedCategory ? '' : selectedCategory));
+    setCategory((cat) => (cat === selectedCategory ? "" : selectedCategory));
   const handleScamReportSourceChange = (source) => {
-    setScamReportSource((src) => (src === source ? '' : source));
-    if (source !== '포털사이트 또는 SNS') {
-      setSiteName('');
+    setScamReportSource((src) => (src === source ? "" : source));
+    if (source !== "포털사이트 또는 SNS") {
+      setSiteName("");
     }
   };
   const handleAccountTypeChange = (type) => setCompanyType(type);
   const handleImpersonatedPersonChange = (type) => {
-    const newType = impersonatedPerson === type ? '' : type;
+    const newType = impersonatedPerson === type ? "" : type;
     setImpersonatedPerson(newType);
-    setShowImpersonatedPersonTextInput(newType === '기타');
-    if (newType !== '기타') setImpersonatedPersonOther('');
+    setShowImpersonatedPersonTextInput(newType === "기타");
+    if (newType !== "기타") setImpersonatedPersonOther("");
   };
   const toggleVictimCircumstanceSelection = (item) => {
     const currentSelected = victimCircumstances
-      .split(', ')
-      .filter((s) => s.trim() !== '');
+      .split(", ")
+      .filter((s) => s.trim() !== "");
     const itemIndex = currentSelected.indexOf(item);
     if (itemIndex > -1) currentSelected.splice(itemIndex, 1);
     else currentSelected.push(item);
-    if (item === '기타') setShowVictimCircumstanceTextInput(itemIndex === -1);
-    setVictimCircumstances(currentSelected.join(', '));
+    if (item === "기타") setShowVictimCircumstanceTextInput(itemIndex === -1);
+    setVictimCircumstances(currentSelected.join(", "));
   };
   const handleTradedItemCategorySelect = (itemName) =>
-    setTradedItemCategory((cat) => (cat === itemName ? '' : itemName));
+    setTradedItemCategory((cat) => (cat === itemName ? "" : itemName));
 
   // ### 로직 수정 부분 ###
   const renderDetailFields = () => {
     if (!category) return null;
-    if (companyType === '개인') {
+    if (companyType === "개인") {
       switch (category) {
         case individualCategories[0]: // 보이스피싱
           return (
@@ -502,11 +503,11 @@ function ReportScreen({ navigation }) {
                     <Icon
                       name={
                         impersonatedPerson === type
-                          ? 'radiobox-marked'
-                          : 'radiobox-blank'
+                          ? "radiobox-marked"
+                          : "radiobox-blank"
                       }
                       size={24}
-                      color={impersonatedPerson === type ? '#3d5afe' : '#555'}
+                      color={impersonatedPerson === type ? "#3d5afe" : "#555"}
                     />
                     <Text style={styles.checkboxLabel}>{type}</Text>
                   </TouchableOpacity>
@@ -536,12 +537,12 @@ function ReportScreen({ navigation }) {
                     <Icon
                       name={
                         victimCircumstances.includes(item)
-                          ? 'checkbox-marked-outline'
-                          : 'checkbox-blank-outline'
+                          ? "checkbox-marked-outline"
+                          : "checkbox-blank-outline"
                       }
                       size={24}
                       color={
-                        victimCircumstances.includes(item) ? '#3d5afe' : '#555'
+                        victimCircumstances.includes(item) ? "#3d5afe" : "#555"
                       }
                     />
                     <Text style={styles.checkboxLabel}>{item}</Text>
@@ -673,7 +674,7 @@ function ReportScreen({ navigation }) {
       <Text style={styles.guidance}>* 표시된 항목은 필수 입력입니다.</Text>
 
       <Text style={styles.label}>
-        계좌여부 <Text style={styles.required}>*</Text>
+        피해자 해당사항 <Text style={styles.required}>*</Text>
       </Text>
       <View style={styles.optionSelectorContainer}>
         {accountTypes.map((type) => (
@@ -711,11 +712,11 @@ function ReportScreen({ navigation }) {
                 <Icon
                   name={
                     category === cat
-                      ? 'checkbox-marked-outline'
-                      : 'checkbox-blank-outline'
+                      ? "checkbox-marked-outline"
+                      : "checkbox-blank-outline"
                   }
                   size={24}
-                  color={category === cat ? '#3d5afe' : '#555'}
+                  color={category === cat ? "#3d5afe" : "#555"}
                 />
                 <Text style={styles.checkboxLabel} numberOfLines={2}>
                   {cat}
@@ -729,7 +730,7 @@ function ReportScreen({ navigation }) {
       {renderDetailFields()}
 
       <Text style={styles.label}>
-        사기 미수 여부 <Text style={styles.required}>*</Text>
+        피해, 미수 여부 <Text style={styles.required}>*</Text>
       </Text>
       <View style={styles.optionSelectorContainer}>
         <TouchableOpacity
@@ -745,7 +746,7 @@ function ReportScreen({ navigation }) {
               attemptedFraud === true && styles.optionButtonTextSelected,
             ]}
           >
-            예
+            피해
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -761,7 +762,7 @@ function ReportScreen({ navigation }) {
               attemptedFraud === false && styles.optionButtonTextSelected,
             ]}
           >
-            아니오
+            미수
           </Text>
         </TouchableOpacity>
       </View>
@@ -841,14 +842,14 @@ function ReportScreen({ navigation }) {
         numberOfLines={5}
       />
 
-      <Text style={styles.label}>닉네임</Text>
+      <Text style={styles.label}>SNS 닉네임</Text>
       <TextInput
         style={styles.input}
         value={nickname}
         onChangeText={setNickname}
         placeholder="닉네임 (입력 시 사진 첨부 필수)"
       />
-      {nickname.trim() !== '' && (
+      {nickname.trim() !== "" && (
         <View style={styles.photoUploadContainer}>
           <Text style={styles.label}>
             닉네임 관련 증거 사진 <Text style={styles.required}>*</Text>
@@ -956,18 +957,18 @@ function ReportScreen({ navigation }) {
             <Icon
               name={
                 scamReportSource === source
-                  ? 'radiobox-marked'
-                  : 'radiobox-blank'
+                  ? "radiobox-marked"
+                  : "radiobox-blank"
               }
               size={24}
-              color={scamReportSource === source ? '#3d5afe' : '#555'}
+              color={scamReportSource === source ? "#3d5afe" : "#555"}
             />
             <Text style={styles.checkboxLabel}>{source}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {scamReportSource === '포털사이트 또는 SNS' && (
+      {scamReportSource === "포털사이트 또는 SNS" && (
         <View style={styles.inputWithButtonContainer}>
           <TextInput
             style={[
@@ -1010,176 +1011,176 @@ function ReportScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, padding: 20, backgroundColor: "#f8f9fa" },
   guidance: {
     fontSize: 13,
-    color: '#e74c3c',
-    textAlign: 'center',
+    color: "#e74c3c",
+    textAlign: "center",
     marginBottom: 20,
   },
   title: {
     fontSize: 26,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 10,
-    color: '#343a40',
+    color: "#343a40",
   },
   label: {
     fontSize: 16,
     marginBottom: 8,
-    fontWeight: '600',
-    color: '#495057',
+    fontWeight: "600",
+    color: "#495057",
     marginTop: 15,
   },
-  required: { color: '#e03131' },
+  required: { color: "#e03131" },
   input: {
     borderWidth: 1,
-    borderColor: '#ced4da',
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    borderColor: "#ced4da",
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     fontSize: 16,
-    color: '#212529',
+    color: "#212529",
     minHeight: 50,
   },
-  textArea: { height: 120, textAlignVertical: 'top' },
+  textArea: { height: 120, textAlignVertical: "top" },
   phoneInputContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   phoneInputSegment: { flex: 1, marginHorizontal: 2 },
   buttonContainer: { marginTop: 25, marginBottom: 50 },
   optionSelectorContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: 10,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   optionButton: {
     flex: 1,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#ced4da',
+    borderColor: "#ced4da",
     borderRadius: 8,
-    backgroundColor: 'white',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "white",
+    alignItems: "center",
+    justifyContent: "center",
     marginHorizontal: 4,
     height: 50,
   },
-  optionButtonSelected: { backgroundColor: '#3d5afe', borderColor: '#3d5afe' },
-  optionButtonText: { fontSize: 16, color: '#495057' },
-  optionButtonTextSelected: { color: 'white', fontWeight: 'bold' },
+  optionButtonSelected: { backgroundColor: "#3d5afe", borderColor: "#3d5afe" },
+  optionButtonText: { fontSize: 16, color: "#495057" },
+  optionButtonTextSelected: { color: "white", fontWeight: "bold" },
   checkboxContainer: { marginBottom: 10 },
   checkboxItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
     paddingVertical: 3,
   },
-  checkboxLabel: { fontSize: 15, marginLeft: 8, color: '#333', flexShrink: 1 },
+  checkboxLabel: { fontSize: 15, marginLeft: 8, color: "#333", flexShrink: 1 },
   itemCategoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
     marginBottom: 18,
   },
   itemCategoryButton: {
-    width: '31%',
+    width: "31%",
     aspectRatio: 1,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
     borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 10,
     padding: 5,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   itemCategoryButtonSelected: {
-    borderColor: '#3d5afe',
+    borderColor: "#3d5afe",
     borderWidth: 2,
-    backgroundColor: '#e9eaff',
+    backgroundColor: "#e9eaff",
   },
-  itemCategoryImage: { width: '100%', height: '100%', marginBottom: 5 },
-  itemCategoryText: { fontSize: 11, textAlign: 'center', marginTop: 3 },
+  itemCategoryImage: { width: "100%", height: "100%", marginBottom: 5 },
+  itemCategoryText: { fontSize: 11, textAlign: "center", marginTop: 3 },
   photoUploadContainer: { marginTop: 5, marginBottom: 15 },
   photoUploadButton: {
-    backgroundColor: '#e9ecef',
+    backgroundColor: "#e9ecef",
     borderWidth: 1,
-    borderColor: '#ced4da',
+    borderColor: "#ced4da",
     borderRadius: 8,
     height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderStyle: 'dashed',
+    justifyContent: "center",
+    alignItems: "center",
+    borderStyle: "dashed",
   },
-  photoUploadText: { marginTop: 8, color: '#495057' },
+  photoUploadText: { marginTop: 8, color: "#495057" },
   previewImage: {
-    width: '100%',
+    width: "100%",
     height: 200,
     borderRadius: 8,
     marginBottom: 10,
   },
   changePhotoButton: {
-    backgroundColor: '#6c757d',
+    backgroundColor: "#6c757d",
     paddingVertical: 10,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
-  changePhotoButtonText: { color: 'white', fontWeight: 'bold' },
+  changePhotoButtonText: { color: "white", fontWeight: "bold" },
   multiPhotoContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
     marginTop: 5,
   },
   photoPreviewWrapper: {
-    width: '31%',
+    width: "31%",
     aspectRatio: 1,
-    marginRight: '2%',
+    marginRight: "2%",
     marginBottom: 10,
-    position: 'relative',
+    position: "relative",
   },
-  multiPreviewImage: { width: '100%', height: '100%', borderRadius: 8 },
+  multiPreviewImage: { width: "100%", height: "100%", borderRadius: 8 },
   removePhotoButton: {
-    position: 'absolute',
+    position: "absolute",
     top: -5,
     right: -5,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 12,
   },
   photoUploadButtonSquare: {
-    width: '31%',
+    width: "31%",
     aspectRatio: 1,
-    backgroundColor: '#e9ecef',
+    backgroundColor: "#e9ecef",
     borderWidth: 1,
-    borderColor: '#ced4da',
+    borderColor: "#ced4da",
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderStyle: 'dashed',
+    justifyContent: "center",
+    alignItems: "center",
+    borderStyle: "dashed",
   },
   inputWithButtonContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 18,
   },
   inlineButton: {
     height: 50,
     paddingHorizontal: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#e9ecef',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#e9ecef",
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
     borderWidth: 1,
     borderLeftWidth: 0,
-    borderColor: '#ced4da',
+    borderColor: "#ced4da",
   },
   inlineButtonText: {
-    color: '#3d5afe',
-    fontWeight: 'bold',
+    color: "#3d5afe",
+    fontWeight: "bold",
   },
 });
 
