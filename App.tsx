@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   ActivityIndicator,
-  TouchableOpacity,
   Alert,
 } from "react-native";
 import {
@@ -53,6 +52,18 @@ import MyReportsScreen from "./src/screens/MyReportsScreen";
 import NewCrimeCaseListScreen from "./src/screens/NewCrimeCaseListScreen";
 import NewCrimeCaseCreateScreen from "./src/screens/NewCrimeCaseCreateScreen";
 import VoiceAnalysisScreen from "./src/screens/VoiceAnalysisScreen";
+import FindEmailScreen from "./src/screens/FindEmailScreen";
+import ResetPasswordScreen from "./src/screens/ResetPasswordScreen";
+import UpdatePasswordScreen from "./src/screens/UpdatePasswordScreen";
+
+const linking = {
+  prefixes: ["credittalk://"],
+  config: {
+    screens: {
+      UpdatePassword: "update-password",
+    },
+  },
+};
 
 export type RootStackParamList = {
   MainApp: undefined;
@@ -85,6 +96,9 @@ export type RootStackParamList = {
   NewCrimeCaseList: undefined;
   NewCrimeCaseCreate: undefined;
   VoiceAnalysis: undefined;
+  FindEmail: undefined;
+  ResetPassword: undefined;
+  UpdatePassword: undefined;
 };
 
 export type CommunityStackParamList = {
@@ -126,27 +140,6 @@ function CommunityStack() {
         options={{ title: "새 글 작성" }}
       />
     </CommunityNativeStack.Navigator>
-  );
-}
-
-function ReviewStack() {
-  return (
-    <ReviewNativeStack.Navigator id={undefined} initialRouteName="ReviewList">
-      <ReviewNativeStack.Screen
-        name="ReviewList"
-        component={ReviewListScreen}
-        options={{ title: "크레디톡 후기" }}
-      />
-      <ReviewNativeStack.Screen
-        name="ReviewDetail"
-        component={ReviewDetailScreen}
-      />
-      <ReviewNativeStack.Screen
-        name="ReviewCreate"
-        component={ReviewCreateScreen}
-        options={{ title: "후기 작성" }}
-      />
-    </ReviewNativeStack.Navigator>
   );
 }
 
@@ -357,6 +350,11 @@ function AppNavigator() {
             component={VoiceAnalysisScreen}
             options={{ title: "통화 녹음 파일 분석" }}
           />
+          <RootStack.Screen
+            name="UpdatePassword"
+            component={UpdatePasswordScreen}
+            options={{ title: "새 비밀번호 설정" }}
+          />
         </>
       ) : (
         <>
@@ -370,6 +368,21 @@ function AppNavigator() {
             component={SignUpScreen}
             options={{ headerShown: false }}
           />
+          <RootStack.Screen
+            name="FindEmail"
+            component={FindEmailScreen}
+            options={{ title: "아이디 찾기" }}
+          />
+          <RootStack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
+            options={{ title: "비밀번호 찾기" }}
+          />
+          <RootStack.Screen
+            name="UpdatePassword"
+            component={UpdatePasswordScreen}
+            options={{ title: "새 비밀번호 설정" }}
+          />
         </>
       )}
     </RootStack.Navigator>
@@ -379,7 +392,7 @@ function AppNavigator() {
 function App(): React.JSX.Element {
   return (
     <AuthProvider>
-      <NavigationContainer>
+      <NavigationContainer linking={linking} fallback={<Text>Loading...</Text>}>
         <AppNavigator />
       </NavigationContainer>
     </AuthProvider>

@@ -229,6 +229,7 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "illegal_collection_evidence_urls" "text"[],
     "bank_name" "text",
     "site_name" "text",
+    "is_cash_transaction" boolean DEFAULT false,
     CONSTRAINT "scammer_reports_category_check" CHECK (("category" = ANY (ARRAY['보이스피싱, 전기통신금융사기, 로맨스 스캠 사기'::"text", '불법사금융'::"text", '중고물품 사기'::"text", '투자 사기, 전세 사기'::"text", '게임 비실물'::"text", '암호화폐'::"text", '노쇼'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text", '기타'::"text"]))),
     CONSTRAINT "scammer_reports_company_type_check" CHECK (("company_type" = ANY (ARRAY['사업자'::"text", '개인'::"text"]))),
     CONSTRAINT "scammer_reports_gender_check" CHECK (("gender" = ANY (ARRAY['남성'::"text", '여성'::"text", '모름'::"text"]))),
@@ -430,7 +431,11 @@ CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
     "r"."nickname",
     "r"."gender",
     "r"."perpetrator_identified",
-    "r"."created_at"
+    "r"."created_at",
+    "r"."analysis_result",
+    "r"."analysis_message",
+    "r"."analyzed_at",
+    "r"."analyzer_id"
    FROM "public"."scammer_reports" "r";
 
 
@@ -992,6 +997,10 @@ CREATE POLICY "Admins can manage incident photos." ON "public"."incident_photos"
 
 
 CREATE POLICY "Admins can manage notices" ON "public"."notices" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
+
+
+
+CREATE POLICY "Admins can view all user profiles" ON "public"."users" FOR SELECT TO "service_role" USING (true);
 
 
 
