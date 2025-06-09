@@ -55,6 +55,9 @@ import VoiceAnalysisScreen from "./src/screens/VoiceAnalysisScreen";
 import FindEmailScreen from "./src/screens/FindEmailScreen";
 import ResetPasswordScreen from "./src/screens/ResetPasswordScreen";
 import UpdatePasswordScreen from "./src/screens/UpdatePasswordScreen";
+import HelpDeskListScreen from "./src/screens/HelpDeskListScreen";
+import HelpDeskCreateScreen from "./src/screens/HelpDeskCreateScreen";
+import HelpDeskDetailScreen from "./src/screens/HelpDeskDetailScreen";
 
 const linking = {
   prefixes: ["credittalk://"],
@@ -99,6 +102,9 @@ export type RootStackParamList = {
   FindEmail: undefined;
   ResetPassword: undefined;
   UpdatePassword: undefined;
+  HelpDeskList: undefined;
+  HelpDeskCreate: undefined;
+  HelpDeskDetail: { ticketId: number; ticketTitle: string };
 };
 
 export type CommunityStackParamList = {
@@ -354,6 +360,23 @@ function AppNavigator() {
             name="UpdatePassword"
             component={UpdatePasswordScreen}
             options={{ title: "새 비밀번호 설정" }}
+          />
+          <RootStack.Screen
+            name="HelpDeskList"
+            component={HelpDeskListScreen}
+            options={{ title: "헬프센터" }}
+          />
+          <RootStack.Screen
+            name="HelpDeskCreate"
+            component={HelpDeskCreateScreen}
+            options={{ title: "상담 글 작성" }}
+          />
+          <RootStack.Screen
+            name="HelpDeskDetail"
+            component={HelpDeskDetailScreen}
+            options={({ route }) => ({
+              title: route.params.ticketTitle,
+            })}
           />
         </>
       ) : (
