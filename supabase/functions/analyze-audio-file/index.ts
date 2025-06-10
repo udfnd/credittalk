@@ -1,8 +1,8 @@
 // supabase/functions/analyze-audio-file/index.ts
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// 분석할 키워드 목록 (동일)
 const PHISHING_KEYWORDS = [
   "검찰",
   "경찰",
@@ -19,74 +19,85 @@ const PHISHING_KEYWORDS = [
   "연루",
 ];
 
-// V2 API에 맞게 수정된 음성 텍스트 변환 함수
-async function transcribeAudioWithV2(filePath: string): Promise<string> {
+// 동기 방식으로 STT 분석 및 키워드 분석까지 완료하는 함수
+async function analyzeAudioSync(filePath: string) {
+  console.log(`Starting SYNC transcription for: ${filePath}`);
+
   const gcpProjectId = Deno.env.get("GCP_PROJECT_ID");
   const gcpApiKey = Deno.env.get("GCP_API_KEY");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-
-  // V2 API는 Recognizer를 지정해야 합니다.
-  const location = "asia-northeast3"; // Recognizer를 생성한 위치
-  const recognizerId = "creditalk-recognizer"; // 사전 준비에서 생성한 Recognizer ID
+  const location = "asia-northeast1";
+  const recognizerId = "creditalk-recognizer";
 
   if (!gcpProjectId || !gcpApiKey || !supabaseUrl) {
-    throw new Error(
-      "Missing environment variables: GCP_PROJECT_ID, GCP_API_KEY, or SUPABASE_URL",
-    );
+    throw new Error("Missing critical environment variables");
   }
 
-  // Storage에 있는 파일의 공개 URL
   const fileUrl = `${supabaseUrl}/storage/v1/object/public/${filePath}`;
 
-  // V2 API 요청 본문. config는 Recognizer에 설정되어 있으므로 uri만 전달합니다.
+  // ## 수정된 부분 1: 요청 본문에서 recognizer 필드 제거 ##
+  // URL에서 Recognizer를 직접 지정하므로, 본문에서는 불필요합니다.
   const requestBody = {
-    audio: {
-      uri: fileUrl,
+    // recognizer 필드 제거
+    uri: fileUrl,
+    config: {
+      features: {
+        enableAutomaticPunctuation: true,
+      },
     },
-    // V2에서는 config를 recognizer가 대체하므로, 본문이 더 간결해집니다.
-    // 필요시 여기에 recognitionFeatures, configMask 등을 추가할 수 있습니다.
   };
 
-  // V2 API 엔드포인트
-  const apiUrl = `https://speech.googleapis.com/v2/projects/${gcpProjectId}/locations/${location}/recognizers/${recognizerId}:recognize`;
+  // ## 수정된 부분 2: API 엔드포인트를 리전별 엔드포인트로 변경 ##
+  // 'asia-northeast1' 리전의 Recognizer를 사용하므로, API 호스트네임에 해당 리전을 명시해야 합니다.
+  const apiUrl = `https://${location}-speech.googleapis.com/v2/projects/${gcpProjectId}/locations/${location}/recognizers/${recognizerId}:recognize`;
 
+  console.log(`Sending SYNC request to Google STT API: ${apiUrl}`);
   const response = await fetch(`${apiUrl}?key=${gcpApiKey}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      // V2는 'X-Goog-Api-Key' 헤더를 권장하기도 합니다.
-      // 'X-Goog-Api-Key': gcpApiKey,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(requestBody),
   });
+  console.log(`Received SYNC response from Google. Status: ${response.status}`);
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("STT API Error Response:", errorText);
+    console.error("STT API SYNC Error Response:", errorText);
     throw new Error(`Google STT API V2 Error: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
+  const transcribedText =
+    data.results
+      ?.map((result: any) => result.alternatives[0].transcript)
+      .join("\n") || "";
 
-  // V2 API의 응답 구조에 맞게 텍스트를 추출합니다.
-  const transcription = data.results
-    ?.map((result: any) => result.alternatives[0].transcript)
-    .join("\n");
+  console.log("Transcription complete. Analyzing keywords...");
 
-  // 분석이 끝나면 파일을 즉시 삭제하여 개인정보를 보호합니다.
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  await fetch(`${supabaseUrl}/storage/v1/object/${filePath}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
-    },
-  });
+  if (serviceRoleKey) {
+    await fetch(`${supabaseUrl}/storage/v1/object/${filePath}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+      },
+    });
+    console.log(`Deleted file from storage: ${filePath}`);
+  }
 
-  return transcription || "";
+  const detectedKeywords = PHISHING_KEYWORDS.filter((keyword) =>
+    transcribedText.includes(keyword),
+  );
+  const isDetected = detectedKeywords.length > 0;
+
+  return {
+    detected: isDetected,
+    keywords: detectedKeywords,
+    text: transcribedText,
+  };
 }
 
-serve(async (req: Request) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -97,25 +108,14 @@ serve(async (req: Request) => {
       throw new Error("Missing 'filePath' in request body");
     }
 
-    const transcribedText = await transcribeAudioWithV2(filePath);
+    const analysisResult = await analyzeAudioSync(filePath);
 
-    const detectedKeywords = PHISHING_KEYWORDS.filter((keyword) =>
-      transcribedText.includes(keyword),
-    );
-    const isDetected = detectedKeywords.length > 0;
-
-    return new Response(
-      JSON.stringify({
-        detected: isDetected,
-        keywords: detectedKeywords,
-        text: transcribedText,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      },
-    );
+    return new Response(JSON.stringify(analysisResult), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
   } catch (error) {
+    console.error("Error in main SYNC handler:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
