@@ -38,6 +38,14 @@ function SettingsScreen() {
     );
   };
 
+  const handleMaliciousAppDetection = () => {
+    Alert.alert(
+      "악성앱 감지 안내",
+      "플레이스토어, 앱스토어에서 'V3'를 검색하십시오. 해당 프로그램을 설치 후 '보안 점검' 기능을 활용하십시오.",
+      [{ text: "확인" }],
+    );
+  };
+
   const menuItems = [
     {
       id: "myReports",
@@ -100,7 +108,6 @@ function SettingsScreen() {
           </View>
         </View>
 
-        {/* 새로운 보안 도구 섹션 */}
         <View style={styles.menuGroup}>
           <Text style={styles.menuGroupTitle}>보안 도구</Text>
           <TouchableOpacity
@@ -114,6 +121,22 @@ function SettingsScreen() {
               style={styles.menuIcon}
             />
             <Text style={styles.menuText}>AI 통화 분석</Text>
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>NEW</Text>
+            </View>
+            <Icon name="chevron-right" size={24} color="#ccc" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleMaliciousAppDetection}
+          >
+            <Icon
+              name="lightbulb-on-outline"
+              size={24}
+              color="#555"
+              style={styles.menuIcon}
+            />
+            <Text style={styles.menuText}>원터치 악성앱 감지</Text>
             <View style={styles.newBadge}>
               <Text style={styles.newBadgeText}>NEW</Text>
             </View>
