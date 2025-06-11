@@ -68,7 +68,6 @@ const victimCircumstanceOptions = [
   "허위 해외문자 발신",
   "SNS 불법 업로드",
   "욕설 및 폭언 협박",
-  "과도한 이자 갈축",
   "기타",
 ];
 
@@ -424,7 +423,7 @@ function ReportScreen({ navigation }) {
         nickname_evidence_url: nicknameEvidenceUrl,
         illegal_collection_evidence_urls:
           illegalCollectionEvidenceUrls.filter(Boolean),
-        is_cash_transaction: isCashTransaction, // [요청 3] 값 전달
+        is_cash_transaction: isCashTransaction,
       };
 
       const { error: functionError } = await supabase.functions.invoke(
@@ -850,7 +849,7 @@ function ReportScreen({ navigation }) {
         value={caseSummary}
         onChangeText={setCaseSummary}
         multiline
-        placeholder="사건의 개요를 상세히 적어주세요."
+        placeholder="사건의 개요를 상세히 적어주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
         numberOfLines={5}
       />
 
@@ -937,8 +936,13 @@ function ReportScreen({ navigation }) {
           maxLength={4}
         />
       </View>
+
       <View style={styles.labelContainer}>
-        <Text style={styles.label}>피해금 송금 정보 (선택)</Text>
+        <Text style={styles.label}>
+          {attemptedFraud === false
+            ? "피해당할 뻔 했던 계좌번호 (선택)"
+            : "피해금 송금 정보 (선택)"}
+        </Text>
         {(category === "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기" ||
           category === "불법사금융") && (
           <TouchableOpacity
@@ -956,6 +960,7 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         )}
       </View>
+
       {!isCashTransaction && category !== "암호화폐" && (
         <>
           <View style={styles.inputWithButtonContainer}>

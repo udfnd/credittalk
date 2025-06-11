@@ -17,7 +17,9 @@ interface ReportData {
   description?: string | null;
   nickname?: string | null;
   gender: string;
-  victim_circumstances?: string[] | null;
+  // --- START: 데이터 타입 수정 (string[] -> string) ---
+  victim_circumstances?: string | null;
+  // --- END: 데이터 타입 수정 ---
   traded_item_category?: string | null;
   perpetrator_identified?: boolean | null;
   attempted_fraud?: boolean | null;
@@ -26,7 +28,7 @@ interface ReportData {
   impersonated_person?: string | null;
   nickname_evidence_url?: string | null;
   illegal_collection_evidence_urls?: string[] | null;
-  is_cash_transaction?: boolean | null; // [요청 3] '현금 전달' 필드 추가
+  is_cash_transaction?: boolean | null;
 }
 
 async function encryptAndInsert(

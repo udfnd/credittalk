@@ -409,14 +409,12 @@ function SearchBaseScreen({
             !dataFetchLoading && (
               <View style={styles.emptyContainer}>
                 <Icon name="alert-circle-outline" size={50} color="#aaa" />
-                <Text style={styles.emptyText}>검색 결과가 없습니다.</Text>
+                <Text style={styles.emptyText}>피해 사실이 없습니다.</Text>
                 <TouchableOpacity
                   style={styles.reportButton}
                   onPress={() => navigation.navigate("Report")}
                 >
-                  <Text style={styles.reportButtonText}>
-                    피해 사실을 등록하시겠습니까?
-                  </Text>
+                  <Text style={styles.reportButtonText}>등록하시겠습니까?</Text>
                 </TouchableOpacity>
               </View>
             )
