@@ -741,6 +741,30 @@ function ReportScreen({ navigation }) {
       {renderDetailFields()}
 
       <Text style={styles.label}>
+        사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
+      </Text>
+      <View style={styles.checkboxContainer}>
+        {scamReportSources.map((source) => (
+          <TouchableOpacity
+            key={source}
+            style={styles.checkboxItem}
+            onPress={() => handleScamReportSourceChange(source)}
+          >
+            <Icon
+              name={
+                scamReportSource === source
+                  ? "radiobox-marked"
+                  : "radiobox-blank"
+              }
+              size={24}
+              color={scamReportSource === source ? "#3d5afe" : "#555"}
+            />
+            <Text style={styles.checkboxLabel}>{source}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={styles.label}>
         피해, 미수 여부 <Text style={styles.required}>*</Text>
       </Text>
       <View style={styles.optionSelectorContainer}>
@@ -841,18 +865,6 @@ function ReportScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.label}>
-        사건 개요 <Text style={styles.required}>*</Text>
-      </Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        value={caseSummary}
-        onChangeText={setCaseSummary}
-        multiline
-        placeholder="사건의 개요를 상세히 적어주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
-        numberOfLines={5}
-      />
-
       <Text style={styles.label}>SNS 닉네임</Text>
       <TextInput
         style={styles.input}
@@ -901,7 +913,7 @@ function ReportScreen({ navigation }) {
             size={24}
             color={isPhoneUnknown ? "#3d5afe" : "#555"}
           />
-          <Text style={styles.checkboxLabel}>없음</Text>
+          <Text style={styles.checkboxLabel}>모름</Text>
         </TouchableOpacity>
       </View>
       {isPhoneUnknown && (
@@ -1004,30 +1016,6 @@ function ReportScreen({ navigation }) {
         />
       )}
 
-      <Text style={styles.label}>
-        사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.checkboxContainer}>
-        {scamReportSources.map((source) => (
-          <TouchableOpacity
-            key={source}
-            style={styles.checkboxItem}
-            onPress={() => handleScamReportSourceChange(source)}
-          >
-            <Icon
-              name={
-                scamReportSource === source
-                  ? "radiobox-marked"
-                  : "radiobox-blank"
-              }
-              size={24}
-              color={scamReportSource === source ? "#3d5afe" : "#555"}
-            />
-            <Text style={styles.checkboxLabel}>{source}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       {scamReportSource === "포털사이트 또는 SNS" && (
         <View style={styles.inputWithButtonContainer}>
           <TextInput
@@ -1053,6 +1041,18 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       )}
+
+      <Text style={styles.label}>
+        사건 개요 <Text style={styles.required}>*</Text>
+      </Text>
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        value={caseSummary}
+        onChangeText={setCaseSummary}
+        multiline
+        placeholder="사건의 개요를 상세히 적어주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
+        numberOfLines={5}
+      />
 
       <View style={styles.buttonContainer}>
         {isLoading ? (
