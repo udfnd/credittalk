@@ -30,11 +30,13 @@ const individualCategories = [
   "불법사금융",
   "중고물품 사기",
   "투자 사기, 전세 사기",
+  "게임 비실물",
   "암호화폐",
   "기타",
 ];
 
 const corporateCategories = [
+  "노쇼",
   "노쇼 대리구매 사기",
   "공갈 협박 범죄",
   "알바 범죄",
@@ -194,7 +196,6 @@ const itemCategories = [
 function ReportScreen({ navigation }) {
   const { user } = useAuth();
 
-  // 상태 변수 정의
   const [accountHolderName, setAccountHolderName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [nickname, setNickname] = useState("");
@@ -226,13 +227,11 @@ function ReportScreen({ navigation }) {
   const [isPhoneUnknown, setIsPhoneUnknown] = useState(false);
   const [isCashTransaction, setIsCashTransaction] = useState(false);
 
-  // 새롭게 추가된 상태 변수
   const [bankName, setBankName] = useState("");
   const [siteName, setSiteName] = useState("");
   const [isBankModalVisible, setIsBankModalVisible] = useState(false);
   const [isSiteModalVisible, setIsSiteModalVisible] = useState(false);
 
-  // 타입이나 카테고리 변경 시 관련 상태 초기화
   useEffect(() => {
     if (companyType === "개인") setCurrentCategories(individualCategories);
     else if (companyType === "사업자")
@@ -396,11 +395,6 @@ function ReportScreen({ navigation }) {
           ? `기타: ${impersonatedPersonOther.trim()}`
           : impersonatedPerson;
 
-      const finalScamReportSource =
-        scamReportSource === "포털사이트 또는 SNS" && siteName
-          ? `${scamReportSource}: ${siteName}`
-          : scamReportSource;
-
       const reportData = {
         name: isCashTransaction ? null : accountHolderName.trim() || null,
         nickname: nickname.trim() || null,
@@ -409,7 +403,7 @@ function ReportScreen({ navigation }) {
         bank_name: isCashTransaction ? null : bankName || null,
         site_name: siteName || null,
         category,
-        scam_report_source: finalScamReportSource,
+        scam_report_source: scamReportSource,
         company_type: companyType,
         gender: gender,
         description: caseSummary.trim() || null,
@@ -450,12 +444,17 @@ function ReportScreen({ navigation }) {
 
   const handleCategoryChange = (selectedCategory) =>
     setCategory((cat) => (cat === selectedCategory ? "" : selectedCategory));
+
+  // --- 이 함수를 수정했습니다 ---
   const handleScamReportSourceChange = (source) => {
-    setScamReportSource((src) => (src === source ? "" : source));
+    // 토글 방식 대신, 항상 선택한 값으로 설정합니다.
+    setScamReportSource(source);
+    // '포털사이트 또는 SNS'가 아니면 siteName을 초기화합니다.
     if (source !== "포털사이트 또는 SNS") {
       setSiteName("");
     }
   };
+
   const handleAccountTypeChange = (type) => setCompanyType(type);
   const handleImpersonatedPersonChange = (type) => {
     const newType = impersonatedPerson === type ? "" : type;
@@ -677,7 +676,28 @@ function ReportScreen({ navigation }) {
         visible={isSiteModalVisible}
         onClose={() => setIsSiteModalVisible(false)}
         items={siteImages}
-        onSelect={setSiteName}
+        onSelect={(name) => {
+          setSiteName(name);
+          if (name === "직접쓰기") {
+            setTimeout(
+              () =>
+                Alert.prompt(
+                  "사이트 직접 입력",
+                  "사이트 이름을 입력해주세요.",
+                  [
+                    { text: "취소", style: "cancel" },
+                    {
+                      text: "확인",
+                      onPress: (text) => setSiteName(text || ""),
+                    },
+                  ],
+                  "plain-text",
+                  siteName !== "직접쓰기" ? siteName : "",
+                ),
+              Platform.OS === "ios" ? 500 : 0,
+            );
+          }
+        }}
         title="사이트 선택"
       />
 
@@ -763,6 +783,27 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {scamReportSource === "포털사이트 또는 SNS" && (
+        <View>
+          <Text style={styles.label}>사이트 이름</Text>
+          <View style={styles.inputWithButtonContainer}>
+            <TextInput
+              style={[styles.input, styles.inputWithButton]}
+              value={siteName}
+              placeholder="오른쪽 버튼으로 사이트 선택"
+              editable={false}
+              pointerEvents="none"
+            />
+            <TouchableOpacity
+              style={styles.inlineButton}
+              onPress={() => setIsSiteModalVisible(true)}
+            >
+              <Text style={styles.inlineButtonText}>선택</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <Text style={styles.label}>
         피해, 미수 여부 <Text style={styles.required}>*</Text>
@@ -930,6 +971,7 @@ function ReportScreen({ navigation }) {
           placeholder="000"
           keyboardType="number-pad"
           maxLength={3}
+          editable={!isPhoneUnknown}
         />
         <TextInput
           style={[styles.input, styles.phoneInputSegment]}
@@ -938,6 +980,7 @@ function ReportScreen({ navigation }) {
           placeholder="0000"
           keyboardType="number-pad"
           maxLength={4}
+          editable={!isPhoneUnknown}
         />
         <TextInput
           style={[styles.input, styles.phoneInputSegment]}
@@ -946,6 +989,7 @@ function ReportScreen({ navigation }) {
           placeholder="0000"
           keyboardType="number-pad"
           maxLength={4}
+          editable={!isPhoneUnknown}
         />
       </View>
 
@@ -1014,32 +1058,6 @@ function ReportScreen({ navigation }) {
           keyboardType={category === "암호화폐" ? "default" : "number-pad"}
           editable={!isCashTransaction}
         />
-      )}
-
-      {scamReportSource === "포털사이트 또는 SNS" && (
-        <View style={styles.inputWithButtonContainer}>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                marginRight: 0,
-                borderRightWidth: 0,
-                borderTopRightRadius: 0,
-                borderBottomRightRadius: 0,
-              },
-            ]}
-            value={siteName}
-            placeholder="사이트 선택"
-            editable={false}
-            pointerEvents="none"
-          />
-          <TouchableOpacity
-            style={styles.inlineButton}
-            onPress={() => setIsSiteModalVisible(true)}
-          >
-            <Text style={styles.inlineButtonText}>선택</Text>
-          </TouchableOpacity>
-        </View>
       )}
 
       <Text style={styles.label}>
@@ -1259,6 +1277,7 @@ const styles = StyleSheet.create({
     color: "#adb5bd",
   },
   inputWithButton: {
+    flex: 1,
     marginRight: 0,
     borderRightWidth: 0,
     borderTopRightRadius: 0,
