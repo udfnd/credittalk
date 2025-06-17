@@ -13,14 +13,12 @@ import {
   Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
 const jobTypes = ["일반", "사업자"];
 
 function SignUpScreen() {
   const navigation = useNavigation();
-  const { signUpWithEmail, isLoading: authIsLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,18 +27,17 @@ function SignUpScreen() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [nationalId, setNationalId] = useState("");
   const [jobType, setJobType] = useState("일반");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 이메일 중복 확인 관련 상태
-  const [isEmailChecking, setIsEmailChecking] = useState(false);
-  const [isEmailAvailable, setIsEmailAvailable] = useState(null);
+  const [otp, setOtp] = useState("");
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
+  const [isEmailAvailable, setIsEmailAvailable] = useState(null);
 
   const validateEmailFormat = (text) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
 
   const handleEmailChange = (text) => {
     setEmail(text);
-    // 이메일이 변경되면 중복 확인 상태 초기화
     if (isEmailAvailable !== null) {
       setIsEmailAvailable(null);
       setEmailMessage("");
@@ -54,18 +51,15 @@ function SignUpScreen() {
       return;
     }
 
-    setIsEmailChecking(true);
+    setIsLoading(true);
     setEmailMessage("");
     try {
       const { data, error } = await supabase.functions.invoke(
         "check-email-availability",
-        {
-          body: { email: email.trim() },
-        },
+        { body: { email: email.trim() } },
       );
 
       if (error) throw error;
-
       if (data.available) {
         setIsEmailAvailable(true);
         setEmailMessage("사용 가능한 이메일입니다.");
@@ -75,27 +69,68 @@ function SignUpScreen() {
       }
     } catch (err) {
       setIsEmailAvailable(null);
-      setEmailMessage("확인 중 오류가 발생했습니다.");
+      setEmailMessage("오류: 이메일 중복 확인에 실패했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendVerificationCode = async () => {
+    Keyboard.dismiss();
+    if (!phoneNumber || !/^\d{10,11}$/.test(phoneNumber)) {
+      Alert.alert("입력 오류", "올바른 휴대폰 번호를 입력해주세요.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke(
+        "send-verification-otp",
+        { body: { phone: phoneNumber.trim() } },
+      );
+
+      if (error) {
+        const contextError = error.context?.errorMessage;
+        let displayError = "인증번호 발송에 실패했습니다.";
+        if (contextError) {
+          try {
+            const parsedError = JSON.parse(contextError);
+            displayError = parsedError.error || displayError;
+          } catch (e) {
+            displayError = contextError;
+          }
+        }
+        throw new Error(displayError);
+      }
+
+      Alert.alert(
+        "인증번호 발송",
+        "입력하신 휴대폰 번호로 인증번호를 발송했습니다.",
+      );
+      setIsOtpSent(true);
+    } catch (err) {
       Alert.alert("오류", err.message);
     } finally {
-      setIsEmailChecking(false);
+      setIsLoading(false);
     }
   };
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
-    if (isEmailAvailable !== true) {
-      Alert.alert("입력 오류", "이메일 중복 확인을 완료해주세요.");
+    if (!isOtpSent) {
+      Alert.alert("인증 필요", "먼저 휴대폰 인증을 완료해주세요.");
       return;
     }
-    // ... (기존 유효성 검사 로직)
+    if (isEmailAvailable !== true) {
+      Alert.alert("이메일 확인 필요", "이메일 중복 확인을 해주세요.");
+      return;
+    }
     if (
+      !otp.trim() ||
       !email.trim() ||
       !password.trim() ||
       !name.trim() ||
-      !phoneNumber.trim() ||
-      !nationalId.trim() ||
-      !jobType
+      !nationalId.trim()
     ) {
       Alert.alert("입력 오류", "모든 필수 항목을 입력해주세요.");
       return;
@@ -109,21 +144,46 @@ function SignUpScreen() {
       return;
     }
 
-    setIsSubmitting(true);
-    const additionalData = {
-      name: name.trim(),
-      phoneNumber: phoneNumber.trim(),
-      nationalId: nationalId.trim(),
-      jobType,
-    };
-    const result = await signUpWithEmail(
-      email.trim(),
-      password,
-      additionalData,
-    );
-    setIsSubmitting(false);
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.functions.invoke("verify-and-signup", {
+        body: {
+          email: email.trim(),
+          password,
+          name: name.trim(),
+          phoneNumber: phoneNumber.trim(),
+          nationalId: nationalId.trim(),
+          jobType,
+          otp: otp.trim(),
+        },
+      });
 
-    if (result.success) navigation.navigate("SignIn");
+      if (error) {
+        const contextError = error.context?.errorMessage;
+        let displayError = "알 수 없는 오류가 발생했습니다.";
+        if (contextError) {
+          try {
+            const parsedError = JSON.parse(contextError);
+            displayError = parsedError.error || displayError;
+          } catch (e) {
+            displayError = contextError;
+          }
+        } else {
+          displayError = error.message;
+        }
+        throw new Error(displayError);
+      }
+
+      Alert.alert(
+        "회원가입 성공",
+        "회원가입이 완료되었습니다. 로그인 해주세요.",
+        [{ text: "확인", onPress: () => navigation.navigate("SignIn") }],
+      );
+    } catch (err) {
+      Alert.alert("회원가입 실패", err.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -134,6 +194,7 @@ function SignUpScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>회원가입</Text>
 
+        {/* --- START: 수정된 부분 (editable 속성 제거) --- */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.inputField}
@@ -146,13 +207,9 @@ function SignUpScreen() {
           <TouchableOpacity
             style={styles.checkButton}
             onPress={handleCheckEmail}
-            disabled={isEmailChecking}
+            disabled={isLoading}
           >
-            {isEmailChecking ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.checkButtonText}>중복확인</Text>
-            )}
+            <Text style={styles.checkButtonText}>중복확인</Text>
           </TouchableOpacity>
         </View>
         {emailMessage && (
@@ -188,14 +245,6 @@ function SignUpScreen() {
         />
         <TextInput
           style={styles.input}
-          placeholder="전화번호 (예: 01012345678)"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
-          keyboardType="phone-pad"
-          maxLength={11}
-        />
-        <TextInput
-          style={styles.input}
           placeholder="주민등록번호 (13자리, - 제외)"
           value={nationalId}
           onChangeText={setNationalId}
@@ -203,7 +252,6 @@ function SignUpScreen() {
           maxLength={13}
           secureTextEntry
         />
-
         <Text style={styles.label}>직업 유형</Text>
         <View style={styles.jobTypeContainer}>
           {jobTypes.map((type) => (
@@ -226,15 +274,58 @@ function SignUpScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        {/* --- END: 수정된 부분 --- */}
 
-        {isSubmitting || authIsLoading ? (
-          <ActivityIndicator
-            size="large"
-            color="#3d5afe"
-            style={styles.spinner}
-          />
+        {!isOtpSent ? (
+          <>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.inputField}
+                placeholder="휴대폰 번호 (예: 01012345678)"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                maxLength={11}
+              />
+              <TouchableOpacity
+                style={styles.checkButton}
+                onPress={handleSendVerificationCode}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.checkButtonText}>인증요청</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            <View style={{ height: 50 }} />
+          </>
         ) : (
-          <Button title="회원가입" onPress={handleSubmit} color="#3d5afe" />
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="인증번호 6자리"
+              value={otp}
+              onChangeText={setOtp}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+            {isLoading ? (
+              <ActivityIndicator
+                size="large"
+                color="#3d5afe"
+                style={{ marginVertical: Platform.OS === "ios" ? 18 : 19 }}
+              />
+            ) : (
+              <Button
+                title="회원가입"
+                onPress={handleSubmit}
+                color="#3d5afe"
+                disabled={isLoading}
+              />
+            )}
+          </>
         )}
 
         <TouchableOpacity
@@ -278,7 +369,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 5,
+    marginBottom: 12,
   },
   inputField: {
     flex: 1,
@@ -296,8 +387,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: "#6c757d",
     justifyContent: "center",
+    alignItems: "center",
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
+    minWidth: 80,
   },
   checkButtonText: { color: "#fff", fontWeight: "bold" },
   message: { marginTop: -7, marginBottom: 12, fontSize: 12, paddingLeft: 5 },
@@ -329,7 +422,6 @@ const styles = StyleSheet.create({
   jobTypeButtonTextSelected: { color: "white", fontWeight: "bold" },
   linkButton: { marginTop: 20, alignItems: "center" },
   linkText: { color: "#3d5afe", fontSize: 15, textDecorationLine: "underline" },
-  spinner: { marginVertical: Platform.OS === "ios" ? 18 : 19 },
 });
 
 export default SignUpScreen;
