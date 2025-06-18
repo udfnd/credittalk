@@ -1,21 +1,10 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { create, getNumericDate } from "https://deno.land/x/djwt@v2.2/mod.ts";
 
-// CryptoKey 생성을 위한 헬퍼 함수
-async function getCryptoKey(secret: string): Promise<CryptoKey> {
-  const keyBuf = new TextEncoder().encode(secret);
-  return await crypto.subtle.importKey(
-    "raw",
-    keyBuf,
-    { name: "HMAC", hash: "SHA-256" },
-    true,
-    ["sign", "verify"],
-  );
-}
-
+// 서버사이드에서 인증을 완료하고 완전한 세션을 반환하는 함수
 serve(async (req) => {
+  // CORS preflight 요청 처리
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -26,125 +15,113 @@ serve(async (req) => {
       throw new Error("Naver access token is required.");
     }
 
-    // 1. 네이버 API를 호출하여 사용자 정보 가져오기
+    // 1. 네이버 API 호출하여 사용자 정보 가져오기
     const naverUserRes = await fetch("https://openapi.naver.com/v1/nid/me", {
-      headers: {
-        Authorization: `Bearer ${naver_token}`,
-      },
+      headers: { Authorization: `Bearer ${naver_token}` },
     });
+    if (!naverUserRes.ok)
+      throw new Error("Failed to fetch Naver user profile.");
+    const naverUser = (await naverUserRes.json()).response;
+    if (!naverUser || !naverUser.id) throw new Error("Invalid Naver profile.");
 
-    if (!naverUserRes.ok) {
-      throw new Error(
-        `Failed to fetch Naver user profile: ${await naverUserRes.text()}`,
-      );
-    }
-
-    const naverUser = await naverUserRes.json();
-
-    // 네이버 응답에서 필수 정보 추출
-    const { id: naverId, email, name } = naverUser.response;
-    if (!naverId) {
-      throw new Error("Naver user ID not found in the response.");
-    }
+    const { id: naverId, email, name } = naverUser;
+    if (!email) throw new Error("Naver account must have a valid email.");
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // 2. Supabase에서 기존 사용자 찾기 (auth.users의 메타데이터 기준)
-    const { data: existingUser, error: userError } = await supabaseAdmin
+    // 2. 사용자 찾기 또는 생성 (이전 로직과 유사)
+    let supabaseUser: User;
+    const { data: userProfile } = await supabaseAdmin
       .from("users")
       .select("auth_user_id")
-      .eq("naver_id", naverId) // public.users 테이블에 naver_id 컬럼이 필요합니다.
+      .eq("naver_id", naverId)
       .single();
 
-    let supabaseUserId: string;
-
-    if (userError && userError.code !== "PGRST116") {
-      throw userError;
-    }
-
-    if (existingUser) {
-      supabaseUserId = existingUser.auth_user_id;
+    if (userProfile) {
+      const { data: userResult, error } =
+        await supabaseAdmin.auth.admin.getUserById(userProfile.auth_user_id);
+      if (error) throw error;
+      supabaseUser = userResult.user;
     } else {
-      // 3. 신규 사용자 생성
       const { data: newUser, error: signUpError } =
         await supabaseAdmin.auth.admin.createUser({
           email: email,
-          email_confirm: true, // 네이버에서 이미 이메일 인증을 완료했다고 가정
-          user_metadata: {
-            full_name: name,
-            provider: "naver",
-            // raw_user_meta_data에 provider 정보를 저장하는 것이 더 표준적일 수 있습니다.
-          },
+          email_confirm: true,
+          user_metadata: { full_name: name, provider: "naver" },
         });
 
       if (signUpError) {
-        // 이미 이메일이 존재하지만 네이버 연동이 안된 경우 처리
-        if (
-          signUpError.message.includes(
-            "duplicate key value violates unique constraint",
-          )
-        ) {
-          return new Response(
-            JSON.stringify({
-              error:
-                "이미 가입된 이메일입니다. 이메일로 로그인 후 계정을 연동해주세요.",
-            }),
-            {
-              status: 409,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
-          );
+        if (signUpError.message.includes("duplicate key value")) {
+          const {
+            data: { users },
+            error: listError,
+          } = await supabaseAdmin.auth.admin.listUsers({ query: email });
+          if (listError) throw listError;
+          const foundUser = users.find((u) => u.email === email);
+          if (!foundUser) throw new Error("User exists but not found.");
+          supabaseUser = foundUser;
+          await supabaseAdmin
+            .from("users")
+            .update({ naver_id: naverId })
+            .eq("auth_user_id", supabaseUser.id);
+        } else {
+          throw signUpError;
         }
-        throw signUpError;
+      } else {
+        supabaseUser = newUser.user;
+        const { error: profileError } = await supabaseAdmin
+          .from("users")
+          .insert({
+            auth_user_id: supabaseUser.id,
+            name,
+            naver_id: naverId,
+            phone_number: "social_login",
+            national_id: "social_login",
+            job_type: "일반",
+          });
+        if (profileError) {
+          await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
+          throw profileError;
+        }
       }
+    }
 
-      if (!newUser?.user) throw new Error("Failed to create Supabase user.");
-      supabaseUserId = newUser.user.id;
-
-      // public.users 테이블에도 프로필 정보 생성
-      const { error: profileError } = await supabaseAdmin.from("users").insert({
-        auth_user_id: supabaseUserId,
-        name: name,
-        naver_id: naverId, // 계정 연결을 위해 네이버 ID 저장
-        // 소셜 로그인이므로 나머지 필수값은 기본값 또는 빈 값으로 처리
-        phone_number: "social_login",
-        national_id: "social_login",
-        job_type: "일반", // 기본값
+    // 3. Magic Link 생성
+    const { data: linkData, error: linkError } =
+      await supabaseAdmin.auth.admin.generateLink({
+        type: "magiclink",
+        email: supabaseUser.email!,
       });
-      if (profileError) {
-        // 롤백: auth.users에서 방금 생성한 유저 삭제
-        await supabaseAdmin.auth.admin.deleteUser(supabaseUserId);
-        throw profileError;
-      }
-    }
+    if (linkError) throw linkError;
 
-    // 4. Custom Supabase JWT 생성
-    const jwtSecret = Deno.env.get("JWT_SECRET");
-    if (!jwtSecret) {
-      throw new Error("JWT_SECRET is not set in environment variables.");
-    }
-    const key = await getCryptoKey(jwtSecret);
+    const magicToken = new URL(
+      linkData.properties.action_link,
+    ).searchParams.get("token");
+    if (!magicToken) throw new Error("Could not extract magic link token.");
 
-    const customToken = await create(
-      { alg: "HS256", typ: "JWT" },
-      {
-        sub: supabaseUserId,
-        aud: "authenticated",
-        role: "authenticated",
-        exp: getNumericDate(60 * 60), // 1시간 후 만료
-      },
-      key,
+    // 4. (핵심) 서버에서 즉시 토큰을 세션으로 교환
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!, // ANONYMOUS KEY 사용
     );
 
-    return new Response(JSON.stringify({ access_token: customToken }), {
+    const { data: sessionData, error: verifyError } =
+      await supabaseClient.auth.verifyOtp({
+        email: supabaseUser.email!,
+        token: magicToken,
+        type: "magiclink",
+      });
+    if (verifyError) throw verifyError;
+
+    // 5. 클라이언트에게 완전한 세션(access_token, refresh_token 포함) 반환
+    return new Response(JSON.stringify(sessionData.session), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error) {
-    console.error(error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
