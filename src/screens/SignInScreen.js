@@ -17,8 +17,8 @@ import { supabase } from "../lib/supabaseClient";
 import NaverLogin from "@react-native-seoul/naver-login";
 import { login } from "@react-native-seoul/kakao-login";
 
-const naverLogo = require("../assets/images/naver_logo.png"); // 네이버 로고 이미지 경로
-const kakaoLogo = require("../assets/images/kakao_logo.png"); // 카카오 로고 이미지 경로
+const naverLogo = require("../assets/images/naver_logo.png");
+const kakaoLogo = require("../assets/images/kakao_logo.png");
 
 function SignInScreen() {
   const { signInWithEmail, isLoading } = useAuth();
@@ -38,30 +38,38 @@ function SignInScreen() {
   const handleSocialLogin = async (provider) => {
     setSocialLoading(true);
     try {
-      let token;
       if (provider === "naver") {
         const result = await NaverLogin.login({
           appName: "크레디톡",
-          consumerKey: "YOUR_NAVER_CLIENT_ID",
-          consumerSecret: "YOUR_NAVER_CLIENT_SECRET",
-          serviceUrlScheme: "naver-YOUR_NAVER_CLIENT_ID", // iOS 설정
+          consumerKey: "belWdkUzgFugOnoHOfBs",
+          consumerSecret: "x0Cc7_4tSU",
+          serviceUrlScheme: "org.reactjs.native.example.credittalk",
         });
-        if (!result?.success) throw new Error("네이버 로그인에 실패했습니다.");
-        token = result.successResponse.accessToken;
+
+        if (!result?.success) {
+          throw new Error("네이버 로그인에 실패했습니다.");
+        }
+
+        // !! 중요: 네이버 로그인은 현재 코드에서 Supabase와 연동되지 않습니다.
+        // 성공적으로 accessToken을 받아오는 것 까지만 확인합니다.
+        console.log("Naver Access Token:", result.successResponse.accessToken);
+        Alert.alert(
+          "네이버 로그인 성공 (임시)",
+          "네이버 로그인이 성공했으나, 현재 앱에서는 후속 처리가 구현되어 있지 않습니다.",
+        );
       } else if (provider === "kakao") {
         const result = await login();
-        token = result.idToken; // Supabase는 idToken을 사용합니다.
+        if (!result.idToken) {
+          throw new Error(
+            "카카오로부터 idToken을 받지 못했습니다. 카카오 개발자 콘솔에서 OpenID Connect를 활성화했는지 확인해주세요.",
+          );
+        }
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: "kakao",
+          token: result.idToken,
+        });
+        if (error) throw error;
       }
-
-      if (!token) throw new Error(`${provider} 토큰을 가져오지 못했습니다.`);
-
-      const { error } = await supabase.auth.signInWithIdToken({
-        provider,
-        token,
-      });
-
-      if (error) throw error;
-      // AuthProvider의 onAuthStateChange가 후속 처리를 담당합니다.
     } catch (error) {
       if (error.code !== "E_CANCELLED_OPERATION") {
         Alert.alert(
