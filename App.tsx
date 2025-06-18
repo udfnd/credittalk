@@ -1,7 +1,7 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Linking,
   Platform,
@@ -22,7 +22,7 @@ import {
 } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-
+import NaverLogin from "@react-native-seoul/naver-login";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 
 // Screens
@@ -425,6 +425,15 @@ function AppNavigator() {
 }
 
 function App(): React.JSX.Element {
+  useEffect(() => {
+    NaverLogin.initialize({
+      appName: "크레디톡",
+      consumerKey: "belWdkUzgFugOnoHOfBs",
+      consumerSecret: "x0Cc7_4tSU",
+      serviceUrlSchemeIOS: "org.reactjs.native.example.credittalk",
+      disableNaverAppAuthIOS: false, // 네이버 앱으로 인증하는 것을 권장 (true로 설정 시 인앱 브라우저만 사용)
+    });
+  }, []);
   return (
     <AuthProvider>
       <NavigationContainer linking={linking} fallback={<Text>Loading...</Text>}>
