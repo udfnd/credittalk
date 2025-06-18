@@ -108,16 +108,17 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY")!, // ANONYMOUS KEY 사용
     );
 
-    const { data: sessionData, error: verifyError } =
-      await supabaseClient.auth.verifyOtp({
-        email: supabaseUser.email!,
-        token: magicToken,
-        type: "magiclink",
-      });
+    const {
+      data: { session },
+      error: verifyError,
+    } = await supabaseClient.auth.verifyOtp({
+      token_hash: magicToken, // token이 아니라 token_hash
+      type: "email", // magiclink 대신 email
+    });
     if (verifyError) throw verifyError;
 
     // 5. 클라이언트에게 완전한 세션(access_token, refresh_token 포함) 반환
-    return new Response(JSON.stringify(sessionData.session), {
+    return new Response(JSON.stringify(session), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
