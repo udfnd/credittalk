@@ -1,7 +1,7 @@
 // src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useContext } from "react";
 import { Alert } from "react-native";
-import { supabase } from "../lib/supabaseClient"; // AsyncStorage 설정된 클라이언트
+import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
 
@@ -10,67 +10,63 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const fetchAndSetProfile = async (authUserId) => {
+    if (!authUserId) {
+      setProfile(null);
+      return false;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("auth_user_id", authUserId)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        throw error;
+      }
+      setProfile(data || null);
+      return !!data;
+    } catch (e) {
+      console.error("Error fetching profile:", e.message);
+      setProfile(null);
+      return false;
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     setIsLoading(true);
 
-    const fetchAndSetProfile = async (authUserId) => {
-      if (!authUserId || !mounted) {
-        if (mounted) setProfile(null);
-        return false;
-      }
-      try {
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .eq("auth_user_id", authUserId)
-          .single();
-
-        if (error && error.code !== "PGRST116") {
-          if (mounted) setProfile(null);
-          return false;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchAndSetProfile(session.user.id).finally(() => {
+            if (mounted) setIsLoading(false);
+          });
+        } else {
+          setIsLoading(false);
         }
-        if (mounted) {
-          setProfile(data || null);
-          return !!data;
-        }
-      } catch (e) {
-        if (mounted) setProfile(null);
-        return false;
       }
-      return false;
-    };
+    });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         if (!mounted) return;
+        setIsLoading(true);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        setProfile(null); // 프로필 초기화 후 다시 조회
 
-        if (event === "INITIAL_SESSION") {
-          if (session?.user) {
-            setUser(session.user);
-            await fetchAndSetProfile(session.user.id);
-          } else {
-            setUser(null);
-            setProfile(null);
+        if (currentUser) {
+          const profileExists = await fetchAndSetProfile(currentUser.id);
+          // 소셜 로그인으로 새로 가입했고, 프로필이 아직 없는 경우
+          if (!profileExists && currentUser.app_metadata.provider) {
+            // App.tsx에서 profile이 null인 것을 감지하여 추가 정보 화면으로 보낼 것
           }
-          if (mounted) setIsLoading(false);
-        } else if (event === "SIGNED_IN" && session?.user) {
-          if (mounted) setIsLoading(true);
-          setUser(session.user);
-          await fetchAndSetProfile(session.user.id);
-          if (mounted) setIsLoading(false);
-        } else if (event === "SIGNED_OUT") {
-          if (mounted) setIsLoading(true);
-          setUser(null);
-          setProfile(null);
-          if (mounted) setIsLoading(false);
-        } else if (
-          (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") &&
-          session?.user
-        ) {
-          setUser(session.user);
-          await fetchAndSetProfile(session.user.id);
         }
+        setIsLoading(false);
       },
     );
 
