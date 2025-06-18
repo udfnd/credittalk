@@ -24,6 +24,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import NaverLogin from "@react-native-seoul/naver-login";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { supabase } from "./src/lib/supabaseClient";
 
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
@@ -434,6 +435,7 @@ function App(): React.JSX.Element {
       disableNaverAppAuthIOS: false, // 네이버 앱으로 인증하는 것을 권장 (true로 설정 시 인앱 브라우저만 사용)
     });
   }, []);
+
   return (
     <AuthProvider>
       <NavigationContainer linking={linking} fallback={<Text>Loading...</Text>}>
