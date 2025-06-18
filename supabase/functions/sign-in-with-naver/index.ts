@@ -1,3 +1,5 @@
+// supabase/functions/sign-in-with-naver/index.ts
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -24,7 +26,7 @@ serve(async (req) => {
     const naverUser = (await naverUserRes.json()).response;
     if (!naverUser || !naverUser.id) throw new Error("Invalid Naver profile.");
 
-    const { id: naverId, email, name, mobile: phoneNumber } = naverUser;
+    const { id: naverId, email, name } = naverUser;
     if (!email) throw new Error("Naver account must have a valid email.");
 
     const supabaseAdmin = createClient(
@@ -34,7 +36,6 @@ serve(async (req) => {
 
     // 2. 사용자 찾기 또는 생성
     let supabaseUser: User;
-    // 이메일로 기존 사용자가 있는지 먼저 확인
     const {
       data: { users },
       error: listError,
@@ -45,6 +46,7 @@ serve(async (req) => {
 
     if (existingUser) {
       supabaseUser = existingUser;
+      // 기존 사용자의 경우, 프로필에 naver_id가 없으면 연결해줍니다.
       const { data: userProfile, error: profileError } = await supabaseAdmin
         .from("users")
         .select("id, naver_id")
@@ -60,34 +62,24 @@ serve(async (req) => {
           .eq("auth_user_id", supabaseUser.id);
       }
     } else {
+      // 신규 사용자의 경우, auth.users에만 생성합니다.
+      // naverId를 user_metadata에 포함시켜 클라이언트로 전달합니다.
       const { data: newUser, error: signUpError } =
         await supabaseAdmin.auth.admin.createUser({
           email: email,
-          email_confirm: true, // 소셜 로그인이므로 이메일은 인증된 것으로 간주
-          user_metadata: { full_name: name, provider: "naver" },
+          email_confirm: true,
+          user_metadata: {
+            full_name: name,
+            provider: "naver",
+            provider_id: naverId, // 이 부분이 중요합니다.
+          },
         });
 
       if (signUpError) throw signUpError;
-
       supabaseUser = newUser.user;
-
-      const { error: profileError } = await supabaseAdmin.from("users").insert({
-        auth_user_id: supabaseUser.id,
-        name,
-        naver_id: naverId,
-        // NOT NULL 제약조건을 만족시키기 위한 기본값 삽입
-        phone_number: phoneNumber || "social_login",
-        national_id: "social_login",
-        job_type: "일반",
-      });
-
-      if (profileError) {
-        // 프로필 생성 실패 시 auth.users에 생성된 유저 롤백
-        await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
-        throw profileError;
-      }
     }
 
+    // 3. Magic Link를 사용하여 세션 생성
     const { data: linkData, error: linkError } =
       await supabaseAdmin.auth.admin.generateLink({
         type: "magiclink",
@@ -95,15 +87,12 @@ serve(async (req) => {
       });
     if (linkError) throw linkError;
 
-    // 3-1. 토큰 해시 바로 꺼내기
     const tokenHash =
       linkData.properties.hashed_token ??
-      linkData.properties.tokenHash ??
-      new URL(linkData.properties.action_link).searchParams.get("token_hash") ??
-      new URL(linkData.properties.action_link).searchParams.get("token");
+      new URL(linkData.properties.action_link).searchParams.get("token_hash");
     if (!tokenHash) throw new Error("Could not extract magic link token hash.");
 
-    // 4. (핵심) 서버에서 즉시 토큰 해시로 세션 교환
+    // 4. 서버에서 즉시 토큰 해시로 세션 교환
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
