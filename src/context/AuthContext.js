@@ -148,6 +148,7 @@ export const AuthProvider = ({ children }) => {
         signOutUser,
         signUpWithEmail,
         supabase,
+        fetchAndSetProfile,
       }}
     >
       {children}

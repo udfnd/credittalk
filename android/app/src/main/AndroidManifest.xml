@@ -23,7 +23,7 @@
               <category android:name="android.intent.category.DEFAULT" />
               <category android:name="android.intent.category.BROWSABLE" />
               <data android:host="oauth"
-                    android:scheme="kakaoYOUR_KAKAO_NATIVE_APP_KEY" />
+                    android:scheme="kakaoa5721065cc212efd0cecafc66e4fe14a" />
               <data android:scheme="credittalk" />
           </intent-filter>
       </activity>

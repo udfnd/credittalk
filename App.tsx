@@ -261,7 +261,45 @@ function AppNavigator() {
 
   return (
     <RootStack.Navigator id={undefined}>
-      {user && profile ? (
+      {!user ? (
+        <>
+          <RootStack.Screen
+            name="SignIn"
+            component={SignInScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="SignUp"
+            component={SignUpScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="FindEmail"
+            component={FindEmailScreen}
+            options={{ title: "아이디 찾기" }}
+          />
+          <RootStack.Screen
+            name="ResetPassword"
+            component={ResetPasswordScreen}
+            options={{ title: "비밀번호 찾기" }}
+          />
+          <RootStack.Screen
+            name="UpdatePassword"
+            component={UpdatePasswordScreen}
+            options={{ title: "새 비밀번호 설정" }}
+          />
+        </>
+      ) : !profile ? (
+        // 2. 소셜 로그인 후 추가 정보가 필요한 상태
+        <>
+          <RootStack.Screen
+            name="AdditionalInfo"
+            component={AdditionalInfoScreen}
+            options={{ title: "추가 정보 입력", headerShown: false }}
+          />
+        </>
+      ) : (
+        // 3. 로그인 완료 및 프로필 존재 상태: 메인 앱 스크린 그룹
         <>
           <RootStack.Screen
             name="MainApp"
@@ -379,39 +417,6 @@ function AppNavigator() {
             options={({ route }) => ({
               title: route.params.ticketTitle,
             })}
-          />
-        </>
-      ) : (
-        <>
-          <RootStack.Screen
-            name="AdditionalInfo"
-            component={AdditionalInfoScreen}
-            options={{ title: "추가 정보 입력", headerShown: false }}
-          />
-          <RootStack.Screen
-            name="SignIn"
-            component={SignInScreen}
-            options={{ headerShown: false }}
-          />
-          <RootStack.Screen
-            name="SignUp"
-            component={SignUpScreen}
-            options={{ headerShown: false }}
-          />
-          <RootStack.Screen
-            name="FindEmail"
-            component={FindEmailScreen}
-            options={{ title: "아이디 찾기" }}
-          />
-          <RootStack.Screen
-            name="ResetPassword"
-            component={ResetPasswordScreen}
-            options={{ title: "비밀번호 찾기" }}
-          />
-          <RootStack.Screen
-            name="UpdatePassword"
-            component={UpdatePasswordScreen}
-            options={{ title: "새 비밀번호 설정" }}
           />
         </>
       )}
