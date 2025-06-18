@@ -13,6 +13,8 @@ prepare_react_native_project!
 target 'credittalk' do
   # auto-link 설정 호출
   config = use_native_modules!
+  pod 'NidThirdPartyLogin'
+  pod 'RNVectorIcons', :path => '../node_modules/react-native-vector-icons'
 
   # React Native core pods 설치 (Hermes 활성화 여부 선택)
   use_react_native!(
