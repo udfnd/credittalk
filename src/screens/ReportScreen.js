@@ -201,6 +201,7 @@ function ReportScreen({ navigation }) {
   const [nickname, setNickname] = useState("");
   const [category, setCategory] = useState("");
   const [scamReportSource, setScamReportSource] = useState("");
+  const [scamReportSourceOther, setScamReportSourceOther] = useState("");
   const [companyType, setCompanyType] = useState("");
   const [gender, setGender] = useState("");
   const [phonePrefix, setPhonePrefix] = useState("");
@@ -259,6 +260,7 @@ function ReportScreen({ navigation }) {
     setNickname("");
     setCategory("");
     setScamReportSource("");
+    setScamReportSourceOther("");
     setCompanyType("");
     setGender("");
     setPhonePrefix("");
@@ -323,11 +325,21 @@ function ReportScreen({ navigation }) {
       !scamReportSource ||
       isPerpetratorIdentified === null ||
       !gender ||
-      attemptedFraud === null
+      attemptedFraud === null ||
+      !caseSummary.trim()
     ) {
       Alert.alert("입력 오류", "필수 항목(*)을 모두 입력/선택해주세요.");
       return;
     }
+
+    if (scamReportSource === "기타" && !scamReportSourceOther.trim()) {
+      Alert.alert(
+        "입력 오류",
+        '"사기를 당하게 된 경로"의 "기타" 항목을 입력해주세요.',
+      );
+      return;
+    }
+
     if (isPhoneUnknown && (!nickname.trim() || !nicknameEvidencePhoto)) {
       Alert.alert(
         "입력 오류",
@@ -390,10 +402,16 @@ function ReportScreen({ navigation }) {
         isPhoneUnknown || (!phonePrefix && !phoneMiddle && !phoneLast)
           ? null
           : `${phonePrefix}${phoneMiddle}${phoneLast}`;
+
       const finalImpersonatedPerson =
         impersonatedPerson === "기타"
           ? `기타: ${impersonatedPersonOther.trim()}`
           : impersonatedPerson;
+
+      const finalScamReportSource =
+        scamReportSource === "기타"
+          ? `기타: ${scamReportSourceOther.trim()}`
+          : scamReportSource;
 
       const reportData = {
         name: isCashTransaction ? null : accountHolderName.trim() || null,
@@ -403,7 +421,7 @@ function ReportScreen({ navigation }) {
         bank_name: isCashTransaction ? null : bankName || null,
         site_name: siteName || null,
         category,
-        scam_report_source: scamReportSource,
+        scam_report_source: finalScamReportSource,
         company_type: companyType,
         gender: gender,
         description: caseSummary.trim() || null,
@@ -445,13 +463,13 @@ function ReportScreen({ navigation }) {
   const handleCategoryChange = (selectedCategory) =>
     setCategory((cat) => (cat === selectedCategory ? "" : selectedCategory));
 
-  // --- 이 함수를 수정했습니다 ---
   const handleScamReportSourceChange = (source) => {
-    // 토글 방식 대신, 항상 선택한 값으로 설정합니다.
     setScamReportSource(source);
-    // '포털사이트 또는 SNS'가 아니면 siteName을 초기화합니다.
     if (source !== "포털사이트 또는 SNS") {
       setSiteName("");
+    }
+    if (source !== "기타") {
+      setScamReportSourceOther("");
     }
   };
 
@@ -760,6 +778,7 @@ function ReportScreen({ navigation }) {
 
       {renderDetailFields()}
 
+      {/* --- 사기를 당하게 된 경로 섹션 --- */}
       <Text style={styles.label}>
         사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
       </Text>
@@ -783,6 +802,16 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* --- '기타' 선택 시 나타나는 입력창 (수정/추가된 부분) --- */}
+      {scamReportSource === "기타" && (
+        <TextInput
+          style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
+          value={scamReportSourceOther}
+          onChangeText={setScamReportSourceOther}
+          placeholder="사기 경로를 직접 입력해주세요."
+        />
+      )}
 
       {scamReportSource === "포털사이트 또는 SNS" && (
         <View>
