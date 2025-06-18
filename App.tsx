@@ -430,7 +430,7 @@ function App(): React.JSX.Element {
       appName: "크레디톡",
       consumerKey: "belWdkUzgFugOnoHOfBs",
       consumerSecret: "x0Cc7_4tSU",
-      serviceUrlSchemeIOS: "org.reactjs.native.example.credittalk",
+      serviceUrlSchemeIOS: "credittalk",
       disableNaverAppAuthIOS: false, // 네이버 앱으로 인증하는 것을 권장 (true로 설정 시 인앱 브라우저만 사용)
     });
   }, []);
