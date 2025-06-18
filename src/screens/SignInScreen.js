@@ -39,24 +39,31 @@ function SignInScreen() {
     setSocialLoading(true);
     try {
       if (provider === "naver") {
-        const result = await NaverLogin.login({
-          appName: "크레디톡",
-          consumerKey: "belWdkUzgFugOnoHOfBs",
-          consumerSecret: "x0Cc7_4tSU",
-          serviceUrlScheme: "org.reactjs.native.example.credittalk",
-        });
+        const result = await NaverLogin.login();
 
-        if (!result?.success) {
-          throw new Error("네이버 로그인에 실패했습니다.");
+        if (result?.isSuccess) {
+          const naverToken = result.successResponse.accessToken;
+
+          // 1. 새로 만든 Edge Function 호출
+          const { data: functionData, error: functionError } =
+            await supabase.functions.invoke("sign-in-with-naver", {
+              body: { naver_token: naverToken },
+            });
+
+          if (functionError) throw functionError;
+          if (functionData.error) throw new Error(functionData.error);
+
+          // 2. 반환받은 Supabase 토큰으로 세션 설정
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: functionData.access_token,
+            refresh_token: "dummy_refresh_token",
+          });
+
+          if (sessionError) throw sessionError;
+        } else {
+          const errorMessage = `[${result.errCode || "UNKNOWN_CODE"}]\n${result.errDesc || "네이버 로그인에 실패했습니다."}`;
+          Alert.alert("네이버 로그인 실패", errorMessage);
         }
-
-        // !! 중요: 네이버 로그인은 현재 코드에서 Supabase와 연동되지 않습니다.
-        // 성공적으로 accessToken을 받아오는 것 까지만 확인합니다.
-        console.log("Naver Access Token:", result.successResponse.accessToken);
-        Alert.alert(
-          "네이버 로그인 성공 (임시)",
-          "네이버 로그인이 성공했으나, 현재 앱에서는 후속 처리가 구현되어 있지 않습니다.",
-        );
       } else if (provider === "kakao") {
         const result = await login();
         if (!result.idToken) {
@@ -72,9 +79,15 @@ function SignInScreen() {
       }
     } catch (error) {
       if (error.code !== "E_CANCELLED_OPERATION") {
+        const errorMessage = `[${error.code || "EXCEPTION"}]\n${error.message || "알 수 없는 오류가 발생했습니다."}`;
+
+        console.error(
+          `${provider} Login Exception:`,
+          JSON.stringify(error, null, 2),
+        );
         Alert.alert(
-          `${provider === "naver" ? "네이버" : "카카오"} 로그인 실패`,
-          error.message,
+          `${provider === "naver" ? "네이버" : "카카오"} 로그인 오류`,
+          errorMessage,
         );
       }
     } finally {
