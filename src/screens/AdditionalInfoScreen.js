@@ -14,7 +14,7 @@ import { useAuth } from "../context/AuthContext";
 const jobTypes = ["일반", "사업자"];
 
 function AdditionalInfoScreen() {
-  const { user, fetchAndSetProfile, supabase } = useAuth();
+  const { user, setProfile, supabase } = useAuth();
   const [jobType, setJobType] = useState("일반");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -25,20 +25,46 @@ function AdditionalInfoScreen() {
     }
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from("users").insert({
+      const profileData = {
         auth_user_id: user.id,
         name:
           user.user_metadata?.full_name || user.user_metadata?.name || "사용자",
         job_type: jobType,
-        // 소셜 로그인이므로 전화번호, 주민번호는 null로 둡니다.
-        // 필요 시 이 화면에서 입력받도록 확장할 수 있습니다.
-      });
+        naver_id:
+          user.user_metadata?.provider === "naver"
+            ? user.user_metadata?.provider_id
+            : null,
+      };
 
-      if (error) throw error;
+      const { data: insertedData, error } = await supabase
+        .from("users")
+        .insert(profileData)
+        .select()
+        .single();
 
-      await fetchAndSetProfile(user.id); // 프로필 정보 갱신
+      if (error) {
+        if (error.code === "23505") {
+          Alert.alert(
+            "오류",
+            "이미 가입된 계정 정보입니다. 다른 계정으로 로그인해주세요.",
+          );
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      // --- START: 수정된 부분 (핵심) ---
+      // 데이터 삽입 성공 시, 반환된 데이터로 직접 profile 상태를 업데이트합니다.
+      if (insertedData) {
+        setProfile(insertedData);
+      } else {
+        throw new Error("프로필이 생성되었지만 데이터를 가져오지 못했습니다.");
+      }
+      // --- END: 수정된 부분 ---
     } catch (err) {
-      Alert.alert("오류", "추가 정보 저장에 실패했습니다: " + err.message);
+      console.error("Error submitting additional info:", err);
+      Alert.alert("오류", `추가 정보 저장에 실패했습니다: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
