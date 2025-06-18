@@ -1,38 +1,28 @@
-# ios/Podfile
+# React Native pods 스크립트 로드
+require_relative '../node_modules/react-native/scripts/react_native_pods'
 
-# React-Native 스크립트 로딩
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+# 최소 iOS 버전: Hermes 요구사항 확인 후 설정
+platform :ios, '15.6'
 
-platform :ios, min_ios_version_supported
+# Swift pod 및 React-jsc 종속 처리: 동적 프레임워크 + 모듈러 헤더 사용
+use_modular_headers!
+use_frameworks! :linkage => :dynamic
+
 prepare_react_native_project!
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage
-  use_frameworks! :linkage => linkage.to_sym
-end
-
 target 'credittalk' do
+  # auto-link 설정 호출
   config = use_native_modules!
 
+  # React Native core pods 설치 (Hermes 활성화 여부 선택)
   use_react_native!(
     :path => config[:reactNativePath],
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    # app_path 옵션 제거하여 package.json 경로 자동 인식
+    hermes_enabled: false
   )
 end
 
 post_install do |installer|
+  # React Native 후처리 스크립트
   react_native_post_install(installer)
-
-  installer.pods_project.targets.each do |target|
-    if target.name.start_with?('React') || target.name == 'kakao-login'
-      target.build_configurations.each do |config|
-        config.build_settings['DEFINES_MODULE']                                    = 'YES'
-        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-      end
-    end
-  end
 end
