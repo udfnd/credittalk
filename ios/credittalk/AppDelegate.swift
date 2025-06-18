@@ -14,15 +14,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-    // naver
-    if ([url.scheme isEqualToString:@"naver-belWdkUzgFugOnoHOfBs"]) {
-      return [[NaverThirdPartyLoginConnection getSharedInstance] application:app openURL:url options:options];
-    }
 
-    // kakao
-    if([RNKakaoLogins isKakaoTalkLoginUrl:url]) {
-      return [RNKakaoLogins handleOpenUrl: url];
-    }
+    RNKakaoLogins.init()
+
+    NaverThirdPartyLoginConnection.getSharedInstance()?.isInAppOauthEnable = true
+    NaverThirdPartyLoginConnection.getSharedInstance()?.isNaverAppOauthEnable = true
 
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
@@ -40,6 +36,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     )
 
     return true
+  }
+
+  func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
+
+    if kakao_login.RNKakaoLogins.isKakaoTalkLoginUrl(url) {
+        return kakao_login.RNKakaoLogins.handleOpen(url)
+      }
+
+    if (NaverThirdPartyLoginConnection.getSharedInstance().application(app, open: url, options: options)) {
+      return true
+    }
+
+    if (RCTLinkingManager.application(app, open: url, options: options)) {
+        return true
+    }
+
+    return false
   }
 }
 

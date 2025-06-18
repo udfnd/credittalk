@@ -58,6 +58,7 @@ import UpdatePasswordScreen from "./src/screens/UpdatePasswordScreen";
 import HelpDeskListScreen from "./src/screens/HelpDeskListScreen";
 import HelpDeskCreateScreen from "./src/screens/HelpDeskCreateScreen";
 import HelpDeskDetailScreen from "./src/screens/HelpDeskDetailScreen";
+import AdditionalInfoScreen from "./src/screens/AdditionalInfoScreen";
 
 const linking = {
   prefixes: ["credittalk://"],
@@ -105,6 +106,7 @@ export type RootStackParamList = {
   HelpDeskList: undefined;
   HelpDeskCreate: undefined;
   HelpDeskDetail: { ticketId: number; ticketTitle: string };
+  AdditionalInfo: undefined;
 };
 
 export type CommunityStackParamList = {
@@ -381,6 +383,11 @@ function AppNavigator() {
         </>
       ) : (
         <>
+          <RootStack.Screen
+            name="AdditionalInfo"
+            component={AdditionalInfoScreen}
+            options={{ title: "추가 정보 입력", headerShown: false }}
+          />
           <RootStack.Screen
             name="SignIn"
             component={SignInScreen}
