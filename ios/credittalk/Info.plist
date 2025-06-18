@@ -34,7 +34,7 @@
             <string>naver</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>naver-belWdkUzgFugOnoHOfBs</string>
+                <string>org.reactjs.native.example.credittalk</string>
             </array>
         </dict>
         <dict>
