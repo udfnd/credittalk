@@ -9,169 +9,113 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 프로필 정보를 가져오는 함수. 이전과 동일.
-  const fetchAndSetProfile = async (authUserId) => {
-    if (!authUserId) {
-      setProfile(null);
-      return false;
-    }
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("auth_user_id", authUserId)
-        .single();
-
-      if (error && error.code !== "PGRST116") {
-        throw error;
-      }
-      setProfile(data || null);
-      return !!data;
-    } catch (e) {
-      console.error("Error fetching profile:", e.message);
-      setProfile(null);
-      return false;
-    }
-  };
-
+  // 이 useEffect는 오직 인증 상태(세션, 사용자)만을 담당합니다.
   useEffect(() => {
-    let mounted = true;
+    // 앱 시작 시, 현재 세션을 가져와 초기 user 상태를 설정합니다.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      // 초기 세션 확인이 끝나면 로딩 상태를 해제합니다.
+      setIsLoading(false);
+    });
 
-    // --- START: 수정된 부분 ---
-
-    // 1. 앱 시작 시 실행되는 초기 세션 및 프로필 로드 로직
-    const loadInitialSession = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (mounted) {
-          const currentUser = session?.user ?? null;
-          setUser(currentUser);
-          if (currentUser) {
-            await fetchAndSetProfile(currentUser.id);
-          }
-        }
-      } catch (e) {
-        console.error("Error loading initial session:", e.message);
-        // 오류 발생 시에도 사용자 상태는 null로 유지
-        setUser(null);
-        setProfile(null);
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadInitialSession();
-
-    // 2. 인증 상태 변경을 감지하는 리스너 로직 (더욱 견고하게 수정)
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!mounted) return;
-
-        setIsLoading(true); // 상태 변경 시작 시 로딩
-
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-
-        // 사용자가 있으면 프로필을 가져오고, 없으면 null로 설정
-        if (currentUser) {
-          await fetchAndSetProfile(currentUser.id);
-        } else {
-          setProfile(null);
-        }
-
-        setIsLoading(false); // 모든 작업 완료 후 로딩 종료
-      },
-    );
-
-    // --- END: 수정된 부분 ---
+    // 로그인, 로그아웃 등 인증 상태 변경을 감지합니다.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
 
     return () => {
-      mounted = false;
-      authListener?.subscription?.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, []);
 
-  // 이메일 로그인 함수: 여기서 더 이상 setIsLoading을 호출하지 않음
-  const signInWithEmail = async (email, password) => {
-    try {
+  // 이 useEffect는 user 상태가 변경될 때만 실행되어 프로필을 관리합니다.
+  useEffect(() => {
+    // 로그아웃 등으로 user가 없어지면 profile도 null로 설정합니다.
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    // 사용자는 있지만 프로필 정보가 아직 로드되지 않았을 경우에만 DB에서 조회합니다.
+    const fetchProfile = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("auth_user_id", user.id)
+          .single();
+
+        if (error && error.code !== "PGRST116") {
+          throw error;
+        }
+        // 프로필이 있으면 설정하고, 없으면 null로 유지합니다. (AdditionalInfoScreen으로 유도)
+        setProfile(data || null);
+      } catch (e) {
+        console.error("Error fetching profile:", e.message);
+        setProfile(null);
+      }
+    };
+
+    fetchProfile();
+  }, [user]); // user 객체가 변경될 때만 이 로직이 실행됩니다.
+
+  const value = {
+    user,
+    profile,
+    isLoading,
+    setProfile, // AdditionalInfoScreen에서 프로필을 직접 설정하기 위해 전달합니다.
+    supabase,
+    signInWithEmail: async (email, password) => {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      if (error) throw error;
-      if (!data.user) throw new Error("Login failed, user data not returned.");
-      // 성공 시 onAuthStateChange 리스너가 모든 상태 업데이트를 처리
-      return { success: true, user: data.user };
-    } catch (error) {
-      Alert.alert(
-        "로그인 실패",
-        error.message || "이메일 또는 비밀번호를 확인해주세요.",
-      );
-      return { success: false, error };
-    }
-  };
+      if (error) Alert.alert("로그인 실패", error.message);
+      return { data, error };
+    },
+    signOutUser: () => {
+      // 로그아웃 시 상태를 즉시 초기화하여 빠른 UI 반응을 유도합니다.
+      setProfile(null);
+      setUser(null);
+      supabase.auth.signOut();
+    },
+    signUpWithEmail: async (email, password, additionalData) => {
+      try {
+        const { data: authData, error: signUpError } =
+          await supabase.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        if (!authData.user)
+          throw new Error("User not created in Supabase Auth during signup.");
 
-  // 로그아웃 함수: 여기서 더 이상 setIsLoading을 호출하지 않음
-  const signOutUser = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      Alert.alert("로그아웃 실패", error.message);
-    }
-    // 성공/실패 여부와 관계없이 onAuthStateChange 리스너가 상태를 처리
-  };
-
-  // signUpWithEmail 함수는 클라이언트 상태를 직접 바꾸지 않으므로 수정 불필요
-  const signUpWithEmail = async (email, password, additionalData) => {
-    try {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp(
-        { email, password },
-      );
-      if (signUpError) throw signUpError;
-      if (!authData.user)
-        throw new Error("User not created in Supabase Auth during signup.");
-
-      const { name, phoneNumber, nationalId, jobType } = additionalData;
-      const { error: profileError } = await supabase.from("users").insert({
-        auth_user_id: authData.user.id,
-        name,
-        phone_number: phoneNumber,
-        national_id: nationalId,
-        job_type: jobType,
-      });
-      if (profileError) {
-        throw profileError;
+        const { name, phoneNumber, nationalId, jobType } = additionalData;
+        const { error: profileError } = await supabase.from("users").insert({
+          auth_user_id: authData.user.id,
+          name,
+          phone_number: phoneNumber,
+          national_id: nationalId,
+          job_type: jobType,
+        });
+        if (profileError) {
+          throw profileError;
+        }
+        Alert.alert(
+          "회원가입 요청됨",
+          "가입 확인을 위해 이메일을 확인해주세요.",
+        );
+        return { success: true, user: authData.user };
+      } catch (error) {
+        Alert.alert(
+          "회원가입 실패",
+          error.message || "알 수 없는 오류가 발생했습니다.",
+        );
+        return { success: false, error };
       }
-      Alert.alert("회원가입 요청됨", "가입 확인을 위해 이메일을 확인해주세요.");
-      return { success: true, user: authData.user };
-    } catch (error) {
-      Alert.alert(
-        "회원가입 실패",
-        error.message || "알 수 없는 오류가 발생했습니다.",
-      );
-      return { success: false, error };
-    }
+    },
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        isLoading,
-        signInWithEmail,
-        signOutUser,
-        signUpWithEmail,
-        supabase,
-        fetchAndSetProfile,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
