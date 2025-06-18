@@ -14,7 +14,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-
     RNKakaoLogins.init()
 
     NaverThirdPartyLoginConnection.getSharedInstance()?.isInAppOauthEnable = true
@@ -28,7 +27,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeFactory = factory
 
     window = UIWindow(frame: UIScreen.main.bounds)
-
     factory.startReactNative(
       withModuleName: "credittalk",
       in: window,
@@ -38,20 +36,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     return true
   }
 
-  func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
-
-    if kakao_login.RNKakaoLogins.isKakaoTalkLoginUrl(url) {
-        return kakao_login.RNKakaoLogins.handleOpen(url)
-      }
-
-    if (NaverThirdPartyLoginConnection.getSharedInstance().application(app, open: url, options: options)) {
+  func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    // Kakao 링크 처리
+    if RNKakaoLogins.isKakaoTalkLoginUrl(url) {
+      return RNKakaoLogins.handleOpen(url)
+    }
+    // Naver 링크 처리
+    if NaverThirdPartyLoginConnection.getSharedInstance().application(app, open: url, options: options) {
       return true
     }
-
-    if (RCTLinkingManager.application(app, open: url, options: options)) {
-        return true
+    // React Linking
+    if RCTLinkingManager.application(app, open: url, options: options) {
+      return true
     }
-
     return false
   }
 }
@@ -60,12 +61,11 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
   override func sourceURL(for bridge: RCTBridge) -> URL? {
     self.bundleURL()
   }
-
   override func bundleURL() -> URL? {
-#if DEBUG
+  #if DEBUG
     RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
-#else
+  #else
     Bundle.main.url(forResource: "main", withExtension: "jsbundle")
-#endif
+  #endif
   }
 }
