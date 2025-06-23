@@ -13,7 +13,6 @@ export const bankImages = [
   { name: "새마을금고", source: require("./새마을금고.png") },
   { name: "한국씨티은행", source: require("./한국씨티은행.png") },
   { name: "우체국", source: require("./우체국.png") },
-
   { name: "저축은행", source: require("./저축은행.png") },
   { name: "전북은행", source: require("./전북은행.png") },
   { name: "제주은행", source: require("./제주은행.png") },
@@ -95,4 +94,5 @@ export const bankImages = [
   { name: "한국투자증권", source: require("./한국투자증권.png") },
   { name: "한화투자증권", source: require("./한화투자증권.png") },
   { name: "현대차증권", source: require("./현대차증권.png") },
+  { name: "기타", source: null },
 ];
