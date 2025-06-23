@@ -74,126 +74,6 @@ const victimCircumstanceOptions = [
   "기타",
 ];
 
-const itemCategories = [
-  {
-    name: "MP3/PMP/전자사전",
-    image: require("../assets/images/items/MP3_PMP_전자사전.png"),
-  },
-  {
-    name: "휴대폰/주변기기",
-    image: require("../assets/images/items/휴대폰_주변기기.png"),
-  },
-  { name: "화폐", image: require("../assets/images/items/화폐.png") },
-  {
-    name: "피싱/대출/계약",
-    image: require("../assets/images/items/피싱_대출_계약.png"),
-  },
-  {
-    name: "패션/의류",
-    image: require("../assets/images/items/패션_의류.png"),
-  },
-  {
-    name: "티켓/상품권",
-    image: require("../assets/images/items/티켓_상품권.png"),
-  },
-  {
-    name: "태블릿/노트북",
-    image: require("../assets/images/items/태블릿_노트북.png"),
-  },
-  {
-    name: "컴퓨터/주변기기",
-    image: require("../assets/images/items/컴퓨터_주변기기.png"),
-  },
-  {
-    name: "카메라/주변기기",
-    image: require("../assets/images/items/카메라_주변기기.png"),
-  },
-  {
-    name: "취미/인형/피규어",
-    image: require("../assets/images/items/취미_인형_피규어.png"),
-  },
-  {
-    name: "자동차/바이크",
-    image: require("../assets/images/items/자동차_바이크.png"),
-  },
-  {
-    name: "음악/영화/주변기기",
-    image: require("../assets/images/items/음악_영화_주변기기.png"),
-  },
-  {
-    name: "유아동/출산",
-    image: require("../assets/images/items/유아동_출산.png"),
-  },
-  {
-    name: "액세서리/귀금속",
-    image: require("../assets/images/items/액세서리_귀금속.png"),
-  },
-  {
-    name: "안경/선글라스",
-    image: require("../assets/images/items/안경_선글라스.png"),
-  },
-  { name: "신발", image: require("../assets/images/items/신발.png") },
-  {
-    name: "식품/음료/의약품",
-    image: require("../assets/images/items/식품_음료_의약품.png"),
-  },
-  { name: "시계", image: require("../assets/images/items/시계.png") },
-  {
-    name: "스포츠/레저/운동",
-    image: require("../assets/images/items/스포츠_레저_운동.png"),
-  },
-  {
-    name: "소프트웨어",
-    image: require("../assets/images/items/소프트웨어.png"),
-  },
-  {
-    name: "성인/사행성",
-    image: require("../assets/images/items/성인_사행성.png"),
-  },
-  {
-    name: "생활/주방/욕실용품",
-    image: require("../assets/images/items/생활_주방_욕실용품.png"),
-  },
-  {
-    name: "뷰티/미용/화장품",
-    image: require("../assets/images/items/뷰티_미용_화장품.png"),
-  },
-  { name: "배송비", image: require("../assets/images/items/배송비.png") },
-  {
-    name: "문구/사무/소모품",
-    image: require("../assets/images/items/문구_사무_소모품.png"),
-  },
-  {
-    name: "동물/생물/식물/용품",
-    image: require("../assets/images/items/동물_생물_식물_용품.png"),
-  },
-  {
-    name: "도서/학습",
-    image: require("../assets/images/items/도서_학습.png"),
-  },
-  { name: "기타", image: require("../assets/images/items/기타.png") },
-  {
-    name: "공구/중장비/농기구",
-    image: require("../assets/images/items/공구_중장비_농기구.png"),
-  },
-  {
-    name: "게임기/주변기기",
-    image: require("../assets/images/items/게임기_주변기기.png"),
-  },
-  {
-    name: "가전/전자제품",
-    image: require("../assets/images/items/가전_전자제품.png"),
-  },
-  {
-    name: "가방/지갑/잡화",
-    image: require("../assets/images/items/가방_지갑_잡화.png"),
-  },
-  {
-    name: "가구/인테리어",
-    image: require("../assets/images/items/가구_인테리어.png"),
-  },
-];
-
 function ReportScreen({ navigation }) {
   const { user } = useAuth();
 
@@ -210,6 +90,11 @@ function ReportScreen({ navigation }) {
   const [phonePrefix, setPhonePrefix] = useState("");
   const [phoneMiddle, setPhoneMiddle] = useState("");
   const [phoneLast, setPhoneLast] = useState("");
+  // --- START: 수정된 부분 ---
+  const [impersonatedPhonePrefix, setImpersonatedPhonePrefix] = useState("");
+  const [impersonatedPhoneMiddle, setImpersonatedPhoneMiddle] = useState("");
+  const [impersonatedPhoneLast, setImpersonatedPhoneLast] = useState("");
+  // --- END: 수정된 부분 ---
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [currentCategories, setCurrentCategories] = useState([]);
@@ -229,6 +114,7 @@ function ReportScreen({ navigation }) {
   const [showVictimCircumstanceTextInput, setShowVictimCircumstanceTextInput] =
     useState(false);
   const [illegalCollectionPhotos, setIllegalCollectionPhotos] = useState([]);
+  const [tradedItemPhotos, setTradedItemPhotos] = useState([]);
   const [isPhoneUnknown, setIsPhoneUnknown] = useState(false);
   const [isCashTransaction, setIsCashTransaction] = useState(false);
 
@@ -236,6 +122,7 @@ function ReportScreen({ navigation }) {
   const [siteName, setSiteName] = useState("");
   const [isBankModalVisible, setIsBankModalVisible] = useState(false);
   const [isSiteModalVisible, setIsSiteModalVisible] = useState(false);
+  const [showBankOtherInput, setShowBankOtherInput] = useState(false);
 
   useEffect(() => {
     if (companyType === "개인") setCurrentCategories(individualCategories);
@@ -255,6 +142,7 @@ function ReportScreen({ navigation }) {
     setImpersonatedPersonOther("");
     setShowImpersonatedPersonTextInput(false);
     setIllegalCollectionPhotos([]);
+    setTradedItemPhotos([]);
     setSiteName("");
   }, [category]);
 
@@ -272,6 +160,9 @@ function ReportScreen({ navigation }) {
     setPhonePrefix("");
     setPhoneMiddle("");
     setPhoneLast("");
+    setImpersonatedPhonePrefix("");
+    setImpersonatedPhoneMiddle("");
+    setImpersonatedPhoneLast("");
     setVictimCircumstances("");
     setVictimCircumstancesOther("");
     setShowVictimCircumstanceTextInput(false);
@@ -286,10 +177,12 @@ function ReportScreen({ navigation }) {
     setShowImpersonatedPersonTextInput(false);
     setNicknameEvidencePhoto(null);
     setIllegalCollectionPhotos([]);
+    setTradedItemPhotos([]);
     setIsLoading(false);
     setIsUploading(false);
     setBankName("");
     setSiteName("");
+    setShowBankOtherInput(false);
   };
 
   const handleChooseNicknamePhoto = () => {
@@ -315,6 +208,25 @@ function ReportScreen({ navigation }) {
       else if (response.assets && response.assets.length > 0)
         setIllegalCollectionPhotos((prev) => [...prev, ...response.assets]);
     });
+  };
+
+  const handleChooseTradedItemPhotos = () => {
+    const selectionLimit = 3 - tradedItemPhotos.length;
+    if (selectionLimit <= 0) {
+      Alert.alert("알림", "거래물품 사진은 최대 3장까지 등록할 수 있습니다.");
+      return;
+    }
+    launchImageLibrary({ mediaType: "photo", selectionLimit }, (response) => {
+      if (response.didCancel) return;
+      if (response.errorCode)
+        Alert.alert("오류", `사진 선택 오류: ${response.errorMessage}`);
+      else if (response.assets && response.assets.length > 0)
+        setTradedItemPhotos((prev) => [...prev, ...response.assets]);
+    });
+  };
+
+  const handleRemoveTradedItemPhoto = (uri) => {
+    setTradedItemPhotos((prev) => prev.filter((photo) => photo.uri !== uri));
   };
 
   const handleRemoveIllegalCollectionPhoto = (uri) => {
@@ -349,6 +261,11 @@ function ReportScreen({ navigation }) {
         "입력 오류",
         '"사기를 당하게 된 경로"의 "기타" 항목을 입력해주세요.',
       );
+      return;
+    }
+
+    if (showBankOtherInput && !bankName.trim()) {
+      Alert.alert("입력 오류", "은행 이름을 직접 입력해주세요.");
       return;
     }
 
@@ -412,16 +329,30 @@ function ReportScreen({ navigation }) {
         nicknameEvidencePhoto,
         "nickname",
       );
-      const uploadPromises = illegalCollectionPhotos.map((photo) =>
-        uploadFile(photo, "illegal-collection"),
+      const illegalCollectionUploadPromises = illegalCollectionPhotos.map(
+        (photo) => uploadFile(photo, "illegal-collection"),
       );
-      const illegalCollectionEvidenceUrls = await Promise.all(uploadPromises);
+      const illegalCollectionEvidenceUrls = await Promise.all(
+        illegalCollectionUploadPromises,
+      );
+      const tradedItemUploadPromises = tradedItemPhotos.map((photo) =>
+        uploadFile(photo, "traded-item"),
+      );
+      const tradedItemImageUrls = await Promise.all(tradedItemUploadPromises);
       setIsUploading(false);
 
       const fullPhoneNumber =
         isPhoneUnknown || (!phonePrefix && !phoneMiddle && !phoneLast)
           ? null
           : `${phonePrefix}${phoneMiddle}${phoneLast}`;
+
+      const impersonatedFullPhoneNumber =
+        category === "노쇼 대리구매 사기" &&
+        (impersonatedPhonePrefix ||
+          impersonatedPhoneMiddle ||
+          impersonatedPhoneLast)
+          ? `${impersonatedPhonePrefix}${impersonatedPhoneMiddle}${impersonatedPhoneLast}`
+          : null;
 
       const finalImpersonatedPerson =
         impersonatedPerson === "기타"
@@ -453,8 +384,9 @@ function ReportScreen({ navigation }) {
         name: isCashTransaction ? null : accountHolderName.trim() || null,
         nickname: nickname.trim() || null,
         phone_number: fullPhoneNumber,
+        impersonated_phone_number: impersonatedFullPhoneNumber,
         account_number: isCashTransaction ? null : accountNumber.trim() || null,
-        bank_name: isCashTransaction ? null : bankName || null,
+        bank_name: isCashTransaction ? null : bankName.trim() || null,
         site_name: siteName || null,
         category: finalCategory,
         scam_report_source: finalScamReportSource,
@@ -471,6 +403,7 @@ function ReportScreen({ navigation }) {
         nickname_evidence_url: nicknameEvidenceUrl,
         illegal_collection_evidence_urls:
           illegalCollectionEvidenceUrls.filter(Boolean),
+        traded_item_image_urls: tradedItemImageUrls.filter(Boolean),
         is_cash_transaction: isCashTransaction,
       };
 
@@ -520,6 +453,16 @@ function ReportScreen({ navigation }) {
     }
   };
 
+  const handleBankSelect = (selectedBank) => {
+    if (selectedBank === "기타") {
+      setShowBankOtherInput(true);
+      setBankName("");
+    } else {
+      setShowBankOtherInput(false);
+      setBankName(selectedBank);
+    }
+  };
+
   const handleAccountTypeChange = (type) => setCompanyType(type);
   const handleImpersonatedPersonChange = (type) => {
     const newType = impersonatedPerson === type ? "" : type;
@@ -547,8 +490,6 @@ function ReportScreen({ navigation }) {
     }
     setVictimCircumstances(currentSelected.join(", "));
   };
-  const handleTradedItemCategorySelect = (itemName) =>
-    setTradedItemCategory((cat) => (cat === itemName ? "" : itemName));
 
   const handlePhoneUnknownToggle = () => {
     const nextState = !isPhoneUnknown;
@@ -567,6 +508,7 @@ function ReportScreen({ navigation }) {
       setBankName("");
       setAccountNumber("");
       setAccountHolderName("");
+      setShowBankOtherInput(false);
     }
   };
 
@@ -685,32 +627,45 @@ function ReportScreen({ navigation }) {
                 onChangeText={setDamagePath}
                 placeholder="예: 중고나라, 번개장터 등"
               />
-              <Text style={styles.label}>피해 물품</Text>
+              <Text style={styles.label}>피해 물품명</Text>
               <TextInput
                 style={styles.input}
                 value={damagedItem}
                 onChangeText={setDamagedItem}
                 placeholder="예: 아이폰 15, 명품 가방 등"
               />
-              <Text style={styles.label}>거래물품</Text>
-              <View style={styles.itemCategoryGrid}>
-                {itemCategories.map((item) => (
-                  <TouchableOpacity
-                    key={item.name}
-                    style={[
-                      styles.itemCategoryButton,
-                      tradedItemCategory === item.name &&
-                        styles.itemCategoryButtonSelected,
-                    ]}
-                    onPress={() => handleTradedItemCategorySelect(item.name)}
-                  >
+              <Text style={styles.label}>거래물품 종류</Text>
+              <TextInput
+                style={styles.input}
+                value={tradedItemCategory}
+                onChangeText={setTradedItemCategory}
+                placeholder="예: 디지털기기, 의류, 상품권 등"
+              />
+              <Text style={styles.label}>거래물품 증빙 사진 (최대 3장)</Text>
+              <View style={styles.multiPhotoContainer}>
+                {tradedItemPhotos.map((photo, index) => (
+                  <View key={index} style={styles.photoPreviewWrapper}>
                     <Image
-                      source={item.image}
-                      style={styles.itemCategoryImage}
-                      resizeMode="contain"
+                      source={{ uri: photo.uri }}
+                      style={styles.multiPreviewImage}
                     />
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveTradedItemPhoto(photo.uri)}
+                      style={styles.removePhotoButton}
+                    >
+                      <Icon name="close-circle" size={24} color="#e74c3c" />
+                    </TouchableOpacity>
+                  </View>
                 ))}
+                {tradedItemPhotos.length < 3 && (
+                  <TouchableOpacity
+                    style={styles.photoUploadButtonSquare}
+                    onPress={handleChooseTradedItemPhotos}
+                  >
+                    <Icon name="camera-plus-outline" size={30} color="#555" />
+                    <Text style={styles.photoUploadText}>사진 추가</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </>
           );
@@ -751,7 +706,7 @@ function ReportScreen({ navigation }) {
           visible={isBankModalVisible}
           onClose={() => setIsBankModalVisible(false)}
           items={bankImages}
-          onSelect={setBankName}
+          onSelect={handleBankSelect}
           title="은행 선택"
         />
         <ImageSelectionModal
@@ -850,7 +805,6 @@ function ReportScreen({ navigation }) {
 
         {renderDetailFields()}
 
-        {/* --- 사기를 당하게 된 경로 섹션 --- */}
         <Text style={styles.label}>
           사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
         </Text>
@@ -875,7 +829,6 @@ function ReportScreen({ navigation }) {
           ))}
         </View>
 
-        {/* --- '기타' 선택 시 나타나는 입력창 (수정/추가된 부분) --- */}
         {scamReportSource === "기타" && (
           <TextInput
             style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
@@ -1044,57 +997,123 @@ function ReportScreen({ navigation }) {
           </View>
         )}
 
-        <View style={styles.labelContainer}>
-          <Text style={styles.label}>나에게 피해를 입혔던 전화번호</Text>
-          <TouchableOpacity
-            style={styles.checkboxItem}
-            onPress={handlePhoneUnknownToggle}
-          >
-            <Icon
-              name={
-                isPhoneUnknown ? "checkbox-marked" : "checkbox-blank-outline"
-              }
-              size={24}
-              color={isPhoneUnknown ? "#3d5afe" : "#555"}
-            />
-            <Text style={styles.checkboxLabel}>모름</Text>
-          </TouchableOpacity>
-        </View>
-        {isPhoneUnknown && (
-          <Text style={styles.guidanceText}>
-            전화번호를 입력하지 않을 경우 SNS 닉네임과 이미지를 필수 업로드 해야
-            합니다.
-          </Text>
+        {/* --- START: 수정된 부분 (전화번호 입력 UI) --- */}
+        {category === "노쇼 대리구매 사기" ? (
+          <>
+            <Text style={styles.label}>노쇼를 했던 전화번호</Text>
+            <View style={styles.phoneInputContainer}>
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={phonePrefix}
+                onChangeText={setPhonePrefix}
+                placeholder="000"
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={phoneMiddle}
+                onChangeText={setPhoneMiddle}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={phoneLast}
+                onChangeText={setPhoneLast}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+            </View>
+
+            <Text style={styles.label}>사칭한 전화번호</Text>
+            <View style={styles.phoneInputContainer}>
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhonePrefix}
+                onChangeText={setImpersonatedPhonePrefix}
+                placeholder="000"
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhoneMiddle}
+                onChangeText={setImpersonatedPhoneMiddle}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhoneLast}
+                onChangeText={setImpersonatedPhoneLast}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.labelContainer}>
+              <Text style={styles.label}>나에게 피해를 입혔던 전화번호</Text>
+              <TouchableOpacity
+                style={styles.checkboxItem}
+                onPress={handlePhoneUnknownToggle}
+              >
+                <Icon
+                  name={
+                    isPhoneUnknown
+                      ? "checkbox-marked"
+                      : "checkbox-blank-outline"
+                  }
+                  size={24}
+                  color={isPhoneUnknown ? "#3d5afe" : "#555"}
+                />
+                <Text style={styles.checkboxLabel}>모름</Text>
+              </TouchableOpacity>
+            </View>
+            {isPhoneUnknown && (
+              <Text style={styles.guidanceText}>
+                전화번호를 입력하지 않을 경우 SNS 닉네임과 이미지를 필수 업로드
+                해야 합니다.
+              </Text>
+            )}
+            <View style={styles.phoneInputContainer}>
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={phonePrefix}
+                onChangeText={setPhonePrefix}
+                placeholder="000"
+                keyboardType="number-pad"
+                maxLength={3}
+                editable={!isPhoneUnknown}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={phoneMiddle}
+                onChangeText={setPhoneMiddle}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+                editable={!isPhoneUnknown}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={phoneLast}
+                onChangeText={setPhoneLast}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+                editable={!isPhoneUnknown}
+              />
+            </View>
+          </>
         )}
-        <View style={styles.phoneInputContainer}>
-          <TextInput
-            style={[styles.input, styles.phoneInputSegment]}
-            value={phonePrefix}
-            onChangeText={setPhonePrefix}
-            placeholder="000"
-            keyboardType="number-pad"
-            maxLength={3}
-            editable={!isPhoneUnknown}
-          />
-          <TextInput
-            style={[styles.input, styles.phoneInputSegment]}
-            value={phoneMiddle}
-            onChangeText={setPhoneMiddle}
-            placeholder="0000"
-            keyboardType="number-pad"
-            maxLength={4}
-            editable={!isPhoneUnknown}
-          />
-          <TextInput
-            style={[styles.input, styles.phoneInputSegment]}
-            value={phoneLast}
-            onChangeText={setPhoneLast}
-            placeholder="0000"
-            keyboardType="number-pad"
-            maxLength={4}
-            editable={!isPhoneUnknown}
-          />
-        </View>
+        {/* --- END: 수정된 부분 --- */}
 
         <View style={styles.labelContainer}>
           <Text style={styles.label}>
@@ -1131,8 +1150,8 @@ function ReportScreen({ navigation }) {
                   styles.inputWithButton,
                   isCashTransaction && styles.disabledInput,
                 ]}
-                value={bankName}
-                placeholder="은행 선택"
+                value={showBankOtherInput ? "기타 (직접입력)" : bankName}
+                placeholder="오른쪽 버튼으로 은행 선택"
                 editable={false}
               />
               <TouchableOpacity
@@ -1143,6 +1162,15 @@ function ReportScreen({ navigation }) {
                 <Text style={styles.inlineButtonText}>선택</Text>
               </TouchableOpacity>
             </View>
+
+            {showBankOtherInput && (
+              <TextInput
+                style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
+                value={bankName}
+                onChangeText={setBankName}
+                placeholder="은행 이름을 직접 입력해주세요."
+              />
+            )}
             <TextInput
               style={[styles.input, isCashTransaction && styles.disabledInput]}
               value={accountHolderName}
@@ -1265,31 +1293,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   checkboxLabel: { fontSize: 15, marginLeft: 8, color: "#333", flexShrink: 1 },
-  itemCategoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-around",
-    marginBottom: 18,
-  },
-  itemCategoryButton: {
-    width: "31%",
-    aspectRatio: 1,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-    padding: 5,
-    backgroundColor: "#fff",
-  },
-  itemCategoryButtonSelected: {
-    borderColor: "#3d5afe",
-    borderWidth: 2,
-    backgroundColor: "#e9eaff",
-  },
-  itemCategoryImage: { width: "100%", height: "100%", marginBottom: 5 },
-  itemCategoryText: { fontSize: 11, textAlign: "center", marginTop: 3 },
   photoUploadContainer: { marginTop: 5, marginBottom: 15 },
   photoUploadButton: {
     backgroundColor: "#e9ecef",

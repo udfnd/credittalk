@@ -8,6 +8,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 interface ReportData {
   name?: string | null;
   phone_number?: string | null;
+  impersonated_phone_number?: string | null;
   account_number?: string | null;
   bank_name?: string | null;
   site_name?: string | null;
@@ -17,9 +18,7 @@ interface ReportData {
   description?: string | null;
   nickname?: string | null;
   gender: string;
-  // --- START: 데이터 타입 수정 (string[] -> string) ---
   victim_circumstances?: string | null;
-  // --- END: 데이터 타입 수정 ---
   traded_item_category?: string | null;
   perpetrator_identified?: boolean | null;
   attempted_fraud?: boolean | null;
@@ -28,6 +27,7 @@ interface ReportData {
   impersonated_person?: string | null;
   nickname_evidence_url?: string | null;
   illegal_collection_evidence_urls?: string[] | null;
+  traded_item_image_urls?: string[] | null;
   is_cash_transaction?: boolean | null;
 }
 
@@ -57,6 +57,9 @@ async function encryptAndInsert(
   const encryptedData = {
     name: await encrypt(reportData.name),
     phone_number: await encrypt(reportData.phone_number),
+    impersonated_phone_number: await encrypt(
+      reportData.impersonated_phone_number,
+    ),
     account_number: await encrypt(reportData.account_number),
   };
 
@@ -66,6 +69,7 @@ async function encryptAndInsert(
       reporter_id: reporterId,
       name: encryptedData.name,
       phone_number: encryptedData.phone_number,
+      impersonated_phone_number: encryptedData.impersonated_phone_number,
       account_number: encryptedData.account_number,
       bank_name: reportData.bank_name || null,
       site_name: reportData.site_name || null,
@@ -86,6 +90,7 @@ async function encryptAndInsert(
       nickname_evidence_url: reportData.nickname_evidence_url || null,
       illegal_collection_evidence_urls:
         reportData.illegal_collection_evidence_urls || null,
+      traded_item_image_urls: reportData.traded_item_image_urls || null,
       is_cash_transaction: reportData.is_cash_transaction || false,
     });
 
@@ -96,9 +101,7 @@ async function encryptAndInsert(
   return { success: true, message: "Report submitted successfully." };
 }
 
-// Edge Function의 메인 로직입니다.
 serve(async (req: Request) => {
-  // ... (이하 로직은 변경 없음) ...
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
