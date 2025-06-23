@@ -7,7 +7,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 interface ReportData {
   name?: string | null;
-  phone_number?: string | null;
+  phone_numbers?: (string | null)[] | null;
   impersonated_phone_number?: string | null;
   account_number?: string | null;
   bank_name?: string | null;
@@ -29,6 +29,7 @@ interface ReportData {
   illegal_collection_evidence_urls?: string[] | null;
   traded_item_image_urls?: string[] | null;
   is_cash_transaction?: boolean | null;
+  detailed_crime_type?: string | null;
 }
 
 async function encryptAndInsert(
@@ -54,9 +55,12 @@ async function encryptAndInsert(
     return String(data);
   };
 
+  const encryptedPhoneNumbers = reportData.phone_numbers
+    ? await Promise.all(reportData.phone_numbers.map((pn) => encrypt(pn)))
+    : null;
+
   const encryptedData = {
     name: await encrypt(reportData.name),
-    phone_number: await encrypt(reportData.phone_number),
     impersonated_phone_number: await encrypt(
       reportData.impersonated_phone_number,
     ),
@@ -68,7 +72,7 @@ async function encryptAndInsert(
     .insert({
       reporter_id: reporterId,
       name: encryptedData.name,
-      phone_number: encryptedData.phone_number,
+      phone_numbers: encryptedPhoneNumbers,
       impersonated_phone_number: encryptedData.impersonated_phone_number,
       account_number: encryptedData.account_number,
       bank_name: reportData.bank_name || null,
@@ -92,6 +96,7 @@ async function encryptAndInsert(
         reportData.illegal_collection_evidence_urls || null,
       traded_item_image_urls: reportData.traded_item_image_urls || null,
       is_cash_transaction: reportData.is_cash_transaction || false,
+      detailed_crime_type: reportData.detailed_crime_type || null,
     });
 
   if (insertError) {
