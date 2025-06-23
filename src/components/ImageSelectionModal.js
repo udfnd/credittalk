@@ -1,16 +1,16 @@
 // src/components/ImageSelectionModal.js
-import React from 'react';
+import React from "react";
 import {
   Modal,
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  Image,
   StyleSheet,
+  Image,
   SafeAreaView,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
 const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
   const handleSelect = (item) => {
@@ -23,12 +23,20 @@ const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
       style={styles.itemContainer}
       onPress={() => handleSelect(item)}
     >
-      <Image
-        source={item.source}
-        style={styles.itemImage}
-        resizeMode="contain"
-      />
-      <Text style={styles.itemText}>{item.name}</Text>
+      {item.source ? (
+        <>
+          <Image
+            source={item.source}
+            style={styles.image}
+            resizeMode="contain"
+          />
+          <Text style={styles.textItem} numberOfLines={2} ellipsizeMode="tail">
+            {item.name}
+          </Text>
+        </>
+      ) : (
+        <Text style={styles.textOnlyItem}>{item.name}</Text>
+      )}
     </TouchableOpacity>
   );
 
@@ -36,15 +44,15 @@ const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Icon name="close" size={24} color="#333" />
+          <Text style={styles.title}>{title}</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Icon name="close" size={28} color="#333" />
           </TouchableOpacity>
         </View>
         <FlatList
           data={items}
           renderItem={renderItem}
-          keyExtractor={(item) => item.name}
+          keyExtractor={(item, index) => `${item.name}-${index}`}
           numColumns={3}
           contentContainerStyle={styles.listContainer}
         />
@@ -56,25 +64,19 @@ const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: "#eee",
   },
-  headerTitle: {
+  title: {
     fontSize: 20,
-    fontWeight: 'bold',
-    flex: 1,
-    textAlign: 'center',
-    marginLeft: 30, // to center title
-  },
-  closeButton: {
-    padding: 5,
+    fontWeight: "bold",
   },
   listContainer: {
     padding: 10,
@@ -82,22 +84,31 @@ const styles = StyleSheet.create({
   itemContainer: {
     flex: 1,
     margin: 5,
-    padding: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: "#e0e0e0",
     borderRadius: 8,
-    height: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 5,
+    aspectRatio: 1,
+    backgroundColor: "#f8f9fa",
   },
-  itemImage: {
-    width: 60,
-    height: 60,
-    marginBottom: 8,
+  image: {
+    width: "70%",
+    height: "70%",
+    marginBottom: 5,
   },
-  itemText: {
+  textItem: {
     fontSize: 12,
-    textAlign: 'center',
+    fontWeight: "500",
+    color: "#343a40",
+    textAlign: "center",
+  },
+  textOnlyItem: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#343a40",
+    textAlign: "center",
   },
 });
 

@@ -201,6 +201,8 @@ function ReportScreen({ navigation }) {
   const [accountNumber, setAccountNumber] = useState("");
   const [nickname, setNickname] = useState("");
   const [category, setCategory] = useState("");
+  const [categoryOther, setCategoryOther] = useState("");
+  const [showCategoryOtherInput, setShowCategoryOtherInput] = useState(false);
   const [scamReportSource, setScamReportSource] = useState("");
   const [scamReportSourceOther, setScamReportSourceOther] = useState("");
   const [companyType, setCompanyType] = useState("");
@@ -223,6 +225,7 @@ function ReportScreen({ navigation }) {
     useState(false);
   const [nicknameEvidencePhoto, setNicknameEvidencePhoto] = useState(null);
   const [victimCircumstances, setVictimCircumstances] = useState("");
+  const [victimCircumstancesOther, setVictimCircumstancesOther] = useState("");
   const [showVictimCircumstanceTextInput, setShowVictimCircumstanceTextInput] =
     useState(false);
   const [illegalCollectionPhotos, setIllegalCollectionPhotos] = useState([]);
@@ -260,6 +263,8 @@ function ReportScreen({ navigation }) {
     setAccountNumber("");
     setNickname("");
     setCategory("");
+    setCategoryOther("");
+    setShowCategoryOtherInput(false);
     setScamReportSource("");
     setScamReportSourceOther("");
     setCompanyType("");
@@ -268,6 +273,7 @@ function ReportScreen({ navigation }) {
     setPhoneMiddle("");
     setPhoneLast("");
     setVictimCircumstances("");
+    setVictimCircumstancesOther("");
     setShowVictimCircumstanceTextInput(false);
     setTradedItemCategory("");
     setIsPerpetratorIdentified(null);
@@ -333,6 +339,11 @@ function ReportScreen({ navigation }) {
       return;
     }
 
+    if (category === "기타" && !categoryOther.trim()) {
+      Alert.alert("입력 오류", '"카테고리"의 "기타" 항목을 입력해주세요.');
+      return;
+    }
+
     if (scamReportSource === "기타" && !scamReportSourceOther.trim()) {
       Alert.alert(
         "입력 오류",
@@ -354,6 +365,14 @@ function ReportScreen({ navigation }) {
       !impersonatedPersonOther.trim()
     ) {
       Alert.alert("입력 오류", '사칭 인물 "기타" 상세 내용을 입력해주세요.');
+      return;
+    }
+    if (
+      category === individualCategories[1] &&
+      victimCircumstances.includes("기타") &&
+      !victimCircumstancesOther.trim()
+    ) {
+      Alert.alert("입력 오류", '"피해 정황"의 "기타" 항목을 입력해주세요.');
       return;
     }
     if (nickname.trim() && !nicknameEvidencePhoto) {
@@ -414,6 +433,22 @@ function ReportScreen({ navigation }) {
           ? `기타: ${scamReportSourceOther.trim()}`
           : scamReportSource;
 
+      let finalVictimCircumstances = victimCircumstances.trim();
+      if (
+        victimCircumstances.includes("기타") &&
+        victimCircumstancesOther.trim()
+      ) {
+        finalVictimCircumstances = victimCircumstances
+          .split(", ")
+          .map((item) =>
+            item === "기타" ? `기타: ${victimCircumstancesOther.trim()}` : item,
+          )
+          .join(", ");
+      }
+
+      const finalCategory =
+        category === "기타" ? categoryOther.trim() : category;
+
       const reportData = {
         name: isCashTransaction ? null : accountHolderName.trim() || null,
         nickname: nickname.trim() || null,
@@ -421,12 +456,12 @@ function ReportScreen({ navigation }) {
         account_number: isCashTransaction ? null : accountNumber.trim() || null,
         bank_name: isCashTransaction ? null : bankName || null,
         site_name: siteName || null,
-        category,
+        category: finalCategory,
         scam_report_source: finalScamReportSource,
         company_type: companyType,
         gender: gender,
         description: caseSummary.trim() || null,
-        victim_circumstances: victimCircumstances.trim() || null,
+        victim_circumstances: finalVictimCircumstances || null,
         traded_item_category: tradedItemCategory || null,
         perpetrator_identified: isPerpetratorIdentified,
         attempted_fraud: attemptedFraud,
@@ -461,15 +496,26 @@ function ReportScreen({ navigation }) {
     }
   };
 
-  const handleCategoryChange = (selectedCategory) =>
-    setCategory((cat) => (cat === selectedCategory ? "" : selectedCategory));
+  const handleCategoryChange = (selectedCategory) => {
+    const isCurrentlySelected = category === selectedCategory;
+    const newCategory = isCurrentlySelected ? "" : selectedCategory;
+    setCategory(newCategory);
+
+    if (newCategory === "기타") {
+      setShowCategoryOtherInput(true);
+    } else {
+      setShowCategoryOtherInput(false);
+      setCategoryOther("");
+    }
+  };
 
   const handleScamReportSourceChange = (source) => {
-    setScamReportSource(source);
-    if (source !== "포털사이트 또는 SNS") {
+    const newSource = scamReportSource === source ? "" : source;
+    setScamReportSource(newSource);
+    if (newSource !== "포털사이트 또는 SNS") {
       setSiteName("");
     }
-    if (source !== "기타") {
+    if (newSource !== "기타") {
       setScamReportSourceOther("");
     }
   };
@@ -486,9 +532,19 @@ function ReportScreen({ navigation }) {
       .split(", ")
       .filter((s) => s.trim() !== "");
     const itemIndex = currentSelected.indexOf(item);
-    if (itemIndex > -1) currentSelected.splice(itemIndex, 1);
-    else currentSelected.push(item);
-    if (item === "기타") setShowVictimCircumstanceTextInput(itemIndex === -1);
+
+    if (itemIndex > -1) {
+      currentSelected.splice(itemIndex, 1);
+      if (item === "기타") {
+        setShowVictimCircumstanceTextInput(false);
+        setVictimCircumstancesOther("");
+      }
+    } else {
+      currentSelected.push(item);
+      if (item === "기타") {
+        setShowVictimCircumstanceTextInput(true);
+      }
+    }
     setVictimCircumstances(currentSelected.join(", "));
   };
   const handleTradedItemCategorySelect = (itemName) =>
@@ -581,6 +637,8 @@ function ReportScreen({ navigation }) {
               {showVictimCircumstanceTextInput && (
                 <TextInput
                   style={[styles.input, styles.textArea, { marginTop: -10 }]}
+                  value={victimCircumstancesOther}
+                  onChangeText={setVictimCircumstancesOther}
                   placeholder="기타 피해 정황을 직접 입력해주세요."
                   multiline
                 />
@@ -779,6 +837,14 @@ function ReportScreen({ navigation }) {
                 </TouchableOpacity>
               ))}
             </View>
+            {showCategoryOtherInput && (
+              <TextInput
+                style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
+                value={categoryOther}
+                onChangeText={setCategoryOther}
+                placeholder="카테고리를 직접 입력해주세요."
+              />
+            )}
           </>
         )}
 
