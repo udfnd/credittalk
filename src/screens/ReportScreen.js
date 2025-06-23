@@ -12,6 +12,7 @@ import {
   Keyboard,
   TouchableOpacity,
   Image,
+  KeyboardAvoidingView,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
@@ -682,438 +683,450 @@ function ReportScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <ImageSelectionModal
-        visible={isBankModalVisible}
-        onClose={() => setIsBankModalVisible(false)}
-        items={bankImages}
-        onSelect={setBankName}
-        title="은행 선택"
-      />
-      <ImageSelectionModal
-        visible={isSiteModalVisible}
-        onClose={() => setIsSiteModalVisible(false)}
-        items={siteImages}
-        onSelect={(name) => {
-          setSiteName(name);
-          if (name === "직접쓰기") {
-            setTimeout(
-              () =>
-                Alert.prompt(
-                  "사이트 직접 입력",
-                  "사이트 이름을 입력해주세요.",
-                  [
-                    { text: "취소", style: "cancel" },
-                    {
-                      text: "확인",
-                      onPress: (text) => setSiteName(text || ""),
-                    },
-                  ],
-                  "plain-text",
-                  siteName !== "직접쓰기" ? siteName : "",
-                ),
-              Platform.OS === "ios" ? 500 : 0,
-            );
-          }
-        }}
-        title="사이트 선택"
-      />
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+    >
+      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+        <ImageSelectionModal
+          visible={isBankModalVisible}
+          onClose={() => setIsBankModalVisible(false)}
+          items={bankImages}
+          onSelect={setBankName}
+          title="은행 선택"
+        />
+        <ImageSelectionModal
+          visible={isSiteModalVisible}
+          onClose={() => setIsSiteModalVisible(false)}
+          items={siteImages}
+          onSelect={(name) => {
+            setSiteName(name);
+            if (name === "직접쓰기") {
+              setTimeout(
+                () =>
+                  Alert.prompt(
+                    "사이트 직접 입력",
+                    "사이트 이름을 입력해주세요.",
+                    [
+                      { text: "취소", style: "cancel" },
+                      {
+                        text: "확인",
+                        onPress: (text) => setSiteName(text || ""),
+                      },
+                    ],
+                    "plain-text",
+                    siteName !== "직접쓰기" ? siteName : "",
+                  ),
+                Platform.OS === "ios" ? 500 : 0,
+              );
+            }
+          }}
+          title="사이트 선택"
+        />
 
-      <Text style={styles.title}>사기 정보 입력</Text>
-      <Text style={styles.guidance}>* 표시된 항목은 필수 입력입니다.</Text>
+        <Text style={styles.title}>사기 정보 입력</Text>
+        <Text style={styles.guidance}>* 표시된 항목은 필수 입력입니다.</Text>
 
-      <Text style={styles.label}>
-        피해자 해당사항 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.optionSelectorContainer}>
-        {accountTypes.map((type) => (
+        <Text style={styles.label}>
+          피해자 해당사항 <Text style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.optionSelectorContainer}>
+          {accountTypes.map((type) => (
+            <TouchableOpacity
+              key={type}
+              style={[
+                styles.optionButton,
+                companyType === type && styles.optionButtonSelected,
+              ]}
+              onPress={() => handleAccountTypeChange(type)}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  companyType === type && styles.optionButtonTextSelected,
+                ]}
+              >
+                {type}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {companyType && currentCategories.length > 0 && (
+          <>
+            <Text style={styles.label}>
+              카테고리 <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.checkboxContainer}>
+              {currentCategories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={styles.checkboxItem}
+                  onPress={() => handleCategoryChange(cat)}
+                >
+                  <Icon
+                    name={
+                      category === cat
+                        ? "checkbox-marked-outline"
+                        : "checkbox-blank-outline"
+                    }
+                    size={24}
+                    color={category === cat ? "#3d5afe" : "#555"}
+                  />
+                  <Text style={styles.checkboxLabel} numberOfLines={2}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {renderDetailFields()}
+
+        {/* --- 사기를 당하게 된 경로 섹션 --- */}
+        <Text style={styles.label}>
+          사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.checkboxContainer}>
+          {scamReportSources.map((source) => (
+            <TouchableOpacity
+              key={source}
+              style={styles.checkboxItem}
+              onPress={() => handleScamReportSourceChange(source)}
+            >
+              <Icon
+                name={
+                  scamReportSource === source
+                    ? "radiobox-marked"
+                    : "radiobox-blank"
+                }
+                size={24}
+                color={scamReportSource === source ? "#3d5afe" : "#555"}
+              />
+              <Text style={styles.checkboxLabel}>{source}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* --- '기타' 선택 시 나타나는 입력창 (수정/추가된 부분) --- */}
+        {scamReportSource === "기타" && (
+          <TextInput
+            style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
+            value={scamReportSourceOther}
+            onChangeText={setScamReportSourceOther}
+            placeholder="사기 경로를 직접 입력해주세요."
+          />
+        )}
+
+        {scamReportSource === "포털사이트 또는 SNS" && (
+          <View>
+            <Text style={styles.label}>사이트 이름</Text>
+            <View style={styles.inputWithButtonContainer}>
+              <TextInput
+                style={[styles.input, styles.inputWithButton]}
+                value={siteName}
+                placeholder="오른쪽 버튼으로 사이트 선택"
+                editable={false}
+                pointerEvents="none"
+              />
+              <TouchableOpacity
+                style={styles.inlineButton}
+                onPress={() => setIsSiteModalVisible(true)}
+              >
+                <Text style={styles.inlineButtonText}>선택</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        <Text style={styles.label}>
+          피해, 미수 여부 <Text style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.optionSelectorContainer}>
           <TouchableOpacity
-            key={type}
             style={[
               styles.optionButton,
-              companyType === type && styles.optionButtonSelected,
+              attemptedFraud === true && styles.optionButtonSelected,
             ]}
-            onPress={() => handleAccountTypeChange(type)}
+            onPress={() => setAttemptedFraud(true)}
           >
             <Text
               style={[
                 styles.optionButtonText,
-                companyType === type && styles.optionButtonTextSelected,
+                attemptedFraud === true && styles.optionButtonTextSelected,
               ]}
             >
-              {type}
+              피해
             </Text>
           </TouchableOpacity>
-        ))}
-      </View>
-      {companyType && currentCategories.length > 0 && (
-        <>
-          <Text style={styles.label}>
-            카테고리 <Text style={styles.required}>*</Text>
-          </Text>
-          <View style={styles.checkboxContainer}>
-            {currentCategories.map((cat) => (
-              <TouchableOpacity
-                key={cat}
-                style={styles.checkboxItem}
-                onPress={() => handleCategoryChange(cat)}
-              >
-                <Icon
-                  name={
-                    category === cat
-                      ? "checkbox-marked-outline"
-                      : "checkbox-blank-outline"
-                  }
-                  size={24}
-                  color={category === cat ? "#3d5afe" : "#555"}
-                />
-                <Text style={styles.checkboxLabel} numberOfLines={2}>
-                  {cat}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </>
-      )}
-
-      {renderDetailFields()}
-
-      {/* --- 사기를 당하게 된 경로 섹션 --- */}
-      <Text style={styles.label}>
-        사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.checkboxContainer}>
-        {scamReportSources.map((source) => (
           <TouchableOpacity
-            key={source}
+            style={[
+              styles.optionButton,
+              attemptedFraud === false && styles.optionButtonSelected,
+            ]}
+            onPress={() => setAttemptedFraud(false)}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                attemptedFraud === false && styles.optionButtonTextSelected,
+              ]}
+            >
+              미수
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.label}>
+          용의자 성별 <Text style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.optionSelectorContainer}>
+          {genders.map((gen) => (
+            <TouchableOpacity
+              key={gen}
+              style={[
+                styles.optionButton,
+                gender === gen && styles.optionButtonSelected,
+              ]}
+              onPress={() => setGender(gen)}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  gender === gen && styles.optionButtonTextSelected,
+                ]}
+              >
+                {gen}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={styles.label}>
+          가해자 특정/불특정 여부 <Text style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.optionSelectorContainer}>
+          <TouchableOpacity
+            style={[
+              styles.optionButton,
+              isPerpetratorIdentified === true && styles.optionButtonSelected,
+            ]}
+            onPress={() => setIsPerpetratorIdentified(true)}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                isPerpetratorIdentified === true &&
+                  styles.optionButtonTextSelected,
+              ]}
+            >
+              특정
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.optionButton,
+              isPerpetratorIdentified === false && styles.optionButtonSelected,
+            ]}
+            onPress={() => setIsPerpetratorIdentified(false)}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                isPerpetratorIdentified === false &&
+                  styles.optionButtonTextSelected,
+              ]}
+            >
+              불특정
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.label}>SNS 닉네임</Text>
+        <TextInput
+          style={styles.input}
+          value={nickname}
+          onChangeText={setNickname}
+          placeholder="닉네임 (입력 시 사진 첨부 필수)"
+        />
+        {nickname.trim() !== "" && (
+          <View style={styles.photoUploadContainer}>
+            <Text style={styles.label}>
+              닉네임 관련 증거 사진 <Text style={styles.required}>*</Text>
+            </Text>
+            {nicknameEvidencePhoto ? (
+              <View>
+                <Image
+                  source={{ uri: nicknameEvidencePhoto.uri }}
+                  style={styles.previewImage}
+                />
+                <TouchableOpacity
+                  style={styles.changePhotoButton}
+                  onPress={handleChooseNicknamePhoto}
+                >
+                  <Text style={styles.changePhotoButtonText}>사진 변경</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.photoUploadButton}
+                onPress={handleChooseNicknamePhoto}
+              >
+                <Icon name="camera-plus-outline" size={30} color="#555" />
+                <Text style={styles.photoUploadText}>사진 선택하기</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>나에게 피해를 입혔던 전화번호</Text>
+          <TouchableOpacity
             style={styles.checkboxItem}
-            onPress={() => handleScamReportSourceChange(source)}
+            onPress={handlePhoneUnknownToggle}
           >
             <Icon
               name={
-                scamReportSource === source
-                  ? "radiobox-marked"
-                  : "radiobox-blank"
+                isPhoneUnknown ? "checkbox-marked" : "checkbox-blank-outline"
               }
               size={24}
-              color={scamReportSource === source ? "#3d5afe" : "#555"}
+              color={isPhoneUnknown ? "#3d5afe" : "#555"}
             />
-            <Text style={styles.checkboxLabel}>{source}</Text>
+            <Text style={styles.checkboxLabel}>모름</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* --- '기타' 선택 시 나타나는 입력창 (수정/추가된 부분) --- */}
-      {scamReportSource === "기타" && (
-        <TextInput
-          style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
-          value={scamReportSourceOther}
-          onChangeText={setScamReportSourceOther}
-          placeholder="사기 경로를 직접 입력해주세요."
-        />
-      )}
-
-      {scamReportSource === "포털사이트 또는 SNS" && (
-        <View>
-          <Text style={styles.label}>사이트 이름</Text>
-          <View style={styles.inputWithButtonContainer}>
-            <TextInput
-              style={[styles.input, styles.inputWithButton]}
-              value={siteName}
-              placeholder="오른쪽 버튼으로 사이트 선택"
-              editable={false}
-              pointerEvents="none"
-            />
-            <TouchableOpacity
-              style={styles.inlineButton}
-              onPress={() => setIsSiteModalVisible(true)}
-            >
-              <Text style={styles.inlineButtonText}>선택</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-      )}
+        {isPhoneUnknown && (
+          <Text style={styles.guidanceText}>
+            전화번호를 입력하지 않을 경우 SNS 닉네임과 이미지를 필수 업로드 해야
+            합니다.
+          </Text>
+        )}
+        <View style={styles.phoneInputContainer}>
+          <TextInput
+            style={[styles.input, styles.phoneInputSegment]}
+            value={phonePrefix}
+            onChangeText={setPhonePrefix}
+            placeholder="000"
+            keyboardType="number-pad"
+            maxLength={3}
+            editable={!isPhoneUnknown}
+          />
+          <TextInput
+            style={[styles.input, styles.phoneInputSegment]}
+            value={phoneMiddle}
+            onChangeText={setPhoneMiddle}
+            placeholder="0000"
+            keyboardType="number-pad"
+            maxLength={4}
+            editable={!isPhoneUnknown}
+          />
+          <TextInput
+            style={[styles.input, styles.phoneInputSegment]}
+            value={phoneLast}
+            onChangeText={setPhoneLast}
+            placeholder="0000"
+            keyboardType="number-pad"
+            maxLength={4}
+            editable={!isPhoneUnknown}
+          />
+        </View>
 
-      <Text style={styles.label}>
-        피해, 미수 여부 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.optionSelectorContainer}>
-        <TouchableOpacity
-          style={[
-            styles.optionButton,
-            attemptedFraud === true && styles.optionButtonSelected,
-          ]}
-          onPress={() => setAttemptedFraud(true)}
-        >
-          <Text
-            style={[
-              styles.optionButtonText,
-              attemptedFraud === true && styles.optionButtonTextSelected,
-            ]}
-          >
-            피해
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.optionButton,
-            attemptedFraud === false && styles.optionButtonSelected,
-          ]}
-          onPress={() => setAttemptedFraud(false)}
-        >
-          <Text
-            style={[
-              styles.optionButtonText,
-              attemptedFraud === false && styles.optionButtonTextSelected,
-            ]}
-          >
-            미수
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.label}>
-        용의자 성별 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.optionSelectorContainer}>
-        {genders.map((gen) => (
-          <TouchableOpacity
-            key={gen}
-            style={[
-              styles.optionButton,
-              gender === gen && styles.optionButtonSelected,
-            ]}
-            onPress={() => setGender(gen)}
-          >
-            <Text
-              style={[
-                styles.optionButtonText,
-                gender === gen && styles.optionButtonTextSelected,
-              ]}
-            >
-              {gen}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <Text style={styles.label}>
-        가해자 특정/불특정 여부 <Text style={styles.required}>*</Text>
-      </Text>
-      <View style={styles.optionSelectorContainer}>
-        <TouchableOpacity
-          style={[
-            styles.optionButton,
-            isPerpetratorIdentified === true && styles.optionButtonSelected,
-          ]}
-          onPress={() => setIsPerpetratorIdentified(true)}
-        >
-          <Text
-            style={[
-              styles.optionButtonText,
-              isPerpetratorIdentified === true &&
-                styles.optionButtonTextSelected,
-            ]}
-          >
-            특정
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.optionButton,
-            isPerpetratorIdentified === false && styles.optionButtonSelected,
-          ]}
-          onPress={() => setIsPerpetratorIdentified(false)}
-        >
-          <Text
-            style={[
-              styles.optionButtonText,
-              isPerpetratorIdentified === false &&
-                styles.optionButtonTextSelected,
-            ]}
-          >
-            불특정
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.label}>SNS 닉네임</Text>
-      <TextInput
-        style={styles.input}
-        value={nickname}
-        onChangeText={setNickname}
-        placeholder="닉네임 (입력 시 사진 첨부 필수)"
-      />
-      {nickname.trim() !== "" && (
-        <View style={styles.photoUploadContainer}>
+        <View style={styles.labelContainer}>
           <Text style={styles.label}>
-            닉네임 관련 증거 사진 <Text style={styles.required}>*</Text>
+            {attemptedFraud === false
+              ? "피해당할 뻔 했던 계좌번호 (선택)"
+              : "피해금 송금 정보 (선택)"}
           </Text>
-          {nicknameEvidencePhoto ? (
-            <View>
-              <Image
-                source={{ uri: nicknameEvidencePhoto.uri }}
-                style={styles.previewImage}
-              />
-              <TouchableOpacity
-                style={styles.changePhotoButton}
-                onPress={handleChooseNicknamePhoto}
-              >
-                <Text style={styles.changePhotoButtonText}>사진 변경</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
+          {(category === "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기" ||
+            category === "불법사금융") && (
             <TouchableOpacity
-              style={styles.photoUploadButton}
-              onPress={handleChooseNicknamePhoto}
+              style={styles.checkboxItem}
+              onPress={handleCashTransactionToggle}
             >
-              <Icon name="camera-plus-outline" size={30} color="#555" />
-              <Text style={styles.photoUploadText}>사진 선택하기</Text>
+              <Icon
+                name={
+                  isCashTransaction
+                    ? "checkbox-marked"
+                    : "checkbox-blank-outline"
+                }
+                size={24}
+                color={isCashTransaction ? "#3d5afe" : "#555"}
+              />
+              <Text style={styles.checkboxLabel}>현금 전달</Text>
             </TouchableOpacity>
           )}
         </View>
-      )}
 
-      <View style={styles.labelContainer}>
-        <Text style={styles.label}>나에게 피해를 입혔던 전화번호</Text>
-        <TouchableOpacity
-          style={styles.checkboxItem}
-          onPress={handlePhoneUnknownToggle}
-        >
-          <Icon
-            name={isPhoneUnknown ? "checkbox-marked" : "checkbox-blank-outline"}
-            size={24}
-            color={isPhoneUnknown ? "#3d5afe" : "#555"}
-          />
-          <Text style={styles.checkboxLabel}>모름</Text>
-        </TouchableOpacity>
-      </View>
-      {isPhoneUnknown && (
-        <Text style={styles.guidanceText}>
-          전화번호를 입력하지 않을 경우 SNS 닉네임과 이미지를 필수 업로드 해야
-          합니다.
-        </Text>
-      )}
-      <View style={styles.phoneInputContainer}>
-        <TextInput
-          style={[styles.input, styles.phoneInputSegment]}
-          value={phonePrefix}
-          onChangeText={setPhonePrefix}
-          placeholder="000"
-          keyboardType="number-pad"
-          maxLength={3}
-          editable={!isPhoneUnknown}
-        />
-        <TextInput
-          style={[styles.input, styles.phoneInputSegment]}
-          value={phoneMiddle}
-          onChangeText={setPhoneMiddle}
-          placeholder="0000"
-          keyboardType="number-pad"
-          maxLength={4}
-          editable={!isPhoneUnknown}
-        />
-        <TextInput
-          style={[styles.input, styles.phoneInputSegment]}
-          value={phoneLast}
-          onChangeText={setPhoneLast}
-          placeholder="0000"
-          keyboardType="number-pad"
-          maxLength={4}
-          editable={!isPhoneUnknown}
-        />
-      </View>
-
-      <View style={styles.labelContainer}>
-        <Text style={styles.label}>
-          {attemptedFraud === false
-            ? "피해당할 뻔 했던 계좌번호 (선택)"
-            : "피해금 송금 정보 (선택)"}
-        </Text>
-        {(category === "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기" ||
-          category === "불법사금융") && (
-          <TouchableOpacity
-            style={styles.checkboxItem}
-            onPress={handleCashTransactionToggle}
-          >
-            <Icon
-              name={
-                isCashTransaction ? "checkbox-marked" : "checkbox-blank-outline"
-              }
-              size={24}
-              color={isCashTransaction ? "#3d5afe" : "#555"}
-            />
-            <Text style={styles.checkboxLabel}>현금 전달</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {!isCashTransaction && category !== "암호화폐" && (
-        <>
-          <View style={styles.inputWithButtonContainer}>
+        {!isCashTransaction && category !== "암호화폐" && (
+          <>
+            <View style={styles.inputWithButtonContainer}>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.inputWithButton,
+                  isCashTransaction && styles.disabledInput,
+                ]}
+                value={bankName}
+                placeholder="은행 선택"
+                editable={false}
+              />
+              <TouchableOpacity
+                style={styles.inlineButton}
+                onPress={() => setIsBankModalVisible(true)}
+                disabled={isCashTransaction}
+              >
+                <Text style={styles.inlineButtonText}>선택</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
-              style={[
-                styles.input,
-                styles.inputWithButton,
-                isCashTransaction && styles.disabledInput,
-              ]}
-              value={bankName}
-              placeholder="은행 선택"
-              editable={false}
+              style={[styles.input, isCashTransaction && styles.disabledInput]}
+              value={accountHolderName}
+              onChangeText={setAccountHolderName}
+              placeholder="예금주명"
+              editable={!isCashTransaction}
             />
-            <TouchableOpacity
-              style={styles.inlineButton}
-              onPress={() => setIsBankModalVisible(true)}
-              disabled={isCashTransaction}
-            >
-              <Text style={styles.inlineButtonText}>선택</Text>
-            </TouchableOpacity>
-          </View>
+          </>
+        )}
+        {!isCashTransaction && (
           <TextInput
             style={[styles.input, isCashTransaction && styles.disabledInput]}
-            value={accountHolderName}
-            onChangeText={setAccountHolderName}
-            placeholder="예금주명"
+            value={accountNumber}
+            onChangeText={setAccountNumber}
+            placeholder={
+              category === "암호화폐"
+                ? "전자지갑주소"
+                : "계좌번호 (- 없이 적어주세요)"
+            }
+            keyboardType={category === "암호화폐" ? "default" : "number-pad"}
             editable={!isCashTransaction}
           />
-        </>
-      )}
-      {!isCashTransaction && (
-        <TextInput
-          style={[styles.input, isCashTransaction && styles.disabledInput]}
-          value={accountNumber}
-          onChangeText={setAccountNumber}
-          placeholder={
-            category === "암호화폐" ? "전자지갑주소" : "계좌번호 (- 제외)"
-          }
-          keyboardType={category === "암호화폐" ? "default" : "number-pad"}
-          editable={!isCashTransaction}
-        />
-      )}
-
-      <Text style={styles.label}>
-        사건 개요 <Text style={styles.required}>*</Text>
-      </Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        value={caseSummary}
-        onChangeText={setCaseSummary}
-        multiline
-        placeholder="사건의 개요를 상세히 적어주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
-        numberOfLines={5}
-      />
-
-      <View style={styles.buttonContainer}>
-        {isLoading ? (
-          <ActivityIndicator size="large" color="#3d5afe" />
-        ) : (
-          <Button
-            title="등록하기"
-            onPress={handleSubmit}
-            color="#3d5afe"
-            disabled={isUploading}
-          />
         )}
-      </View>
-    </ScrollView>
+
+        <Text style={styles.label}>
+          사건 개요 <Text style={styles.required}>*</Text>
+        </Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={caseSummary}
+          onChangeText={setCaseSummary}
+          multiline
+          placeholder="사건의 개요를 상세히 적어주세요. 누가 언제 어디서 무엇을 어떻게 왜? 피해를 당했는지, 육하원칙에 맞게 상세히 써주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
+          numberOfLines={5}
+        />
+
+        <View style={styles.buttonContainer}>
+          {isLoading ? (
+            <ActivityIndicator size="large" color="#3d5afe" />
+          ) : (
+            <Button
+              title="등록하기"
+              onPress={handleSubmit}
+              color="#3d5afe"
+              disabled={isUploading}
+            />
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

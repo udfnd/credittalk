@@ -25,6 +25,11 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import NaverLogin from "@react-native-seoul/naver-login";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { supabase } from "./src/lib/supabaseClient";
+// 추가된 부분: react-native-safe-area-context에서 필요한 모듈을 가져옵니다.
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
@@ -155,6 +160,8 @@ function CommunityStack() {
 function MainTabs() {
   const rootNavigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // 수정된 부분: useSafeAreaInsets Hook을 사용하여 inset 값을 가져옵니다.
+  const insets = useSafeAreaInsets();
 
   const handleHelpCenterLink = () => {
     Alert.alert(
@@ -199,9 +206,10 @@ function MainTabs() {
         },
         tabBarActiveTintColor: "#3d5afe",
         tabBarInactiveTintColor: "gray",
+        // 수정된 부분: 안드로이드에서 하단 네비게이션과 겹치지 않도록 스타일을 동적으로 조정합니다.
         tabBarStyle: {
-          height: Platform.OS === "ios" ? 90 : 65,
-          paddingBottom: Platform.OS === "ios" ? 30 : 10,
+          height: Platform.OS === "android" ? 65 + insets.bottom : 90,
+          paddingBottom: Platform.OS === "android" ? insets.bottom + 5 : 30,
           paddingTop: 5,
         },
         headerShown: false,
@@ -437,11 +445,16 @@ function App(): React.JSX.Element {
   }, []);
 
   return (
-    <AuthProvider>
-      <NavigationContainer linking={linking} fallback={<Text>Loading...</Text>}>
-        <AppNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NavigationContainer
+          linking={linking}
+          fallback={<Text>Loading...</Text>}
+        >
+          <AppNavigator />
+        </NavigationContainer>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 

@@ -24,6 +24,7 @@ function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [nationalId, setNationalId] = useState("");
   const [jobType, setJobType] = useState("일반");
@@ -31,8 +32,12 @@ function SignUpScreen() {
   const [otp, setOtp] = useState("");
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
   const [emailMessage, setEmailMessage] = useState("");
   const [isEmailAvailable, setIsEmailAvailable] = useState(null);
+
+  const [nicknameMessage, setNicknameMessage] = useState("");
+  const [isNicknameAvailable, setIsNicknameAvailable] = useState(null);
 
   const validateEmailFormat = (text) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
 
@@ -41,6 +46,45 @@ function SignUpScreen() {
     if (isEmailAvailable !== null) {
       setIsEmailAvailable(null);
       setEmailMessage("");
+    }
+  };
+
+  const handleNicknameChange = (text) => {
+    setNickname(text);
+    if (isNicknameAvailable !== null) {
+      setIsNicknameAvailable(null);
+      setNicknameMessage("");
+    }
+  };
+
+  const handleCheckNickname = async () => {
+    Keyboard.dismiss();
+    if (nickname.trim().length < 2) {
+      Alert.alert("입력 오류", "닉네임은 2자 이상이어야 합니다.");
+      return;
+    }
+
+    setIsLoading(true);
+    setNicknameMessage("");
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "check-nickname-availability",
+        { body: { nickname: nickname.trim() } },
+      );
+
+      if (error) throw error;
+      if (data.available) {
+        setIsNicknameAvailable(true);
+        setNicknameMessage("사용 가능한 닉네임입니다.");
+      } else {
+        setIsNicknameAvailable(false);
+        setNicknameMessage("이미 사용 중인 닉네임입니다.");
+      }
+    } catch (err) {
+      setIsNicknameAvailable(null);
+      setNicknameMessage("오류: 닉네임 중복 확인에 실패했습니다.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -125,11 +169,16 @@ function SignUpScreen() {
       Alert.alert("이메일 확인 필요", "이메일 중복 확인을 해주세요.");
       return;
     }
+    if (isNicknameAvailable !== true) {
+      Alert.alert("닉네임 확인 필요", "닉네임 중복 확인을 해주세요.");
+      return;
+    }
     if (
       !otp.trim() ||
       !email.trim() ||
       !password.trim() ||
       !name.trim() ||
+      !nickname.trim() ||
       !nationalId.trim()
     ) {
       Alert.alert("입력 오류", "모든 필수 항목을 입력해주세요.");
@@ -151,6 +200,7 @@ function SignUpScreen() {
           email: email.trim(),
           password,
           name: name.trim(),
+          nickname: nickname.trim(),
           phoneNumber: phoneNumber.trim(),
           nationalId: nationalId.trim(),
           jobType,
@@ -198,7 +248,7 @@ function SignUpScreen() {
           <TextInput
             style={styles.inputField}
             placeholder="이메일 주소"
-            placeholderTextColor="#6c757d" // 플레이스홀더 색상
+            placeholderTextColor="#6c757d"
             value={email}
             onChangeText={handleEmailChange}
             keyboardType="email-address"
@@ -223,7 +273,6 @@ function SignUpScreen() {
           </Text>
         )}
 
-        {/* 비밀번호 */}
         <TextInput
           style={styles.input}
           placeholder="비밀번호 (6자 이상)"
@@ -241,7 +290,6 @@ function SignUpScreen() {
           secureTextEntry
         />
 
-        {/* 이름 */}
         <TextInput
           style={styles.input}
           placeholder="이름"
@@ -250,7 +298,6 @@ function SignUpScreen() {
           onChangeText={setName}
         />
 
-        {/* 주민등록번호 */}
         <TextInput
           style={styles.input}
           placeholder="주민등록번호 (13자리, - 제외)"
@@ -262,7 +309,34 @@ function SignUpScreen() {
           secureTextEntry
         />
 
-        {/* 직업 유형 */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.inputField}
+            placeholder="닉네임 (영문, 숫자, 특수문자 가능)"
+            placeholderTextColor="#6c757d"
+            value={nickname}
+            onChangeText={handleNicknameChange}
+            autoCapitalize="none"
+          />
+          <TouchableOpacity
+            style={styles.checkButton}
+            onPress={handleCheckNickname}
+            disabled={isLoading}
+          >
+            <Text style={styles.checkButtonText}>중복확인</Text>
+          </TouchableOpacity>
+        </View>
+        {nicknameMessage.length > 0 && (
+          <Text
+            style={[
+              styles.message,
+              isNicknameAvailable ? styles.successMessage : styles.errorMessage,
+            ]}
+          >
+            {nicknameMessage}
+          </Text>
+        )}
+
         <Text style={styles.label}>직업 유형</Text>
         <View style={styles.jobTypeContainer}>
           {jobTypes.map((type) => (
@@ -288,7 +362,6 @@ function SignUpScreen() {
 
         {!isOtpSent ? (
           <>
-            {/* 휴대폰 번호 & 인증요청 */}
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.inputField}
@@ -315,7 +388,6 @@ function SignUpScreen() {
           </>
         ) : (
           <>
-            {/* OTP 입력 & 회원가입 */}
             <TextInput
               style={styles.input}
               placeholder="인증번호 6자리"
@@ -379,7 +451,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "white",
     fontSize: 16,
-    color: "#000", // ← 입력된 텍스트 색상 명시
+    color: "#000",
   },
   inputContainer: {
     flexDirection: "row",
@@ -394,7 +466,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     backgroundColor: "white",
     fontSize: 16,
-    color: "#000", // ← 입력된 텍스트 색상 명시
+    color: "#000",
     borderTopLeftRadius: 8,
     borderBottomLeftRadius: 8,
   },
