@@ -39,34 +39,25 @@ function SignInScreen() {
     try {
       if (provider === "naver") {
         const result = await NaverLogin.login();
-
         if (result?.isSuccess) {
           const naverToken = result.successResponse.accessToken;
-
-          // 1. Edge Function을 호출하여 완전한 세션 데이터를 받음
-          const { data: session, error: functionError } =
+          const { data: session, error: fnError } =
             await supabase.functions.invoke("sign-in-with-naver", {
               body: { naver_token: naverToken },
             });
-
-          if (functionError) throw functionError;
+          if (fnError) throw fnError;
           if (session.error) throw new Error(session.error);
 
-          // 2. 받은 세션으로 클라이언트 상태 설정
           const { error: sessionError } = await supabase.auth.setSession({
             access_token: session.access_token,
             refresh_token: session.refresh_token,
           });
-
           if (sessionError) throw sessionError;
-
-          // 성공! onAuthStateChange 리스너가 앱 상태를 자동으로 업데이트합니다.
         } else if (result.errCode !== "user_cancel") {
-          const errorMessage = `[${result.errCode || "UNKNOWN_CODE"}]\n${result.errDesc || "네이버 로그인에 실패했습니다."}`;
-          Alert.alert("네이버 로그인 실패", errorMessage);
+          const msg = `[${result.errCode || "UNKNOWN"}]\n${result.errDesc || "네이버 로그인 실패"}`;
+          Alert.alert("네이버 로그인 실패", msg);
         }
       } else if (provider === "kakao") {
-        // 카카오 로그인 로직은 변경 없음
         const result = await login();
         if (result.idToken) {
           const { error } = await supabase.auth.signInWithIdToken({
@@ -81,14 +72,11 @@ function SignInScreen() {
         error.code !== "E_CANCELLED_OPERATION" &&
         !error.message.includes("cancel")
       ) {
-        const errorMessage = `[${error.code || "EXCEPTION"}]\n${error.message || "알 수 없는 오류가 발생했습니다."}`;
-        console.error(
-          `${provider} Login Exception:`,
-          JSON.stringify(error, null, 2),
-        );
+        const msg = `[${error.code || "EXCEPTION"}]\n${error.message || "알 수 없는 오류"}`;
+        console.error(`${provider} 로그인 오류:`, error);
         Alert.alert(
-          `${provider === "naver" ? "네이버" : "카카오"} 로그인 오류`,
-          errorMessage,
+          provider === "naver" ? "네이버 로그인 오류" : "카카오 로그인 오류",
+          msg,
         );
       }
     } finally {
@@ -99,10 +87,10 @@ function SignInScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>CreditTalk</Text>
-
       <TextInput
         style={styles.input}
         placeholder="이메일 주소"
+        placeholderTextColor="#6c757d"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -111,6 +99,7 @@ function SignInScreen() {
       <TextInput
         style={styles.input}
         placeholder="비밀번호"
+        placeholderTextColor="#6c757d"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -184,6 +173,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "white",
     fontSize: 16,
+    color: "#000", // 입력된 텍스트 색상 명시
   },
   linksContainer: {
     flexDirection: "row",

@@ -194,11 +194,11 @@ function SignUpScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>회원가입</Text>
 
-        {/* --- START: 수정된 부분 (editable 속성 제거) --- */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.inputField}
             placeholder="이메일 주소"
+            placeholderTextColor="#6c757d" // 플레이스홀더 색상
             value={email}
             onChangeText={handleEmailChange}
             keyboardType="email-address"
@@ -212,7 +212,7 @@ function SignUpScreen() {
             <Text style={styles.checkButtonText}>중복확인</Text>
           </TouchableOpacity>
         </View>
-        {emailMessage && (
+        {emailMessage.length > 0 && (
           <Text
             style={[
               styles.message,
@@ -223,9 +223,11 @@ function SignUpScreen() {
           </Text>
         )}
 
+        {/* 비밀번호 */}
         <TextInput
           style={styles.input}
           placeholder="비밀번호 (6자 이상)"
+          placeholderTextColor="#6c757d"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -233,25 +235,34 @@ function SignUpScreen() {
         <TextInput
           style={styles.input}
           placeholder="비밀번호 확인"
+          placeholderTextColor="#6c757d"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry
         />
+
+        {/* 이름 */}
         <TextInput
           style={styles.input}
           placeholder="이름"
+          placeholderTextColor="#6c757d"
           value={name}
           onChangeText={setName}
         />
+
+        {/* 주민등록번호 */}
         <TextInput
           style={styles.input}
           placeholder="주민등록번호 (13자리, - 제외)"
+          placeholderTextColor="#6c757d"
           value={nationalId}
           onChangeText={setNationalId}
           keyboardType="number-pad"
           maxLength={13}
           secureTextEntry
         />
+
+        {/* 직업 유형 */}
         <Text style={styles.label}>직업 유형</Text>
         <View style={styles.jobTypeContainer}>
           {jobTypes.map((type) => (
@@ -274,14 +285,15 @@ function SignUpScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        {/* --- END: 수정된 부분 --- */}
 
         {!isOtpSent ? (
           <>
+            {/* 휴대폰 번호 & 인증요청 */}
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.inputField}
                 placeholder="휴대폰 번호 (예: 01012345678)"
+                placeholderTextColor="#6c757d"
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
@@ -303,9 +315,11 @@ function SignUpScreen() {
           </>
         ) : (
           <>
+            {/* OTP 입력 & 회원가입 */}
             <TextInput
               style={styles.input}
               placeholder="인증번호 6자리"
+              placeholderTextColor="#6c757d"
               value={otp}
               onChangeText={setOtp}
               keyboardType="number-pad"
@@ -365,6 +379,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "white",
     fontSize: 16,
+    color: "#000", // ← 입력된 텍스트 색상 명시
   },
   inputContainer: {
     flexDirection: "row",
@@ -379,6 +394,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     backgroundColor: "white",
     fontSize: 16,
+    color: "#000", // ← 입력된 텍스트 색상 명시
     borderTopLeftRadius: 8,
     borderBottomLeftRadius: 8,
   },
@@ -417,7 +433,10 @@ const styles = StyleSheet.create({
     borderColor: "#adb5bd",
     backgroundColor: "#e9ecef",
   },
-  jobTypeButtonSelected: { backgroundColor: "#3d5afe", borderColor: "#3d5afe" },
+  jobTypeButtonSelected: {
+    backgroundColor: "#3d5afe",
+    borderColor: "#3d5afe",
+  },
   jobTypeButtonText: { fontSize: 16, color: "#495057" },
   jobTypeButtonTextSelected: { color: "white", fontWeight: "bold" },
   linkButton: { marginTop: 20, alignItems: "center" },
