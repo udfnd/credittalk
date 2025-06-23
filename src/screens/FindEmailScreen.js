@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  TouchableOpacity,
 } from "react-native";
 import { supabase } from "../lib/supabaseClient";
 
@@ -25,9 +24,7 @@ function FindEmailScreen({ navigation }) {
     try {
       const { data, error } = await supabase.functions.invoke(
         "find-email-by-profile",
-        {
-          body: { name: name.trim(), phoneNumber: phoneNumber.trim() },
-        },
+        { body: { name: name.trim(), phoneNumber: phoneNumber.trim() } },
       );
 
       if (error) {
@@ -56,20 +53,28 @@ function FindEmailScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>아이디(이메일) 찾기</Text>
+
+      {/* 이름 입력 */}
       <TextInput
         style={styles.input}
         placeholder="이름"
+        placeholderTextColor="#6c757d"
         value={name}
         onChangeText={setName}
         autoCapitalize="none"
       />
+
+      {/* 휴대폰 번호 입력 */}
       <TextInput
         style={styles.input}
         placeholder="휴대폰 번호 (- 제외)"
+        placeholderTextColor="#6c757d"
         value={phoneNumber}
         onChangeText={setPhoneNumber}
         keyboardType="number-pad"
       />
+
+      {/* 버튼 또는 로딩 */}
       {isLoading ? (
         <ActivityIndicator size="large" color="#3d5afe" />
       ) : (
@@ -91,6 +96,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
+    color: "#1e3a5f",
   },
   input: {
     height: 50,
@@ -101,6 +107,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "white",
     fontSize: 16,
+    color: "#000",
   },
 });
 

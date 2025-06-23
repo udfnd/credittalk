@@ -18,13 +18,22 @@ serve(async (req) => {
   }
 
   try {
-    const { email, password, name, phoneNumber, nationalId, jobType, otp } =
-      await req.json();
+    const {
+      email,
+      password,
+      name,
+      nickname,
+      phoneNumber,
+      nationalId,
+      jobType,
+      otp,
+    } = await req.json();
 
     if (
       !email ||
       !password ||
       !name ||
+      !nickname ||
       !phoneNumber ||
       !nationalId ||
       !jobType ||
@@ -70,7 +79,7 @@ serve(async (req) => {
     } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      phone: e164PhoneNumber, // 변환된 번호를 사용
+      phone: e164PhoneNumber,
       email_confirm: true,
       phone_confirm: true,
     });
@@ -81,6 +90,7 @@ serve(async (req) => {
     const { error: profileError } = await supabaseAdmin.from("users").insert({
       auth_user_id: user.id,
       name,
+      nickname,
       phone_number: phoneNumber,
       national_id: nationalId,
       job_type: jobType,
