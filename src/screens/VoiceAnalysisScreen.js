@@ -1,3 +1,5 @@
+// src/screens/VoiceAnalysisScreen.js
+
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -11,23 +13,6 @@ import {
 import { pick, isCancel, types } from "@react-native-documents/picker";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-
-// 키워드 목록 (변경 없음)
-const PHISHING_KEYWORDS = [
-  "검찰",
-  "경찰",
-  "수사관",
-  "금융감독원",
-  "금감원",
-  "대출",
-  "상환",
-  "명의도용",
-  "계좌이체",
-  "송금",
-  "개인정보",
-  "사건",
-  "연루",
-];
 
 const ResultModal = ({ isVisible, onClose, result }) => {
   if (!result) return null;
@@ -55,9 +40,12 @@ const ResultModal = ({ isVisible, onClose, result }) => {
               : "통화 내용에서 특별한 위험 단어가 감지되지 않았습니다."}
           </Text>
           {result.detected && result.keywords?.length > 0 && (
-            <Text style={styles.detectedKeywords}>
-              감지된 단어: {result.keywords.join(", ")}
-            </Text>
+            <View>
+              <Text style={styles.detectedKeywordsTitle}>감지된 단어:</Text>
+              <Text style={styles.detectedKeywords}>
+                {result.keywords.join(", ")}
+              </Text>
+            </View>
           )}
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>닫기</Text>
@@ -70,19 +58,27 @@ const ResultModal = ({ isVisible, onClose, result }) => {
 
 function VoiceAnalysisScreen({ navigation }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const [result, setResult] = useState(null);
-  console.log(result);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   const handleFilePickAndAnalyze = useCallback(async () => {
     try {
+      // --- [디버깅 1] 파일 선택 단계 ---
+      console.log("[DEBUG-CLIENT] 1. 파일 선택 시작...");
       const [res] = await pick({
         type: [types.audio],
       });
 
       if (!res) {
+        console.log("[DEBUG-CLIENT] 파일 선택이 취소되었습니다.");
         return;
       }
+
+      console.log(
+        "[DEBUG-CLIENT] 1. 파일 선택 완료:",
+        JSON.stringify(res, null, 2),
+      );
 
       setIsLoading(true);
       setResult(null);
@@ -97,14 +93,23 @@ function VoiceAnalysisScreen({ navigation }) {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `voice-files/${fileName}`;
 
-      const { data, error: uploadError } = await supabase.storage
+      // --- [디버깅 2] 파일 업로드 단계 ---
+      console.log(
+        `[DEBUG-CLIENT] 2. Supabase Storage에 파일 업로드 시작... (경로: ${filePath})`,
+      );
+      setLoadingMessage("파일 업로드 중...");
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from("voice-analysis")
         .upload(filePath, file);
 
       if (uploadError) {
-        console.log(uploadError);
         throw uploadError;
       }
+      console.log("[DEBUG-CLIENT] 2. 파일 업로드 성공:", uploadData.path);
+
+      // --- [디버깅 3] Edge Function 호출 단계 ---
+      console.log("[DEBUG-CLIENT] 3. 'analyze-audio-file' 함수 호출 시작...");
+      setLoadingMessage("AI가 통화 내용을 분석 중입니다...");
 
       const { data: functionData, error: functionError } =
         await supabase.functions.invoke("analyze-audio-file", {
@@ -117,19 +122,26 @@ function VoiceAnalysisScreen({ navigation }) {
         );
       }
 
+      console.log(
+        "[DEBUG-CLIENT] 3. 함수 호출 성공. 분석 결과:",
+        JSON.stringify(functionData, null, 2),
+      );
+
       setResult(functionData);
       setIsModalVisible(true);
     } catch (err) {
       if (isCancel(err)) {
+        console.log("[DEBUG-CLIENT] 파일 선택이 사용자에 의해 취소되었습니다.");
       } else {
         console.error(
-          "Function Invocation Error:",
+          "[DEBUG-CLIENT] 에러 발생:",
           JSON.stringify(err, null, 2),
         );
         Alert.alert("오류 발생", err.message);
       }
     } finally {
       setIsLoading(false);
+      setLoadingMessage("");
     }
   }, []);
 
@@ -148,11 +160,10 @@ function VoiceAnalysisScreen({ navigation }) {
       </Text>
 
       {isLoading ? (
-        <ActivityIndicator
-          size="large"
-          color="#3d5afe"
-          style={{ marginVertical: 20 }}
-        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3d5afe" />
+          <Text style={styles.loadingText}>{loadingMessage}</Text>
+        </View>
       ) : (
         <TouchableOpacity
           style={styles.actionButton}
@@ -163,7 +174,6 @@ function VoiceAnalysisScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      {/* 개선된 Modal 호출 방식 */}
       <ResultModal
         isVisible={isModalVisible}
         onClose={() => setIsModalVisible(false)}
@@ -173,7 +183,6 @@ function VoiceAnalysisScreen({ navigation }) {
   );
 }
 
-// 스타일 정의 (변경 없음)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -214,6 +223,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: 10,
   },
+  loadingContainer: {
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#3d5afe",
+  },
   modalContainer: {
     flex: 1,
     justifyContent: "center",
@@ -234,11 +252,19 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     lineHeight: 24,
   },
+  detectedKeywordsTitle: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#34495e",
+    marginBottom: 5,
+    textAlign: "center",
+  },
   detectedKeywords: {
     fontSize: 14,
     color: "#e74c3c",
     marginBottom: 20,
     fontWeight: "bold",
+    textAlign: "center",
   },
   closeButton: {
     backgroundColor: "#3d5afe",

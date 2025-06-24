@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/screens/NewCrimeCaseListScreen.js
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,11 +9,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-} from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { supabase } from '../lib/supabaseClient';
-import { useAuth } from '../context/AuthContext';
+} from "react-native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 
 function NewCrimeCaseListScreen() {
   const navigation = useNavigation();
@@ -29,16 +30,16 @@ function NewCrimeCaseListScreen() {
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
-        .from('new_crime_cases')
-        .select('id, created_at, method')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
+        .from("new_crime_cases")
+        .select("id, created_at, method")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
       setCases(data || []);
     } catch (err) {
-      console.error('Error in fetchCases:', err);
-      setError(err.message || '데이터를 불러오는데 실패했습니다.');
+      console.error("Error in fetchCases:", err);
+      setError(err.message || "데이터를 불러오는데 실패했습니다.");
       setCases([]);
     } finally {
       setIsLoading(false);
@@ -59,22 +60,32 @@ function NewCrimeCaseListScreen() {
 
   const handleCreateCase = () => {
     if (!user) {
-      Alert.alert('로그인 필요', '글을 작성하려면 로그인이 필요합니다.', [
-        { text: '로그인', onPress: () => navigation.navigate('SignIn') },
-        { text: '취소', style: 'cancel' },
+      Alert.alert("로그인 필요", "글을 작성하려면 로그인이 필요합니다.", [
+        { text: "로그인", onPress: () => navigation.navigate("SignIn") },
+        { text: "취소", style: "cancel" },
       ]);
       return;
     }
-    navigation.navigate('NewCrimeCaseCreate');
+    navigation.navigate("NewCrimeCaseCreate");
   };
 
   const renderItem = ({ item }) => (
-    <View style={styles.caseItem}>
-      <Text style={styles.caseText}>{item.method}</Text>
-      <Text style={styles.caseDate}>
-        {new Date(item.created_at).toLocaleDateString()}
+    <TouchableOpacity
+      style={styles.caseItem}
+      onPress={() =>
+        navigation.navigate("NewCrimeCaseDetail", { caseId: item.id })
+      }
+    >
+      <Text style={styles.caseText} numberOfLines={3}>
+        {item.method}
       </Text>
-    </View>
+      <View style={styles.itemFooter}>
+        <Text style={styles.caseDate}>
+          {new Date(item.created_at).toLocaleDateString()}
+        </Text>
+        <Icon name="chevron-right" size={20} color="#7f8c8d" />
+      </View>
+    </TouchableOpacity>
   );
 
   if (isLoading && !refreshing && cases.length === 0) {
@@ -116,7 +127,7 @@ function NewCrimeCaseListScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#3d5afe']}
+            colors={["#3d5afe"]}
           />
         }
       />
@@ -130,70 +141,77 @@ function NewCrimeCaseListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f2f5',
+    backgroundColor: "#f0f2f5",
   },
   centered: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   listContainer: {
     padding: 15,
   },
   caseItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     padding: 15,
     borderRadius: 8,
     marginBottom: 12,
     borderLeftWidth: 5,
-    borderLeftColor: '#e74c3c',
+    borderLeftColor: "#e74c3c",
     elevation: 2,
+    justifyContent: "space-between",
+    minHeight: 100,
   },
   caseText: {
     fontSize: 16,
-    color: '#34495e',
+    color: "#34495e",
     lineHeight: 24,
+    flex: 1,
+  },
+  itemFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
   },
   caseDate: {
     fontSize: 12,
-    color: '#7f8c8d',
-    textAlign: 'right',
-    marginTop: 10,
+    color: "#7f8c8d",
   },
   errorText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#e74c3c',
-    textAlign: 'center',
+    color: "#e74c3c",
+    textAlign: "center",
   },
   emptyText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#7f8c8d',
+    color: "#7f8c8d",
   },
   fab: {
-    position: 'absolute',
+    position: "absolute",
     margin: 16,
     right: 10,
     bottom: 10,
-    backgroundColor: '#3d5afe',
+    backgroundColor: "#3d5afe",
     width: 60,
     height: 60,
     borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     elevation: 8,
   },
   retryButton: {
     marginTop: 20,
-    backgroundColor: '#3d5afe',
+    backgroundColor: "#3d5afe",
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 5,
   },
   retryButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
   },
 });
