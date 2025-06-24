@@ -26,7 +26,6 @@ function SignUpScreen() {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [nationalId, setNationalId] = useState("");
   const [jobType, setJobType] = useState("일반");
 
   const [otp, setOtp] = useState("");
@@ -178,8 +177,7 @@ function SignUpScreen() {
       !email.trim() ||
       !password.trim() ||
       !name.trim() ||
-      !nickname.trim() ||
-      !nationalId.trim()
+      !nickname.trim()
     ) {
       Alert.alert("입력 오류", "모든 필수 항목을 입력해주세요.");
       return;
@@ -202,7 +200,6 @@ function SignUpScreen() {
           name: name.trim(),
           nickname: nickname.trim(),
           phoneNumber: phoneNumber.trim(),
-          nationalId: nationalId.trim(),
           jobType,
           otp: otp.trim(),
         },
@@ -296,17 +293,6 @@ function SignUpScreen() {
           placeholderTextColor="#6c757d"
           value={name}
           onChangeText={setName}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="주민등록번호 (13자리, - 제외)"
-          placeholderTextColor="#6c757d"
-          value={nationalId}
-          onChangeText={setNationalId}
-          keyboardType="number-pad"
-          maxLength={13}
-          secureTextEntry
         />
 
         <View style={styles.inputContainer}>
