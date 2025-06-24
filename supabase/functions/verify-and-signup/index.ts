@@ -18,16 +18,8 @@ serve(async (req) => {
   }
 
   try {
-    const {
-      email,
-      password,
-      name,
-      nickname,
-      phoneNumber,
-      nationalId,
-      jobType,
-      otp,
-    } = await req.json();
+    const { email, password, name, nickname, phoneNumber, jobType, otp } =
+      await req.json();
 
     if (
       !email ||
@@ -35,7 +27,6 @@ serve(async (req) => {
       !name ||
       !nickname ||
       !phoneNumber ||
-      !nationalId ||
       !jobType ||
       !otp
     ) {
@@ -92,7 +83,6 @@ serve(async (req) => {
       name,
       nickname,
       phone_number: phoneNumber,
-      national_id: nationalId,
       job_type: jobType,
     });
 
