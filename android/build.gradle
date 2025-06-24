@@ -1,3 +1,7 @@
+ext {
+    ffmpegKitPackage = "https"
+}
+
 buildscript {
     ext {
         buildToolsVersion = "35.0.0"

@@ -12,46 +12,84 @@ import {
   Keyboard,
   TouchableOpacity,
   Image,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
+import RNBlobUtil from "react-native-blob-util";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
-function CommunityPostCreateScreen() {
+export default function CommunityPostCreateScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
-
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 사진 선택
   const handleChoosePhotos = () => {
-    const selectionLimit = 3 - photos.length;
-    if (selectionLimit <= 0) {
+    const limit = 3 - photos.length;
+    if (limit <= 0) {
       Alert.alert("알림", "사진은 최대 3장까지 등록할 수 있습니다.");
       return;
     }
-
     launchImageLibrary(
-      { mediaType: "photo", selectionLimit, quality: 0.7 },
-      (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) {
-          Alert.alert("오류", `사진 선택 오류: ${response.errorMessage}`);
-        } else if (response.assets && response.assets.length > 0) {
-          setPhotos((prevPhotos) => [...prevPhotos, ...response.assets]);
+      { mediaType: "photo", selectionLimit: limit, quality: 0.7 },
+      (res) => {
+        if (res.didCancel) return;
+        if (res.errorCode) {
+          Alert.alert("오류", `사진 선택 오류: ${res.errorMessage}`);
+        } else if (res.assets) {
+          setPhotos((p) => [...p, ...res.assets]);
         }
       },
     );
   };
 
-  const handleRemovePhoto = (uri) => {
-    setPhotos((prevPhotos) => prevPhotos.filter((photo) => photo.uri !== uri));
+  // 사진 삭제
+  const handleRemovePhoto = (uri) =>
+    setPhotos((p) => p.filter((x) => x.uri !== uri));
+
+  /**
+   * 로컬 URI → Blob-like 객체 생성
+   * Android content:// URI 는 fs.stat 으로 변환
+   */
+  const uriToBlob = async (uri) => {
+    let filePath = uri;
+    if (Platform.OS === "android" && uri.startsWith("content://")) {
+      const stat = await RNBlobUtil.fs.stat(uri);
+      filePath = stat.path;
+    }
+    return RNBlobUtil.wrap(filePath);
   };
 
+  // Supabase 업로드 유틸
+  const uploadToSupabase = async (uri, mimeType) => {
+    // 1) Blob-like 생성
+    const blob = await uriToBlob(uri);
+
+    // 2) 파일명·경로 구성 (보안상 user.id 등으로 고유명 부여)
+    const ext = mimeType.split("/")[1] || "jpg";
+    const fileName = `${user.id}_${Date.now()}.${ext}`;
+    const storagePath = `community-posts/${fileName}`;
+
+    // 3) 업로드
+    const { data, error } = await supabase.storage
+      .from("post-images")
+      .upload(storagePath, blob, { contentType: mimeType });
+    if (error) throw new Error(`업로드 실패: ${error.message}`);
+
+    // 4) 퍼블릭 URL 반환
+    const { publicUrl } = supabase.storage
+      .from("post-images")
+      .getPublicUrl(storagePath);
+    return publicUrl;
+  };
+
+  // 폼 제출
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!title.trim() || !content.trim()) {
@@ -59,53 +97,32 @@ function CommunityPostCreateScreen() {
       return;
     }
     if (!user) {
-      Alert.alert("오류", "로그인 정보가 없습니다. 다시 로그인해주세요.");
+      Alert.alert("오류", "로그인 정보가 없습니다.");
       return;
     }
 
     setIsLoading(true);
     try {
-      const imageUrls = [];
-      if (photos.length > 0) {
-        for (const photo of photos) {
-          const fileExt = photo.uri.split(".").pop();
-          const fileName = `${user.id}_${Date.now()}.${fileExt}`;
-          const filePath = `community-posts/${fileName}`;
-
-          const response = await fetch(photo.uri);
-          const blob = await response.blob();
-
-          const { data, error: uploadError } = await supabase.storage
-            .from("post-images")
-            .upload(filePath, blob, { contentType: photo.type });
-
-          if (uploadError) {
-            throw new Error(`사진 업로드 실패: ${uploadError.message}`);
-          }
-
-          const { data: urlData } = supabase.storage
-            .from("post-images")
-            .getPublicUrl(data.path);
-          imageUrls.push(urlData.publicUrl);
-        }
+      // 1) 사진이 있으면 업로드
+      const urls = [];
+      for (const photo of photos) {
+        const url = await uploadToSupabase(photo.uri, photo.type);
+        urls.push(url);
       }
 
+      // 2) 게시글 테이블에 삽입
       const { error } = await supabase.from("community_posts").insert({
         title: title.trim(),
         content: content.trim(),
         user_id: user.id,
-        image_urls: imageUrls.length > 0 ? imageUrls : null,
+        image_urls: urls.length ? urls : null,
       });
-
       if (error) throw error;
 
-      Alert.alert("작성 완료", "게시글이 성공적으로 등록되었습니다.");
+      Alert.alert("작성 완료", "게시글이 등록되었습니다.");
       navigation.goBack();
     } catch (err) {
-      Alert.alert(
-        "작성 실패",
-        err.message || "게시글 등록 중 오류가 발생했습니다.",
-      );
+      Alert.alert("작성 실패", err.message);
     } finally {
       setIsLoading(false);
     }
@@ -116,29 +133,28 @@ function CommunityPostCreateScreen() {
       <Text style={styles.pageTitle}>새 게시글 작성</Text>
       <TextInput
         style={styles.input}
-        placeholder="제목을 입력하세요"
+        placeholder="제목"
         value={title}
         onChangeText={setTitle}
         maxLength={100}
       />
       <TextInput
         style={[styles.input, styles.textArea]}
-        placeholder="내용을 입력하세요"
+        placeholder="내용"
         value={content}
         onChangeText={setContent}
         multiline
-        numberOfLines={10}
         textAlignVertical="top"
       />
 
       <Text style={styles.label}>사진 첨부 (최대 3장)</Text>
       <View style={styles.photoContainer}>
-        {photos.map((photo) => (
-          <View key={photo.uri} style={styles.photoWrapper}>
-            <Image source={{ uri: photo.uri }} style={styles.thumbnail} />
+        {photos.map((p) => (
+          <View key={p.uri} style={styles.photoWrapper}>
+            <Image source={{ uri: p.uri }} style={styles.thumbnail} />
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() => handleRemovePhoto(photo.uri)}
+              onPress={() => handleRemovePhoto(p.uri)}
             >
               <Icon name="close-circle" size={24} color="#e74c3c" />
             </TouchableOpacity>
@@ -167,85 +183,50 @@ function CommunityPostCreateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#f8f9fa",
-  },
+  container: { flex: 1, padding: 20, backgroundColor: "#f8f9fa" },
   pageTitle: {
     fontSize: 24,
     fontWeight: "bold",
     textAlign: "center",
-    marginBottom: 25,
+    marginBottom: 20,
     color: "#34495e",
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#495057",
-    marginBottom: 10,
-    marginTop: 15,
   },
   input: {
     borderWidth: 1,
     borderColor: "#ced4da",
-    paddingVertical: 12,
-    paddingHorizontal: 15,
-    marginBottom: 15,
     borderRadius: 8,
-    backgroundColor: "white",
-    fontSize: 16,
-    color: "#212529",
+    padding: 12,
+    marginBottom: 15,
+    backgroundColor: "#fff",
   },
-  textArea: {
-    minHeight: 200,
-    textAlignVertical: "top",
-  },
-  photoContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-  },
+  textArea: { height: 150 },
+  label: { fontSize: 16, fontWeight: "600", marginBottom: 10 },
+  photoContainer: { flexDirection: "row", flexWrap: "wrap" },
   photoWrapper: {
     position: "relative",
-    width: 100,
-    height: 100,
+    width: 80,
+    height: 80,
     marginRight: 10,
     marginBottom: 10,
   },
-  thumbnail: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 8,
-    backgroundColor: "#e9ecef",
-  },
+  thumbnail: { width: "100%", height: "100%", borderRadius: 8 },
   removeButton: {
     position: "absolute",
-    top: -8,
-    right: -8,
-    backgroundColor: "white",
+    top: -6,
+    right: -6,
+    backgroundColor: "#fff",
     borderRadius: 12,
   },
   addButton: {
-    width: 100,
-    height: 100,
+    width: 80,
+    height: 80,
     borderRadius: 8,
-    backgroundColor: "#e9ecef",
-    justifyContent: "center",
-    alignItems: "center",
     borderWidth: 1,
     borderColor: "#ced4da",
     borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  addButtonText: {
-    fontSize: 12,
-    color: "#868e96",
-    marginTop: 4,
-  },
-  buttonContainer: {
-    marginTop: 20,
-    marginBottom: 40,
-  },
+  addButtonText: { fontSize: 12, color: "#868e96", marginTop: 4 },
+  buttonContainer: { marginTop: 20 },
 });
-
-export default CommunityPostCreateScreen;

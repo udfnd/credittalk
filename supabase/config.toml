@@ -1,6 +1,6 @@
 [functions.insert-scammer-report]
 enabled = true
-verify_jwt = false # 수정된 부분
+verify_jwt = true
 import_map = "./functions/insert-scammer-report/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -11,7 +11,7 @@ entrypoint = "./functions/insert-scammer-report/index.ts"
 
 [functions.admin-get-decrypted-report]
 enabled = true
-verify_jwt = false # 수정된 부분
+verify_jwt = true
 import_map = "./functions/admin-get-decrypted-report/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -22,7 +22,7 @@ entrypoint = "./functions/admin-get-decrypted-report/index.ts"
 
 [functions.create-chat-room]
 enabled = true
-verify_jwt = false # 수정된 부분
+verify_jwt = true
 import_map = "./functions/create-chat-room/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx

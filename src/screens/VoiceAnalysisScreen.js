@@ -1,4 +1,5 @@
 // src/screens/VoiceAnalysisScreen.js
+
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -8,14 +9,10 @@ import {
   ActivityIndicator,
   Modal,
   TouchableOpacity,
-  Platform,
 } from "react-native";
 import { pick, isCancel, types } from "@react-native-documents/picker";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { FFmpegKit } from "ffmpeg-kit-react-native";
-import RNFS from "react-native-fs";
-import { Buffer } from "buffer"; // Buffer polyfill import
 
 const ResultModal = ({ isVisible, onClose, result }) => {
   if (!result) return null;
@@ -67,62 +64,53 @@ function VoiceAnalysisScreen({ navigation }) {
 
   const handleFilePickAndAnalyze = useCallback(async () => {
     try {
-      // 1. 파일 선택
+      // --- [디버깅 1] 파일 선택 단계 ---
+      console.log("[DEBUG-CLIENT] 1. 파일 선택 시작...");
       const [res] = await pick({
         type: [types.audio],
       });
 
-      if (!res) return;
+      if (!res) {
+        console.log("[DEBUG-CLIENT] 파일 선택이 취소되었습니다.");
+        return;
+      }
+
+      console.log(
+        "[DEBUG-CLIENT] 1. 파일 선택 완료:",
+        JSON.stringify(res, null, 2),
+      );
 
       setIsLoading(true);
       setResult(null);
-      setLoadingMessage("오디오 파일 변환 중...");
 
-      const originalUri = res.uri;
-      const outputName = `${Date.now()}.wav`;
-      const outputPath = `${RNFS.CachesDirectoryPath}/${outputName}`;
+      const file = {
+        uri: res.uri,
+        type: res.type,
+        name: res.name,
+      };
 
-      // 2. FFmpeg를 사용하여 WAV로 변환
-      console.log(`[FFmpeg] 변환 시작: ${originalUri} -> ${outputPath}`);
-      const session = await FFmpegKit.execute(
-        `-y -i "${originalUri}" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`,
+      const fileExt = res.name.split(".").pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `voice-files/${fileName}`;
+
+      // --- [디버깅 2] 파일 업로드 단계 ---
+      console.log(
+        `[DEBUG-CLIENT] 2. Supabase Storage에 파일 업로드 시작... (경로: ${filePath})`,
       );
-      const returnCode = await session.getReturnCode();
-
-      if (!returnCode.isValueSuccess()) {
-        const logs = await session.getOutput();
-        throw new Error(`FFmpeg 변환 실패. 로그: ${logs}`);
-      }
-      console.log("[FFmpeg] 변환 성공.");
-
-      // 3. 변환된 WAV 파일 Supabase에 업로드
       setLoadingMessage("파일 업로드 중...");
-      const filePath = `voice-files/${outputName}`;
-
-      // --- [핵심 수정] ---
-      // RNFS로 읽는 대신, fetch API를 사용하여 파일을 Blob으로 만듭니다.
-      // 이것이 다른 화면에서도 사용된 가장 안정적인 방식입니다.
-      const fileUriForUpload =
-        Platform.OS === "android" ? `file://${outputPath}` : outputPath;
-      const response = await fetch(fileUriForUpload);
-      const blob = await response.blob();
-
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("voice-analysis")
-        .upload(filePath, blob, {
-          contentType: "audio/wav",
-          upsert: true, // 덮어쓰기 허용
-        });
+        .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
-      console.log("[Supabase] 파일 업로드 성공:", uploadData.path);
+      if (uploadError) {
+        throw uploadError;
+      }
+      console.log("[DEBUG-CLIENT] 2. 파일 업로드 성공:", uploadData.path);
 
-      // 업로드 후 변환된 로컬 파일 삭제
-      await RNFS.unlink(outputPath);
-      console.log(`[Local] 임시 파일 삭제 완료: ${outputPath}`);
-
-      // 4. Supabase Edge Function 호출
+      // --- [디버깅 3] Edge Function 호출 단계 ---
+      console.log("[DEBUG-CLIENT] 3. 'analyze-audio-file' 함수 호출 시작...");
       setLoadingMessage("AI가 통화 내용을 분석 중입니다...");
+
       const { data: functionData, error: functionError } =
         await supabase.functions.invoke("analyze-audio-file", {
           body: { filePath },
@@ -135,16 +123,20 @@ function VoiceAnalysisScreen({ navigation }) {
       }
 
       console.log(
-        "[Supabase] 함수 호출 성공. 분석 결과:",
+        "[DEBUG-CLIENT] 3. 함수 호출 성공. 분석 결과:",
         JSON.stringify(functionData, null, 2),
       );
+
       setResult(functionData);
       setIsModalVisible(true);
     } catch (err) {
       if (isCancel(err)) {
-        console.log("파일 선택이 사용자에 의해 취소되었습니다.");
+        console.log("[DEBUG-CLIENT] 파일 선택이 사용자에 의해 취소되었습니다.");
       } else {
-        console.error("분석 과정 중 에러 발생:", err);
+        console.error(
+          "[DEBUG-CLIENT] 에러 발생:",
+          JSON.stringify(err, null, 2),
+        );
         Alert.alert("오류 발생", err.message);
       }
     } finally {

@@ -12,14 +12,16 @@ import {
   Keyboard,
   TouchableOpacity,
   Image,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
+import RNBlobUtil from "react-native-blob-util"; // ✅ react-native-blob-util
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
-function NewCrimeCaseCreateScreen() {
+export default function NewCrimeCaseCreateScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
 
@@ -27,6 +29,7 @@ function NewCrimeCaseCreateScreen() {
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 사진 선택 핸들러
   const handleChoosePhotos = () => {
     const selectionLimit = 3 - photos.length;
     if (selectionLimit <= 0) {
@@ -41,16 +44,55 @@ function NewCrimeCaseCreateScreen() {
         if (response.errorCode) {
           Alert.alert("오류", `사진 선택 오류: ${response.errorMessage}`);
         } else if (response.assets && response.assets.length > 0) {
-          setPhotos((prevPhotos) => [...prevPhotos, ...response.assets]);
+          setPhotos((prev) => [...prev, ...response.assets]);
         }
       },
     );
   };
 
+  // 사진 제거 핸들러
   const handleRemovePhoto = (uri) => {
-    setPhotos((prevPhotos) => prevPhotos.filter((photo) => photo.uri !== uri));
+    setPhotos((prev) => prev.filter((photo) => photo.uri !== uri));
   };
 
+  /**
+   * 로컬 URI -> Blob-like 객체 생성
+   * Android의 content:// URI 처리
+   */
+  const uriToBlob = async (uri) => {
+    let filePath = uri;
+    if (Platform.OS === "android" && uri.startsWith("content://")) {
+      const stat = await RNBlobUtil.fs.stat(uri);
+      filePath = stat.path;
+    }
+    return RNBlobUtil.wrap(filePath);
+  };
+
+  /**
+   * Blob-like 객체 업로드 후 publicUrl 반환
+   */
+  const uploadToSupabase = async (uri, mimeType) => {
+    // 1) Blob-like 객체 생성
+    const blob = await uriToBlob(uri);
+    // 2) 파일명/경로 구성
+    const ext = mimeType.split("/")[1] || "jpg";
+    const fileName = `${user.id}_${Date.now()}.${ext}`;
+    const storagePath = `new-crime-cases/${fileName}`;
+
+    // 3) Supabase Storage 업로드
+    const { data, error } = await supabase.storage
+      .from("post-images")
+      .upload(storagePath, blob, { contentType: mimeType });
+    if (error) throw new Error(`사진 업로드 실패: ${error.message}`);
+
+    // 4) 퍼블릭 URL 얻기
+    const { publicUrl } = supabase.storage
+      .from("post-images")
+      .getPublicUrl(storagePath);
+    return publicUrl;
+  };
+
+  // 폼 제출 핸들러
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!method.trim()) {
@@ -64,40 +106,19 @@ function NewCrimeCaseCreateScreen() {
 
     setIsLoading(true);
     try {
+      // 1) 사진이 있으면 업로드
       const imageUrls = [];
-      if (photos.length > 0) {
-        for (const photo of photos) {
-          const fileExt = photo.uri.split(".").pop();
-          const fileName = `${user.id}_${Date.now()}.${fileExt}`;
-          // --- START: 수정된 부분 ---
-          // 업로드 경로를 'community-posts/'로 변경하여 기존 정책을 활용합니다.
-          const filePath = `community-posts/${fileName}`;
-          // --- END: 수정된 부분 ---
-
-          const response = await fetch(photo.uri);
-          const blob = await response.blob();
-
-          const { data, error: uploadError } = await supabase.storage
-            .from("post-images")
-            .upload(filePath, blob, { contentType: photo.type });
-
-          if (uploadError) {
-            throw new Error(`사진 업로드 실패: ${uploadError.message}`);
-          }
-
-          const { data: urlData } = supabase.storage
-            .from("post-images")
-            .getPublicUrl(data.path);
-          imageUrls.push(urlData.publicUrl);
-        }
+      for (const photo of photos) {
+        const url = await uploadToSupabase(photo.uri, photo.type);
+        imageUrls.push(url);
       }
 
+      // 2) 데이터베이스에 삽입
       const { error } = await supabase.from("new_crime_cases").insert({
         method: method.trim(),
         user_id: user.id,
         image_urls: imageUrls.length > 0 ? imageUrls : null,
       });
-
       if (error) throw error;
 
       Alert.alert("작성 완료", "사례가 성공적으로 등록되었습니다.");
@@ -240,5 +261,3 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
 });
-
-export default NewCrimeCaseCreateScreen;
