@@ -1,3 +1,4 @@
+// App.tsx
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
@@ -24,8 +25,6 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import NaverLogin from "@react-native-seoul/naver-login";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import { supabase } from "./src/lib/supabaseClient";
-// 추가된 부분: react-native-safe-area-context에서 필요한 모듈을 가져옵니다.
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -65,6 +64,7 @@ import HelpDeskListScreen from "./src/screens/HelpDeskListScreen";
 import HelpDeskCreateScreen from "./src/screens/HelpDeskCreateScreen";
 import HelpDeskDetailScreen from "./src/screens/HelpDeskDetailScreen";
 import AdditionalInfoScreen from "./src/screens/AdditionalInfoScreen";
+import NewCrimeCaseDetailScreen from "./src/screens/NewCrimeCaseDetailScreen"; // 새로 추가될 스크린
 
 const linking = {
   prefixes: ["credittalk://"],
@@ -104,6 +104,7 @@ export type RootStackParamList = {
   IncidentPhotoList: undefined;
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
   NewCrimeCaseList: undefined;
+  NewCrimeCaseDetail: { caseId: number }; // 새로 추가
   NewCrimeCaseCreate: undefined;
   VoiceAnalysis: undefined;
   FindEmail: undefined;
@@ -319,6 +320,11 @@ function AppNavigator() {
             name="NewCrimeCaseList"
             component={NewCrimeCaseListScreen}
             options={{ title: "신종범죄 피해사례" }}
+          />
+          <RootStack.Screen
+            name="NewCrimeCaseDetail"
+            component={NewCrimeCaseDetailScreen}
+            options={{ title: "신종범죄 사례 상세" }}
           />
           <RootStack.Screen
             name="NewCrimeCaseCreate"
