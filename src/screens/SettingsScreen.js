@@ -57,7 +57,7 @@ function SettingsScreen() {
       id: "notices",
       title: "공지사항",
       icon: "bullhorn-outline",
-      screen: "Notices",
+      screen: "NoticeList",
     },
     {
       id: "reportScam",
@@ -69,7 +69,7 @@ function SettingsScreen() {
       id: "community",
       title: "피해 사례 공유",
       icon: "account-group-outline",
-      screen: "Community",
+      screen: "CommunityTab",
     },
     {
       id: "helpCenter",
