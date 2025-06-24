@@ -492,16 +492,33 @@ CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
     "public"."decrypt_secret"("r"."name") AS "name",
     "public"."decrypt_secret_array"("r"."phone_numbers") AS "phone_numbers",
     "public"."decrypt_secret"("r"."account_number") AS "account_number",
-    "r"."bank_name",
-    "r"."site_name",
+    "public"."decrypt_secret"("r"."impersonated_phone_number") AS "impersonated_phone_number",
     "r"."category",
     "r"."description",
-    "r"."nickname",
-    "r"."gender",
+    "r"."ip_address",
     "r"."company_type",
     "r"."scam_report_source",
+    "r"."nickname",
     "r"."victim_circumstances",
-    "r"."impersonated_person"
+    "r"."traded_item_category",
+    "r"."perpetrator_identified",
+    "r"."analysis_result",
+    "r"."analysis_message",
+    "r"."analyzed_at",
+    "r"."analyzer_id",
+    "r"."gender",
+    "r"."reporter_id",
+    "r"."attempted_fraud",
+    "r"."damage_path",
+    "r"."damaged_item",
+    "r"."impersonated_person",
+    "r"."nickname_evidence_url",
+    "r"."illegal_collection_evidence_urls",
+    "r"."bank_name",
+    "r"."site_name",
+    "r"."is_cash_transaction",
+    "r"."traded_item_image_urls",
+    "r"."detailed_crime_type"
    FROM "public"."scammer_reports" "r";
 
 
@@ -699,7 +716,8 @@ CREATE TABLE IF NOT EXISTS "public"."community_posts" (
     "content" "text",
     "user_id" "uuid" NOT NULL,
     "category" "text",
-    "views" bigint DEFAULT 0
+    "views" bigint DEFAULT 0,
+    "image_urls" "text"[]
 );
 
 
@@ -726,6 +744,7 @@ CREATE OR REPLACE VIEW "public"."community_posts_with_author_profile" AS
     "cp"."user_id" AS "author_auth_id",
     "cp"."category",
     "cp"."views",
+    "cp"."image_urls",
     "u"."name" AS "author_name",
     "u"."phone_number" AS "author_phone_number",
     "u"."job_type" AS "author_job_type"
@@ -865,7 +884,8 @@ CREATE TABLE IF NOT EXISTS "public"."new_crime_cases" (
     "user_id" "uuid",
     "method" "text" NOT NULL,
     "is_published" boolean DEFAULT true NOT NULL,
-    "views" bigint DEFAULT 0
+    "views" bigint DEFAULT 0,
+    "image_urls" "text"[]
 );
 
 
@@ -906,7 +926,9 @@ CREATE TABLE IF NOT EXISTS "public"."notices" (
     "content" "text",
     "author_name" "text",
     "is_published" boolean DEFAULT true,
-    "views" bigint DEFAULT 0
+    "views" bigint DEFAULT 0,
+    "image_url" "text",
+    "link_url" "text"
 );
 
 
