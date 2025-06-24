@@ -69,7 +69,10 @@ function NewCrimeCaseCreateScreen() {
         for (const photo of photos) {
           const fileExt = photo.uri.split(".").pop();
           const fileName = `${user.id}_${Date.now()}.${fileExt}`;
-          const filePath = `new-crime-cases/${fileName}`;
+          // --- START: 수정된 부분 ---
+          // 업로드 경로를 'community-posts/'로 변경하여 기존 정책을 활용합니다.
+          const filePath = `community-posts/${fileName}`;
+          // --- END: 수정된 부분 ---
 
           const response = await fetch(photo.uri);
           const blob = await response.blob();

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/screens/NoticeDetailScreen.js
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,9 +7,15 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { supabase } from '../lib/supabaseClient';
+  Image,
+  Dimensions,
+  Linking,
+  Alert,
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { supabase } from "../lib/supabaseClient";
+
+const { width } = Dimensions.get("window");
 
 function NoticeDetailScreen({ route, navigation }) {
   const { noticeId, noticeTitle } = route.params;
@@ -27,22 +34,24 @@ function NoticeDetailScreen({ route, navigation }) {
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
-        .from('notices')
-        .select('id, title, content, created_at, author_name')
-        .eq('id', noticeId)
-        .eq('is_published', true)
+        .from("notices")
+        .select(
+          "id, title, content, created_at, author_name, image_url, link_url",
+        )
+        .eq("id", noticeId)
+        .eq("is_published", true)
         .single();
 
       if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
+        if (fetchError.code === "PGRST116") {
           // Not found
-          throw new Error('공지사항을 찾을 수 없거나 접근 권한이 없습니다.');
+          throw new Error("공지사항을 찾을 수 없거나 접근 권한이 없습니다.");
         }
         throw fetchError;
       }
       setNotice(data);
     } catch (err) {
-      setError(err.message || '공지사항 상세 정보를 불러오는데 실패했습니다.');
+      setError(err.message || "공지사항 상세 정보를 불러오는데 실패했습니다.");
     } finally {
       setIsLoading(false);
     }
@@ -51,6 +60,14 @@ function NoticeDetailScreen({ route, navigation }) {
   useEffect(() => {
     fetchNoticeDetail();
   }, [fetchNoticeDetail]);
+
+  const handleLinkPress = () => {
+    if (notice?.link_url) {
+      Linking.openURL(notice.link_url).catch(() =>
+        Alert.alert("오류", "링크를 열 수 없습니다."),
+      );
+    }
+  };
 
   if (isLoading) {
     return (
@@ -84,21 +101,42 @@ function NoticeDetailScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>{notice.title}</Text>
-      <View style={styles.metaContainer}>
-        {notice.author_name && (
-          <Text style={styles.author}>작성자: {notice.author_name}</Text>
-        )}
-        <Text style={styles.date}>
-          게시일: {new Date(notice.created_at).toLocaleDateString()}
-        </Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainerScrollView}
+    >
+      <View style={styles.header}>
+        <Text style={styles.title}>{notice.title}</Text>
+        <View style={styles.metaContainer}>
+          {notice.author_name && (
+            <Text style={styles.author}>작성자: {notice.author_name}</Text>
+          )}
+          <Text style={styles.date}>
+            게시일: {new Date(notice.created_at).toLocaleDateString()}
+          </Text>
+        </View>
       </View>
-      <View style={styles.contentContainer}>
+
+      {notice.image_url && (
+        <Image
+          source={{ uri: notice.image_url }}
+          style={styles.mainImage}
+          resizeMode="contain"
+        />
+      )}
+
+      <View style={styles.contentWrapper}>
         <Text style={styles.content}>
-          {notice.content || '내용이 없습니다.'}
+          {notice.content || "내용이 없습니다."}
         </Text>
       </View>
+
+      {notice.link_url && (
+        <TouchableOpacity style={styles.linkButton} onPress={handleLinkPress}>
+          <Icon name="link-variant" size={20} color="white" />
+          <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -106,65 +144,93 @@ function NoticeDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   centered: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
+    backgroundColor: "#fff",
   },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
+  },
+  contentContainerScrollView: {
     padding: 20,
+  },
+  header: {
+    marginBottom: 20,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2c3e50',
+    fontWeight: "bold",
+    color: "#2c3e50",
     marginBottom: 10,
   },
   metaContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#ecf0f1',
+    borderBottomColor: "#ecf0f1",
   },
   author: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: "#7f8c8d",
   },
   date: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: "#7f8c8d",
   },
-  contentContainer: {
-    // marginTop: 10,
+  mainImage: {
+    width: "100%",
+    height: width * 0.6,
+    borderRadius: 8,
+    marginBottom: 20,
+    backgroundColor: "#e9ecef",
+  },
+  contentWrapper: {
+    marginTop: 10,
   },
   content: {
     fontSize: 16,
     lineHeight: 26,
-    color: '#34495e',
-    textAlign: 'justify',
+    color: "#34495e",
+    textAlign: "justify",
+  },
+  linkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 30,
+    backgroundColor: "#3d5afe",
+    borderRadius: 8,
+    paddingVertical: 14,
+    elevation: 2,
+  },
+  linkButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
   },
   errorText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#e74c3c',
-    textAlign: 'center',
+    color: "#e74c3c",
+    textAlign: "center",
   },
   emptyText: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: "#7f8c8d",
   },
   retryButton: {
     marginTop: 20,
-    backgroundColor: '#3d5afe',
+    backgroundColor: "#3d5afe",
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 5,
   },
   retryButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
   },
 });
