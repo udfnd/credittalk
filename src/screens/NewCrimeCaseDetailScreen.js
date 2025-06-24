@@ -86,7 +86,10 @@ function NewCrimeCaseDetailScreen({ route }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+    >
       <View style={styles.header}>
         <Text style={styles.label}>범죄 수법</Text>
         <Text style={styles.date}>
@@ -97,19 +100,20 @@ function NewCrimeCaseDetailScreen({ route }) {
         <Text style={styles.content}>{caseDetail.method}</Text>
       </View>
 
-      {caseDetail.image_urls && caseDetail.image_urls.length > 0 && (
-        <View style={styles.imageSection}>
-          <Text style={styles.label}>첨부 사진</Text>
-          {caseDetail.image_urls.map((url, index) => (
-            <Image
-              key={index}
-              source={{ uri: url }}
-              style={styles.image}
-              resizeMode="contain"
-            />
-          ))}
-        </View>
-      )}
+      {Array.isArray(caseDetail.image_urls) &&
+        caseDetail.image_urls.length > 0 && (
+          <View style={styles.imageSection}>
+            <Text style={styles.label}>첨부 사진</Text>
+            {caseDetail.image_urls.map((url, index) => (
+              <Image
+                key={index}
+                source={{ uri: url }}
+                style={styles.image}
+                resizeMode="contain"
+              />
+            ))}
+          </View>
+        )}
     </ScrollView>
   );
 }
@@ -125,6 +129,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  scrollContent: {
     padding: 20,
   },
   header: {

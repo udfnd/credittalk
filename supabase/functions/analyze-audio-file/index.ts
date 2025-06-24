@@ -94,7 +94,7 @@ const PHISHING_KEYWORDS = [
   "핑돈",
   "성매매",
   "영상 퍼뜨리겠다",
-  "현김수거책",
+  "현금수거책",
   "고수익알바",
   "통장 잠군다",
   "계좌 묶는다",
@@ -178,55 +178,47 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 async function analyzeAudio(filePath: string) {
-  console.log(
-    `[DEBUG-SERVER] 1. analyzeAudio 함수 시작. filePath: ${filePath}`,
-  );
+  console.log(`[SERVER] 1. analyzeAudio 함수 시작 (filePath: ${filePath})`);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const gcpProjectId = Deno.env.get("GCP_PROJECT_ID")!;
   const googleCredentialsJson = Deno.env.get("GOOGLE_CREDENTIALS")!;
   const location = "asia-northeast1";
+  // --- [수정된 부분] 인식기 ID를 다시 사용합니다. ---
   const recognizerId = "creditalk-recognizer";
   const bucketName = "voice-analysis";
 
-  // 1. Supabase Admin 클라이언트로 파일 다운로드
-  console.log("[DEBUG-SERVER] 2. Supabase Storage에서 파일 다운로드 시도...");
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
   const { data: blob, error: downloadError } = await supabaseAdmin.storage
     .from(bucketName)
     .download(filePath);
 
-  if (downloadError) {
-    console.error("[DEBUG-SERVER] 2-1. 파일 다운로드 에러:", downloadError);
+  if (downloadError)
     throw new Error(`Storage download error: ${downloadError.message}`);
-  }
-  if (!blob) {
-    console.error("[DEBUG-SERVER] 2-1. 파일이 스토리지에 존재하지 않음.");
-    throw new Error("File not found in storage.");
-  }
-  console.log("[DEBUG-SERVER] 2. 파일 다운로드 성공. Blob size:", blob.size);
+  if (!blob) throw new Error("File not found in storage.");
 
   const audioArrayBuffer = await blob.arrayBuffer();
   const audioBase64 = arrayBufferToBase64(audioArrayBuffer);
   console.log(
-    "[DEBUG-SERVER] 2-2. 오디오 파일을 Base64로 인코딩 완료. Length:",
-    audioBase64.length,
+    `[SERVER] 2. 파일 다운로드 및 Base64 인코딩 완료 (Size: ${blob.size})`,
   );
 
-  // 2. 서비스 계정으로 Access Token 발급
-  console.log("[DEBUG-SERVER] 3. Google Cloud Access Token 발급 시도...");
   const accessToken = await getAccessToken(googleCredentialsJson);
-  console.log("[DEBUG-SERVER] 3. Access Token 발급 성공.");
+  console.log("[SERVER] 3. Google Cloud Access Token 발급 성공.");
 
-  // 3. Google STT API에 요청
   const requestBody = {
+    config: {
+      autoDecodingConfig: {},
+      features: {
+        enableAutomaticPunctuation: true,
+      },
+    },
     content: audioBase64,
-    config: { features: { enableAutomaticPunctuation: true } },
   };
 
   const apiUrl = `https://${location}-speech.googleapis.com/v2/projects/${gcpProjectId}/locations/${location}/recognizers/${recognizerId}:recognize`;
-  console.log(`[DEBUG-SERVER] 4. Google STT API 요청 전송. URL: ${apiUrl}`);
+  console.log(`[SERVER] 4. Google STT API 요청 전송. (URL: ${apiUrl})`);
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -239,34 +231,33 @@ async function analyzeAudio(filePath: string) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("[DEBUG-SERVER] 4-1. STT API 에러 응답:", errorText);
+    console.error("[SERVER] 4-1. STT API 에러:", errorText);
     throw new Error(`Google STT API V2 Error: ${response.status} ${errorText}`);
   }
-  console.log("[DEBUG-SERVER] 4. STT API 요청 성공. Status:", response.status);
 
   const data = await response.json();
   const transcribedText =
     data.results
       ?.map((result: any) => result.alternatives[0].transcript)
       .join("\n") || "";
-  console.log("[DEBUG-SERVER] 5. 텍스트 변환 결과:", transcribedText);
+  console.log("[SERVER] 5. 텍스트 변환 결과:", transcribedText);
 
-  // 4. 분석 후 파일 삭제
-  console.log(`[DEBUG-SERVER] 6. 분석 완료된 파일 삭제 시도: ${filePath}`);
   const { error: removeError } = await supabaseAdmin.storage
     .from(bucketName)
     .remove([filePath]);
   if (removeError) {
-    console.error("[DEBUG-SERVER] 6-1. 파일 삭제 에러:", removeError.message);
-    // 참고: 파일 삭제 실패는 치명적이지 않으므로 에러를 던지지 않고 로그만 남길 수 있습니다.
+    console.error(
+      `[SERVER] 6-1. 파일 삭제 에러: ${filePath}`,
+      removeError.message,
+    );
   } else {
-    console.log("[DEBUG-SERVER] 6. 파일 삭제 성공.");
+    console.log(`[SERVER] 6. 파일 삭제 성공: ${filePath}`);
   }
 
   const detectedKeywords = PHISHING_KEYWORDS.filter((keyword) =>
     transcribedText.includes(keyword),
   );
-  console.log("[DEBUG-SERVER] 7. 키워드 분석 결과:", detectedKeywords);
+  console.log("[SERVER] 7. 키워드 분석 결과:", detectedKeywords);
 
   return {
     detected: detectedKeywords.length > 0,
@@ -282,32 +273,6 @@ serve(async (req) => {
 
   try {
     const { filePath } = await req.json();
-    console.log("[DEBUG-SERVER] 함수 시작. 요청 body:", { filePath });
-    if (!filePath) throw new Error("Missing 'filePath' in request body");
-
-    const analysisResult = await analyzeAudio(filePath);
-
-    console.log("[DEBUG-SERVER] 최종 분석 결과 반환:", analysisResult);
-    return new Response(JSON.stringify(analysisResult), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
-  } catch (error) {
-    console.error("[DEBUG-SERVER] 핸들러 전체 에러:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
-    });
-  }
-});
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  try {
-    const { filePath } = await req.json();
     if (!filePath) throw new Error("Missing 'filePath' in request body");
 
     const analysisResult = await analyzeAudio(filePath);
@@ -317,7 +282,7 @@ serve(async (req) => {
       status: 200,
     });
   } catch (error) {
-    console.error("Error in main SYNC handler:", error);
+    console.error("[SERVER] 최종 에러:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,
