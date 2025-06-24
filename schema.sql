@@ -129,6 +129,28 @@ END;$$;
 ALTER FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[]) RETURNS "text"[]
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  decrypted_array text[];
+  item bytea;
+BEGIN
+  IF encrypted_array IS NULL THEN
+    RETURN NULL;
+  END IF;
+  FOREACH item IN ARRAY encrypted_array
+  LOOP
+    decrypted_array := array_append(decrypted_array, decrypt_secret(item));
+  END LOOP;
+  RETURN decrypted_array;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[]) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."encrypt_secret"("data" "text") RETURNS "bytea"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -172,6 +194,22 @@ $$;
 ALTER FUNCTION "public"."encrypt_secret"("data" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."find_email_by_profile"("p_name" "text", "p_phone_number" "text") RETURNS TABLE("email" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  RETURN QUERY
+  SELECT u_auth.email
+  FROM public.users u_profile
+  JOIN auth.users u_auth ON u_profile.auth_user_id = u_auth.id
+  WHERE u_profile.name = p_name AND u_profile.phone_number = p_phone_number;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."find_email_by_profile"("p_name" "text", "p_phone_number" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") RETURNS TABLE("room_id" "uuid")
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -204,7 +242,7 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "id" bigint NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "name" "bytea",
-    "phone_number" "bytea",
+    "phone_numbers" "bytea"[],
     "account_number" "bytea",
     "category" "text" NOT NULL,
     "description" "text",
@@ -230,7 +268,9 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "bank_name" "text",
     "site_name" "text",
     "is_cash_transaction" boolean DEFAULT false,
-    CONSTRAINT "scammer_reports_category_check" CHECK (("category" = ANY (ARRAY['보이스피싱, 전기통신금융사기, 로맨스 스캠 사기'::"text", '불법사금융'::"text", '중고물품 사기'::"text", '투자 사기, 전세 사기'::"text", '게임 비실물'::"text", '암호화폐'::"text", '노쇼'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text", '기타'::"text"]))),
+    "traded_item_image_urls" "text"[],
+    "impersonated_phone_number" "bytea",
+    "detailed_crime_type" "text",
     CONSTRAINT "scammer_reports_company_type_check" CHECK (("company_type" = ANY (ARRAY['사업자'::"text", '개인'::"text"]))),
     CONSTRAINT "scammer_reports_gender_check" CHECK (("gender" = ANY (ARRAY['남성'::"text", '여성'::"text", '모름'::"text"])))
 );
@@ -249,7 +289,7 @@ COMMENT ON COLUMN "public"."scammer_reports"."name" IS '신고 대상 이름 (pg
 
 
 
-COMMENT ON COLUMN "public"."scammer_reports"."phone_number" IS '신고 대상 연락처 (pgcrypto AES-256 암호화)';
+COMMENT ON COLUMN "public"."scammer_reports"."phone_numbers" IS '신고 대상 연락처 (pgcrypto AES-256 암호화)';
 
 
 
@@ -274,6 +314,18 @@ COMMENT ON COLUMN "public"."scammer_reports"."analyzer_id" IS '분석 수행 관
 
 
 COMMENT ON COLUMN "public"."scammer_reports"."reporter_id" IS '신고를 작성한 사용자의 ID (auth.users.id)';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."traded_item_image_urls" IS '거래물품 증빙 사진 URL 목록';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."impersonated_phone_number" IS '사칭된 연락처 (pgcrypto AES-256 암호화)';
+
+
+
+COMMENT ON COLUMN "public"."scammer_reports"."detailed_crime_type" IS '세부 피해 종류';
 
 
 
@@ -331,12 +383,15 @@ BEGIN
   -- 예: IF NOT is_admin(auth.uid()) THEN RAISE EXCEPTION 'Forbidden: Admin privileges required.'; END IF;
 
   SELECT
-    r.id, r.user_id, r.created_at,
+    r.id, 
+    r.reporter_id, -- `user_id` 대신 `reporter_id`가 올바른 컬럼명인 것 같습니다. 스키마를 확인하세요.
+    r.created_at,
     decrypt_secret(r.name) AS name,
-    decrypt_secret(r.phone_number) AS phone_number,
-    decrypt_secret(r.national_id) AS national_id, -- !!! 극도의 주의 !!!
+    decrypt_secret(r.phone_numbers) AS phone_numbers,
     decrypt_secret(r.account_number) AS account_number,
-    r.category, r.description, r.ip_address
+    r.category, 
+    r.description, 
+    r.ip_address
   INTO result
   FROM public.scammer_reports r
   WHERE r.id = report_id_input;
@@ -433,24 +488,20 @@ ALTER FUNCTION "public"."update_room_last_message_at"() OWNER TO "postgres";
 
 CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
  SELECT "r"."id",
+    "r"."created_at",
     "public"."decrypt_secret"("r"."name") AS "name",
-    "public"."decrypt_secret"("r"."phone_number") AS "phone_number",
+    "public"."decrypt_secret_array"("r"."phone_numbers") AS "phone_numbers",
     "public"."decrypt_secret"("r"."account_number") AS "account_number",
     "r"."bank_name",
     "r"."site_name",
     "r"."category",
     "r"."description",
-    "r"."ip_address",
-    "r"."company_type",
-    "r"."scam_report_source",
     "r"."nickname",
     "r"."gender",
-    "r"."perpetrator_identified",
-    "r"."created_at",
-    "r"."analysis_result",
-    "r"."analysis_message",
-    "r"."analyzed_at",
-    "r"."analyzer_id"
+    "r"."company_type",
+    "r"."scam_report_source",
+    "r"."victim_circumstances",
+    "r"."impersonated_person"
    FROM "public"."scammer_reports" "r";
 
 
@@ -548,11 +599,12 @@ CREATE TABLE IF NOT EXISTS "public"."users" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "name" "text",
     "phone_number" "text",
-    "national_id" "text",
     "job_type" "text" NOT NULL,
     "auth_user_id" "uuid",
     "is_admin" boolean DEFAULT false,
     "naver_id" "text",
+    "nickname" "text",
+    CONSTRAINT "nickname_length_check" CHECK ((("char_length"("nickname") >= 2) AND ("char_length"("nickname") <= 20))),
     CONSTRAINT "users_job_type_check" CHECK (("job_type" = ANY (ARRAY['일반'::"text", '사업자'::"text"])))
 );
 
@@ -789,7 +841,7 @@ CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
  SELECT "sr"."id",
     "public"."decrypt_secret"("sr"."name") AS "name",
     "sr"."nickname",
-    "public"."decrypt_secret"("sr"."phone_number") AS "phone_number",
+    "public"."decrypt_secret_array"("sr"."phone_numbers") AS "phone_numbers",
     "public"."decrypt_secret"("sr"."account_number") AS "account_number",
     "sr"."bank_name",
     "sr"."site_name",
@@ -801,7 +853,7 @@ CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
     "sr"."created_at",
     "sr"."company_type",
     "sr"."scam_report_source"
-   FROM "public"."get_allowed_scammer_reports_for_user"() "sr"("id", "created_at", "name", "phone_number", "account_number", "category", "description", "ip_address", "company_type", "scam_report_source", "nickname", "victim_circumstances", "traded_item_category", "perpetrator_identified", "analysis_result", "analysis_message", "analyzed_at", "analyzer_id", "gender", "reporter_id", "attempted_fraud", "damage_path", "damaged_item", "impersonated_person", "nickname_evidence_url", "illegal_collection_evidence_urls", "bank_name", "site_name");
+   FROM "public"."get_allowed_scammer_reports_for_user"() "sr"("id", "created_at", "name", "phone_numbers", "account_number", "category", "description", "ip_address", "company_type", "scam_report_source", "nickname", "victim_circumstances", "traded_item_category", "perpetrator_identified", "analysis_result", "analysis_message", "analyzed_at", "analyzer_id", "gender", "reporter_id", "attempted_fraud", "damage_path", "damaged_item", "impersonated_person", "nickname_evidence_url", "illegal_collection_evidence_urls", "bank_name", "site_name", "is_cash_transaction", "traded_item_image_urls", "impersonated_phone_number", "detailed_crime_type");
 
 
 ALTER TABLE "public"."masked_scammer_reports" OWNER TO "postgres";
@@ -1061,6 +1113,11 @@ ALTER TABLE ONLY "public"."users"
 
 ALTER TABLE ONLY "public"."users"
     ADD CONSTRAINT "users_naver_id_key" UNIQUE ("naver_id");
+
+
+
+ALTER TABLE ONLY "public"."users"
+    ADD CONSTRAINT "users_nickname_key" UNIQUE ("nickname");
 
 
 
@@ -1549,9 +1606,21 @@ GRANT ALL ON FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") TO "se
 
 
 
+GRANT ALL ON FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[]) TO "anon";
+GRANT ALL ON FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[]) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."find_email_by_profile"("p_name" "text", "p_phone_number" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."find_email_by_profile"("p_name" "text", "p_phone_number" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."find_email_by_profile"("p_name" "text", "p_phone_number" "text") TO "service_role";
 
 
 
@@ -1571,7 +1640,7 @@ GRANT INSERT("name"),UPDATE("name") ON TABLE "public"."scammer_reports" TO "auth
 
 
 
-GRANT INSERT("phone_number"),UPDATE("phone_number") ON TABLE "public"."scammer_reports" TO "authenticated";
+GRANT INSERT("phone_numbers"),UPDATE("phone_numbers") ON TABLE "public"."scammer_reports" TO "authenticated";
 
 
 
