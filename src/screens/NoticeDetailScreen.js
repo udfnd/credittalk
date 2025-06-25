@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 26,
     color: "#34495e",
-    textAlign: "justify",
+    textAlign: "left",
   },
   linkButton: {
     flexDirection: "row",

@@ -17,7 +17,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
-import RNBlobUtil from "react-native-blob-util";
+import RNBlobUtil from "react-native-blob-util"; // 파일 래핑
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -29,7 +29,6 @@ export default function CommunityPostCreateScreen() {
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 사진 선택
   const handleChoosePhotos = () => {
     const limit = 3 - photos.length;
     if (limit <= 0) {
@@ -43,53 +42,57 @@ export default function CommunityPostCreateScreen() {
         if (res.errorCode) {
           Alert.alert("오류", `사진 선택 오류: ${res.errorMessage}`);
         } else if (res.assets) {
-          setPhotos((p) => [...p, ...res.assets]);
+          setPhotos((prev) => [...prev, ...res.assets]);
         }
       },
     );
   };
 
-  // 사진 삭제
   const handleRemovePhoto = (uri) =>
-    setPhotos((p) => p.filter((x) => x.uri !== uri));
+    setPhotos((prev) => prev.filter((p) => p.uri !== uri));
 
   /**
-   * 로컬 URI → Blob-like 객체 생성
-   * Android content:// URI 는 fs.stat 으로 변환
+   * 로컬 URI를 네이티브 파일 경로로 변환
    */
-  const uriToBlob = async (uri) => {
-    let filePath = uri;
+  const getFilePath = async (uri) => {
     if (Platform.OS === "android" && uri.startsWith("content://")) {
       const stat = await RNBlobUtil.fs.stat(uri);
-      filePath = stat.path;
+      return stat.path;
     }
-    return RNBlobUtil.wrap(filePath);
+    if (uri.startsWith("file://")) {
+      return uri.replace("file://", "");
+    }
+    return uri;
   };
 
-  // Supabase 업로드 유틸
-  const uploadToSupabase = async (uri, mimeType) => {
-    // 1) Blob-like 생성
-    const blob = await uriToBlob(uri);
+  /**
+   * Supabase에 파일 업로드 (RNBlobUtil.wrap 사용)
+   */
+  const uploadToSupabase = async (photo) => {
+    let path = await getFilePath(photo.uri);
+    // RNBlobUtil.wrap으로 파일 객체 래핑
+    const fileWrapper = RNBlobUtil.wrap(path);
 
-    // 2) 파일명·경로 구성 (보안상 user.id 등으로 고유명 부여)
-    const ext = mimeType.split("/")[1] || "jpg";
+    const ext = photo.type.split("/")[1] || "jpg";
     const fileName = `${user.id}_${Date.now()}.${ext}`;
     const storagePath = `community-posts/${fileName}`;
 
-    // 3) 업로드
+    // 직접 래핑 객체를 전달하여 업로드
     const { data, error } = await supabase.storage
       .from("post-images")
-      .upload(storagePath, blob, { contentType: mimeType });
-    if (error) throw new Error(`업로드 실패: ${error.message}`);
+      .upload(storagePath, fileWrapper, {
+        contentType: photo.type,
+        upsert: false,
+      });
+    if (error) throw new Error(`사진 업로드 실패: ${error.message}`);
 
-    // 4) 퍼블릭 URL 반환
-    const { publicUrl } = supabase.storage
+    const { publicUrl, error: urlError } = supabase.storage
       .from("post-images")
       .getPublicUrl(storagePath);
+    if (urlError) throw new Error(`URL 가져오기 실패: ${urlError.message}`);
     return publicUrl;
   };
 
-  // 폼 제출
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!title.trim() || !content.trim()) {
@@ -103,23 +106,18 @@ export default function CommunityPostCreateScreen() {
 
     setIsLoading(true);
     try {
-      // 1) 사진이 있으면 업로드
-      const urls = [];
-      for (const photo of photos) {
-        const url = await uploadToSupabase(photo.uri, photo.type);
-        urls.push(url);
-      }
-
-      // 2) 게시글 테이블에 삽입
+      const imageUrls = await Promise.all(
+        photos.map((p) => uploadToSupabase(p)),
+      );
       const { error } = await supabase.from("community_posts").insert({
         title: title.trim(),
         content: content.trim(),
         user_id: user.id,
-        image_urls: urls.length ? urls : null,
+        image_urls: imageUrls.length ? imageUrls : null,
       });
       if (error) throw error;
 
-      Alert.alert("작성 완료", "게시글이 등록되었습니다.");
+      Alert.alert("작성 완료", "게시글이 성공적으로 등록되었습니다.");
       navigation.goBack();
     } catch (err) {
       Alert.alert("작성 실패", err.message);
@@ -144,7 +142,6 @@ export default function CommunityPostCreateScreen() {
         value={content}
         onChangeText={setContent}
         multiline
-        textAlignVertical="top"
       />
 
       <Text style={styles.label}>사진 첨부 (최대 3장)</Text>
@@ -152,10 +149,7 @@ export default function CommunityPostCreateScreen() {
         {photos.map((p) => (
           <View key={p.uri} style={styles.photoWrapper}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} />
-            <TouchableOpacity
-              style={styles.removeButton}
-              onPress={() => handleRemovePhoto(p.uri)}
-            >
+            <TouchableOpacity onPress={() => handleRemovePhoto(p.uri)}>
               <Icon name="close-circle" size={24} color="#e74c3c" />
             </TouchableOpacity>
           </View>
@@ -173,9 +167,9 @@ export default function CommunityPostCreateScreen() {
 
       <View style={styles.buttonContainer}>
         {isLoading ? (
-          <ActivityIndicator size="large" color="#3d5afe" />
+          <ActivityIndicator />
         ) : (
-          <Button title="등록하기" onPress={handleSubmit} color="#3d5afe" />
+          <Button title="등록하기" onPress={handleSubmit} />
         )}
       </View>
     </ScrollView>
@@ -189,18 +183,16 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
-    color: "#34495e",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ced4da",
+    borderColor: "#ccc",
     borderRadius: 8,
     padding: 12,
     marginBottom: 15,
-    backgroundColor: "#fff",
   },
-  textArea: { height: 150 },
-  label: { fontSize: 16, fontWeight: "600", marginBottom: 10 },
+  textArea: { height: 150, textAlignVertical: "top" },
+  label: { fontSize: 16, marginBottom: 10 },
   photoContainer: { flexDirection: "row", flexWrap: "wrap" },
   photoWrapper: {
     position: "relative",
@@ -210,20 +202,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   thumbnail: { width: "100%", height: "100%", borderRadius: 8 },
-  removeButton: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-  },
   addButton: {
     width: 80,
     height: 80,
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#ced4da",
-    borderStyle: "dashed",
+    borderColor: "#ccc",
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },

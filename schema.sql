@@ -927,8 +927,8 @@ CREATE TABLE IF NOT EXISTS "public"."notices" (
     "author_name" "text",
     "is_published" boolean DEFAULT true,
     "views" bigint DEFAULT 0,
-    "image_url" "text",
-    "link_url" "text"
+    "link_url" "text",
+    "image_urls" "text"[]
 );
 
 
