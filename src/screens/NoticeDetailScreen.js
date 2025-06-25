@@ -36,7 +36,7 @@ function NoticeDetailScreen({ route, navigation }) {
       const { data, error: fetchError } = await supabase
         .from("notices")
         .select(
-          "id, title, content, created_at, author_name, image_url, link_url",
+          "id, title, content, created_at, author_name, image_urls, link_url", // image_url을 image_urls로 변경
         )
         .eq("id", noticeId)
         .eq("is_published", true)
@@ -117,12 +117,18 @@ function NoticeDetailScreen({ route, navigation }) {
         </View>
       </View>
 
-      {notice.image_url && (
-        <Image
-          source={{ uri: notice.image_url }}
-          style={styles.mainImage}
-          resizeMode="contain"
-        />
+      {/* 이미지 렌더링 수정: notice.image_urls 배열을 순회하며 Image 컴포넌트 렌더링 */}
+      {notice.image_urls && notice.image_urls.length > 0 && (
+        <View style={styles.imageSection}>
+          {notice.image_urls.slice(0, 3).map((url, index) => (
+            <Image
+              key={index}
+              source={{ uri: url }}
+              style={styles.mainImage}
+              resizeMode="contain"
+            />
+          ))}
+        </View>
       )}
 
       <View style={styles.contentWrapper}>
@@ -180,11 +186,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#7f8c8d",
   },
+  // 이미지 섹션 스타일 추가
+  imageSection: {
+    marginBottom: 20,
+  },
   mainImage: {
     width: "100%",
     height: width * 0.6,
     borderRadius: 8,
-    marginBottom: 20,
+    marginBottom: 15, // 이미지 간 간격
     backgroundColor: "#e9ecef",
   },
   contentWrapper: {
