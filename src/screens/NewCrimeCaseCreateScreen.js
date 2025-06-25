@@ -17,7 +17,8 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
-import RNBlobUtil from "react-native-blob-util"; // 네이티브 파일 래핑용
+import RNBlobUtil from "react-native-blob-util";
+import { Buffer } from "buffer"; // Buffer import
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -53,13 +54,15 @@ export default function NewCrimeCaseCreateScreen() {
   };
 
   /**
-   * 로컬 URI를 네이티브 파일 경로로 변환
+   * 로컬 URI를 네이티브 파일 경로로 변환 (필수)
    */
   const getFilePath = async (uri) => {
     if (Platform.OS === "android" && uri.startsWith("content://")) {
+      // content URI를 실제 파일 경로로 변환
       const stat = await RNBlobUtil.fs.stat(uri);
       return stat.path;
     }
+    // iOS의 경우 file:// 접두사 제거
     if (uri.startsWith("file://")) {
       return uri.replace("file://", "");
     }
@@ -67,43 +70,45 @@ export default function NewCrimeCaseCreateScreen() {
   };
 
   /**
-   * Supabase Storage에 사진 업로드 및 URL 반환
+   * Supabase Storage에 사진 업로드 및 URL 반환 (수정된 함수)
    */
   const uploadToSupabase = async (photo) => {
-    // 1) 파일 경로 획득
+    // 1. asset URI로부터 실제 파일 경로 획득
     const path = await getFilePath(photo.uri);
-    // 2) 네이티브 래핑 객체 생성
-    const fileWrapper = RNBlobUtil.wrap(path);
-    // 3) 파일명 및 버킷 경로 설정
-    const ext = photo.type.split("/")[1] || "jpg";
+
+    // 2. RNBlobUtil을 사용해 파일을 Base64 문자열로 읽기
+    const base64Data = await RNBlobUtil.fs.readFile(path, "base64");
+
+    // 3. Base64를 ArrayBuffer로 디코딩
+    const arrayBuffer = Buffer.from(base64Data, "base64");
+
+    // 4. 파일명 및 Storage 경로 설정
+    const ext = photo.fileName?.split(".").pop() || "jpg";
     const fileName = `${user.id}_${Date.now()}.${ext}`;
     const storagePath = `new-crime-cases/${fileName}`;
-    // 4) 업로드
-    const { data, error } = await supabase.storage
+
+    // 5. ArrayBuffer를 Supabase에 업로드
+    const { error: uploadError } = await supabase.storage
       .from("post-images")
-      .upload(storagePath, fileWrapper, {
+      .upload(storagePath, arrayBuffer, {
         contentType: photo.type,
         upsert: false,
       });
-    if (error) {
-      throw new Error(`사진 업로드 실패: ${error.message}`);
+
+    if (uploadError) {
+      throw new Error(`사진 업로드 실패: ${uploadError.message}`);
     }
-    // 5) 공개 URL 가져오기
-    // 5) 공개 URL 가져오기
-    const { data: urlData, error: urlError } = supabase.storage
+
+    // 6. 업로드된 파일의 공개 URL 가져오기
+    const { data: urlData } = supabase.storage
       .from("post-images")
       .getPublicUrl(storagePath);
-    if (urlError) {
-      throw new Error(`URL 가져오기 실패: ${urlError.message}`);
+
+    if (!urlData || !urlData.publicUrl) {
+      throw new Error("URL 생성에 실패했습니다.");
     }
-    const publicUrl = urlData.publicUrl;
-    if (!publicUrl) {
-      throw new Error("URL 생성 실패: 반환된 publicUrl이 없습니다.");
-    }
-    if (urlError || !publicUrl) {
-      throw new Error(`URL 생성 실패: ${urlError?.message || "null URL"}`);
-    }
-    return publicUrl;
+
+    return urlData.publicUrl;
   };
 
   const handleSubmit = async () => {
@@ -119,11 +124,10 @@ export default function NewCrimeCaseCreateScreen() {
 
     setIsLoading(true);
     try {
-      // 사진 업로드
       const imageUrls = await Promise.all(
         photos.map((p) => uploadToSupabase(p)),
       );
-      // 데이터 삽입
+
       const { error } = await supabase.from("new_crime_cases").insert({
         method: method.trim(),
         user_id: user.id,
@@ -134,7 +138,10 @@ export default function NewCrimeCaseCreateScreen() {
       Alert.alert("작성 완료", "사례가 성공적으로 등록되었습니다.");
       navigation.goBack();
     } catch (err) {
-      Alert.alert("작성 실패", err.message);
+      Alert.alert(
+        "작성 실패",
+        err.message || "알 수 없는 오류가 발생했습니다.",
+      );
     } finally {
       setIsLoading(false);
     }
