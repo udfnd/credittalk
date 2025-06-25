@@ -1366,12 +1366,12 @@ const styles = StyleSheet.create({
   },
   textArea: { height: 120, textAlignVertical: "top" },
   phoneInputContainer: {
-    flex: 1, // --- 수정된 부분 ---
+    flex: 1,
     flexDirection: "row",
     justifyContent: "space-between",
   },
   phoneInputSegment: { flex: 1, marginHorizontal: 2 },
-  buttonContainer: { marginTop: 25, marginBottom: 50 },
+  buttonContainer: { marginTop: 25, marginBottom: 100, paddingBottom: 25 },
   optionSelectorContainer: {
     flexDirection: "row",
     marginBottom: 10,

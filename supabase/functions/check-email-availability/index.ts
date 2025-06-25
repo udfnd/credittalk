@@ -1,3 +1,4 @@
+// supabase/functions/check-email-availability/index.ts
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -28,30 +29,34 @@ serve(async (req) => {
       { auth: { persistSession: false } },
     );
 
-    // 4) auth.users 테이블에서 email로 조회
-    //    maybeSingle(): 레코드가 하나만 있으면 객체, 없으면 null 리턴
-    const { data: user, error: queryError } = await supabaseAdmin
-      .from("auth.users")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
+    const trimmedEmail = email.trim();
 
-    if (queryError) {
-      // PostgREST 쿼리 에러 처리
-      throw queryError;
+    // 4) `listUsers`의 `query` 파라미터를 사용하여 사용자 검색
+    const {
+      data: { users },
+      error: listError,
+    } = await supabaseAdmin.auth.admin.listUsers({
+      query: trimmedEmail,
+    });
+
+    if (listError) {
+      throw listError;
     }
 
-    // 5) user가 null 이면 사용 가능, 아니면 중복
-    const available = user === null;
+    // 5) `query`는 부분 일치 검색이므로, 결과에서 정확히 일치하는 이메일이 있는지 확인
+    const existingUser = users.find((u) => u.email === trimmedEmail);
 
-    // 6) 결과 반환
+    // 6) `existingUser`가 존재하지 않아야 사용 가능
+    const available = !existingUser;
+
+    // 7) 결과 반환
     return new Response(JSON.stringify({ available }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error(err);
-    // 7) 예기치 못한 서버 에러 처리
+    // 8) 예기치 못한 서버 에러 처리
     return new Response(
       JSON.stringify({ error: err.message ?? "서버 오류가 발생했습니다." }),
       {
