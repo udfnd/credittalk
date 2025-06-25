@@ -17,7 +17,8 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
-import RNBlobUtil from "react-native-blob-util"; // 파일 래핑
+import RNBlobUtil from "react-native-blob-util";
+import { Buffer } from "buffer"; // Buffer import
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -66,31 +67,37 @@ export default function CommunityPostCreateScreen() {
   };
 
   /**
-   * Supabase에 파일 업로드 (RNBlobUtil.wrap 사용)
+   * Supabase에 파일 업로드 (수정된 안정적인 방식)
    */
   const uploadToSupabase = async (photo) => {
-    let path = await getFilePath(photo.uri);
-    // RNBlobUtil.wrap으로 파일 객체 래핑
-    const fileWrapper = RNBlobUtil.wrap(path);
+    const path = await getFilePath(photo.uri);
+    const base64Data = await RNBlobUtil.fs.readFile(path, "base64");
+    const arrayBuffer = Buffer.from(base64Data, "base64");
 
-    const ext = photo.type.split("/")[1] || "jpg";
+    const ext = photo.fileName?.split(".").pop() || "jpg";
     const fileName = `${user.id}_${Date.now()}.${ext}`;
     const storagePath = `community-posts/${fileName}`;
 
-    // 직접 래핑 객체를 전달하여 업로드
-    const { data, error } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("post-images")
-      .upload(storagePath, fileWrapper, {
+      .upload(storagePath, arrayBuffer, {
         contentType: photo.type,
         upsert: false,
       });
-    if (error) throw new Error(`사진 업로드 실패: ${error.message}`);
 
-    const { publicUrl, error: urlError } = supabase.storage
+    if (uploadError) {
+      throw new Error(`사진 업로드 실패: ${uploadError.message}`);
+    }
+
+    const { data: urlData } = supabase.storage
       .from("post-images")
       .getPublicUrl(storagePath);
-    if (urlError) throw new Error(`URL 가져오기 실패: ${urlError.message}`);
-    return publicUrl;
+
+    if (!urlData || !urlData.publicUrl) {
+      throw new Error("URL 생성에 실패했습니다.");
+    }
+
+    return urlData.publicUrl;
   };
 
   const handleSubmit = async () => {
@@ -120,7 +127,10 @@ export default function CommunityPostCreateScreen() {
       Alert.alert("작성 완료", "게시글이 성공적으로 등록되었습니다.");
       navigation.goBack();
     } catch (err) {
-      Alert.alert("작성 실패", err.message);
+      Alert.alert(
+        "작성 실패",
+        err.message || "알 수 없는 오류가 발생했습니다.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -149,7 +159,10 @@ export default function CommunityPostCreateScreen() {
         {photos.map((p) => (
           <View key={p.uri} style={styles.photoWrapper}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} />
-            <TouchableOpacity onPress={() => handleRemovePhoto(p.uri)}>
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => handleRemovePhoto(p.uri)}
+            >
               <Icon name="close-circle" size={24} color="#e74c3c" />
             </TouchableOpacity>
           </View>
@@ -167,9 +180,9 @@ export default function CommunityPostCreateScreen() {
 
       <View style={styles.buttonContainer}>
         {isLoading ? (
-          <ActivityIndicator />
+          <ActivityIndicator size="large" color="#3d5afe" />
         ) : (
-          <Button title="등록하기" onPress={handleSubmit} />
+          <Button title="등록하기" onPress={handleSubmit} color="#3d5afe" />
         )}
       </View>
     </ScrollView>
@@ -183,34 +196,73 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
+    color: "#34495e",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#ced4da",
+    paddingVertical: 12,
+    paddingHorizontal: 15,
     borderRadius: 8,
-    padding: 12,
+    backgroundColor: "white",
+    fontSize: 16,
+    color: "#212529",
     marginBottom: 15,
   },
-  textArea: { height: 150, textAlignVertical: "top" },
-  label: { fontSize: 16, marginBottom: 10 },
-  photoContainer: { flexDirection: "row", flexWrap: "wrap" },
+  textArea: {
+    minHeight: 200,
+    textAlignVertical: "top",
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#495057",
+    marginBottom: 10,
+    marginTop: 10,
+  },
+  photoContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
   photoWrapper: {
     position: "relative",
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     marginRight: 10,
     marginBottom: 10,
   },
-  thumbnail: { width: "100%", height: "100%", borderRadius: 8 },
-  addButton: {
-    width: 80,
-    height: 80,
-    borderWidth: 1,
-    borderColor: "#ccc",
+  thumbnail: {
+    width: "100%",
+    height: "100%",
     borderRadius: 8,
+    backgroundColor: "#e9ecef",
+  },
+  removeButton: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  addButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: "#e9ecef",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ced4da",
+    borderStyle: "dashed",
   },
-  addButtonText: { fontSize: 12, color: "#868e96", marginTop: 4 },
-  buttonContainer: { marginTop: 20 },
+  addButtonText: {
+    fontSize: 12,
+    color: "#868e96",
+    marginTop: 4,
+  },
+  buttonContainer: {
+    marginTop: 30,
+    marginBottom: 40,
+  },
 });
