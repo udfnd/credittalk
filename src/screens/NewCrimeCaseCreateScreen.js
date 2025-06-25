@@ -17,7 +17,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
-import RNBlobUtil from "react-native-blob-util"; // ✅ react-native-blob-util
+import RNBlobUtil from "react-native-blob-util"; // 네이티브 파일 래핑용
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -29,70 +29,83 @@ export default function NewCrimeCaseCreateScreen() {
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 사진 선택 핸들러
   const handleChoosePhotos = () => {
-    const selectionLimit = 3 - photos.length;
-    if (selectionLimit <= 0) {
+    const limit = 3 - photos.length;
+    if (limit <= 0) {
       Alert.alert("알림", "사진은 최대 3장까지 등록할 수 있습니다.");
       return;
     }
-
     launchImageLibrary(
-      { mediaType: "photo", selectionLimit, quality: 0.7 },
-      (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) {
-          Alert.alert("오류", `사진 선택 오류: ${response.errorMessage}`);
-        } else if (response.assets && response.assets.length > 0) {
-          setPhotos((prev) => [...prev, ...response.assets]);
+      { mediaType: "photo", selectionLimit: limit, quality: 0.7 },
+      (res) => {
+        if (res.didCancel) return;
+        if (res.errorCode) {
+          Alert.alert("오류", `사진 선택 오류: ${res.errorMessage}`);
+        } else if (res.assets) {
+          setPhotos((prev) => [...prev, ...res.assets]);
         }
       },
     );
   };
 
-  // 사진 제거 핸들러
   const handleRemovePhoto = (uri) => {
-    setPhotos((prev) => prev.filter((photo) => photo.uri !== uri));
+    setPhotos((prev) => prev.filter((p) => p.uri !== uri));
   };
 
   /**
-   * 로컬 URI -> Blob-like 객체 생성
-   * Android의 content:// URI 처리
+   * 로컬 URI를 네이티브 파일 경로로 변환
    */
-  const uriToBlob = async (uri) => {
-    let filePath = uri;
+  const getFilePath = async (uri) => {
     if (Platform.OS === "android" && uri.startsWith("content://")) {
       const stat = await RNBlobUtil.fs.stat(uri);
-      filePath = stat.path;
+      return stat.path;
     }
-    return RNBlobUtil.wrap(filePath);
+    if (uri.startsWith("file://")) {
+      return uri.replace("file://", "");
+    }
+    return uri;
   };
 
   /**
-   * Blob-like 객체 업로드 후 publicUrl 반환
+   * Supabase Storage에 사진 업로드 및 URL 반환
    */
-  const uploadToSupabase = async (uri, mimeType) => {
-    // 1) Blob-like 객체 생성
-    const blob = await uriToBlob(uri);
-    // 2) 파일명/경로 구성
-    const ext = mimeType.split("/")[1] || "jpg";
+  const uploadToSupabase = async (photo) => {
+    // 1) 파일 경로 획득
+    const path = await getFilePath(photo.uri);
+    // 2) 네이티브 래핑 객체 생성
+    const fileWrapper = RNBlobUtil.wrap(path);
+    // 3) 파일명 및 버킷 경로 설정
+    const ext = photo.type.split("/")[1] || "jpg";
     const fileName = `${user.id}_${Date.now()}.${ext}`;
     const storagePath = `new-crime-cases/${fileName}`;
-
-    // 3) Supabase Storage 업로드
+    // 4) 업로드
     const { data, error } = await supabase.storage
       .from("post-images")
-      .upload(storagePath, blob, { contentType: mimeType });
-    if (error) throw new Error(`사진 업로드 실패: ${error.message}`);
-
-    // 4) 퍼블릭 URL 얻기
-    const { publicUrl } = supabase.storage
+      .upload(storagePath, fileWrapper, {
+        contentType: photo.type,
+        upsert: false,
+      });
+    if (error) {
+      throw new Error(`사진 업로드 실패: ${error.message}`);
+    }
+    // 5) 공개 URL 가져오기
+    // 5) 공개 URL 가져오기
+    const { data: urlData, error: urlError } = supabase.storage
       .from("post-images")
       .getPublicUrl(storagePath);
+    if (urlError) {
+      throw new Error(`URL 가져오기 실패: ${urlError.message}`);
+    }
+    const publicUrl = urlData.publicUrl;
+    if (!publicUrl) {
+      throw new Error("URL 생성 실패: 반환된 publicUrl이 없습니다.");
+    }
+    if (urlError || !publicUrl) {
+      throw new Error(`URL 생성 실패: ${urlError?.message || "null URL"}`);
+    }
     return publicUrl;
   };
 
-  // 폼 제출 핸들러
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!method.trim()) {
@@ -106,28 +119,22 @@ export default function NewCrimeCaseCreateScreen() {
 
     setIsLoading(true);
     try {
-      // 1) 사진이 있으면 업로드
-      const imageUrls = [];
-      for (const photo of photos) {
-        const url = await uploadToSupabase(photo.uri, photo.type);
-        imageUrls.push(url);
-      }
-
-      // 2) 데이터베이스에 삽입
+      // 사진 업로드
+      const imageUrls = await Promise.all(
+        photos.map((p) => uploadToSupabase(p)),
+      );
+      // 데이터 삽입
       const { error } = await supabase.from("new_crime_cases").insert({
         method: method.trim(),
         user_id: user.id,
-        image_urls: imageUrls.length > 0 ? imageUrls : null,
+        image_urls: imageUrls.length ? imageUrls : null,
       });
       if (error) throw error;
 
       Alert.alert("작성 완료", "사례가 성공적으로 등록되었습니다.");
       navigation.goBack();
     } catch (err) {
-      Alert.alert(
-        "작성 실패",
-        err.message || "사례 등록 중 오류가 발생했습니다.",
-      );
+      Alert.alert("작성 실패", err.message);
     } finally {
       setIsLoading(false);
     }
