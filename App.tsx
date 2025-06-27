@@ -443,8 +443,8 @@ function App(): React.JSX.Element {
   useEffect(() => {
     NaverLogin.initialize({
       appName: "크레디톡",
-      consumerKey: "belWdkUzgFugOnoHOfBs",
-      consumerSecret: "x0Cc7_4tSU",
+      consumerKey: "QWU6hRfI6lQMlQ5QIZN1",
+      consumerSecret: "VtyqGV8HHb",
       serviceUrlSchemeIOS: "credittalk",
       disableNaverAppAuthIOS: false,
     });
