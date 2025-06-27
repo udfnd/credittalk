@@ -8,6 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  TextInput,
+  Keyboard,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 
@@ -18,11 +20,64 @@ function AdditionalInfoScreen() {
   const [jobType, setJobType] = useState("일반");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [nickname, setNickname] = useState("");
+  const [isNicknameAvailable, setIsNicknameAvailable] = useState(null);
+  const [nicknameMessage, setNicknameMessage] = useState("");
+  const [isCheckingNickname, setIsCheckingNickname] = useState(false);
+
+  const handleNicknameChange = (text) => {
+    setNickname(text);
+    if (isNicknameAvailable !== null) {
+      setIsNicknameAvailable(null);
+      setNicknameMessage("");
+    }
+  };
+
+  const handleCheckNickname = async () => {
+    Keyboard.dismiss();
+    const trimmedNickname = nickname.trim();
+    if (trimmedNickname.length < 2) {
+      Alert.alert("입력 오류", "닉네임은 2자 이상이어야 합니다.");
+      return;
+    }
+
+    setIsCheckingNickname(true);
+    setNicknameMessage("");
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "check-nickname-availability",
+        { body: { nickname: trimmedNickname } },
+      );
+
+      if (error) throw error;
+
+      if (data.available) {
+        setIsNicknameAvailable(true);
+        setNicknameMessage("사용 가능한 닉네임입니다.");
+      } else {
+        setIsNicknameAvailable(false);
+        setNicknameMessage("이미 사용 중인 닉네임입니다.");
+      }
+    } catch (err) {
+      setIsNicknameAvailable(null);
+      setNicknameMessage(`오류: ${err.message}`);
+    } finally {
+      setIsCheckingNickname(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    // --- START: 닉네임 유효성 검사 추가 ---
+    if (isNicknameAvailable !== true) {
+      Alert.alert("확인 필요", "닉네임 중복 확인을 완료해주세요.");
+      return;
+    }
+
     if (!user) {
       Alert.alert("오류", "사용자 세션이 만료되었습니다. 다시 로그인해주세요.");
       return;
     }
+
     setIsSubmitting(true);
     try {
       const profileData = {
@@ -30,6 +85,7 @@ function AdditionalInfoScreen() {
         name:
           user.user_metadata?.full_name || user.user_metadata?.name || "사용자",
         job_type: jobType,
+        nickname: nickname.trim(), // 닉네임 추가
         naver_id:
           user.user_metadata?.provider === "naver"
             ? user.user_metadata?.provider_id
@@ -44,24 +100,19 @@ function AdditionalInfoScreen() {
 
       if (error) {
         if (error.code === "23505") {
-          Alert.alert(
-            "오류",
-            "이미 가입된 계정 정보입니다. 다른 계정으로 로그인해주세요.",
-          );
+          // Unique constraint violation (users_nickname_key)
+          Alert.alert("오류", "이미 사용 중인 닉네임이거나 가입된 계정입니다.");
         } else {
           throw error;
         }
         return;
       }
 
-      // --- START: 수정된 부분 (핵심) ---
-      // 데이터 삽입 성공 시, 반환된 데이터로 직접 profile 상태를 업데이트합니다.
       if (insertedData) {
         setProfile(insertedData);
       } else {
         throw new Error("프로필이 생성되었지만 데이터를 가져오지 못했습니다.");
       }
-      // --- END: 수정된 부분 ---
     } catch (err) {
       console.error("Error submitting additional info:", err);
       Alert.alert("오류", `추가 정보 저장에 실패했습니다: ${err.message}`);
@@ -74,8 +125,41 @@ function AdditionalInfoScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>추가 정보 입력</Text>
       <Text style={styles.subtitle}>
-        원활한 서비스 이용을 위해 직업 유형을 선택해주세요.
+        원활한 서비스 이용을 위해 추가 정보를 입력해주세요.
       </Text>
+
+      <Text style={styles.label}>닉네임 (필수)</Text>
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.inputField}
+          placeholder="사용할 닉네임을 입력하세요 (2자 이상)"
+          value={nickname}
+          onChangeText={handleNicknameChange}
+          autoCapitalize="none"
+        />
+        <TouchableOpacity
+          style={styles.checkButton}
+          onPress={handleCheckNickname}
+          disabled={isCheckingNickname}
+        >
+          {isCheckingNickname ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.checkButtonText}>중복확인</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+      {nicknameMessage ? (
+        <Text
+          style={[
+            styles.message,
+            isNicknameAvailable ? styles.successMessage : styles.errorMessage,
+          ]}
+        >
+          {nicknameMessage}
+        </Text>
+      ) : null}
+
       <Text style={styles.label}>직업 유형</Text>
       <View style={styles.jobTypeContainer}>
         {jobTypes.map((type) => (
@@ -105,6 +189,7 @@ function AdditionalInfoScreen() {
           title="저장하고 시작하기"
           onPress={handleSubmit}
           color="#3d5afe"
+          disabled={isNicknameAvailable !== true || isCheckingNickname}
         />
       )}
     </View>
@@ -129,14 +214,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "gray",
     textAlign: "center",
-    marginBottom: 40,
+    marginBottom: 30,
   },
   label: {
     fontSize: 16,
     fontWeight: "600",
     color: "#495057",
     marginBottom: 10,
+    marginTop: 10,
   },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  inputField: {
+    flex: 1,
+    height: 50,
+    borderColor: "#ced4da",
+    borderWidth: 1,
+    paddingHorizontal: 15,
+    backgroundColor: "white",
+    fontSize: 16,
+    color: "#000",
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  checkButton: {
+    height: 50,
+    paddingHorizontal: 12,
+    backgroundColor: "#6c757d",
+    justifyContent: "center",
+    alignItems: "center",
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  checkButtonText: { color: "#fff", fontWeight: "bold" },
+  message: {
+    fontSize: 12,
+    paddingLeft: 5,
+    marginBottom: 10,
+  },
+  successMessage: { color: "green" },
+  errorMessage: { color: "red" },
   jobTypeContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
