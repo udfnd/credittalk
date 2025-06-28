@@ -1,3 +1,5 @@
+// eslint.config.mjs
+
 import globals from "globals";
 import pluginReact from "eslint-plugin-react";
 import pluginReactHooks from "eslint-plugin-react-hooks";
@@ -5,28 +7,29 @@ import eslintConfigPrettier from "eslint-config-prettier";
 import rnEslintConfig from "@react-native/eslint-config";
 
 export default [
+  rnEslintConfig,
+
+  pluginReact.configs.recommended,
+
+  pluginReactHooks.configs.recommended,
+
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,tsx}"],
-    ...rnEslintConfig, // React Native 기본 설정 적용
+
     languageOptions: {
-      ...rnEslintConfig.languageOptions,
       globals: {
         ...globals.browser,
-        ...globals.node,
         ...globals.es2020,
       },
     },
-    plugins: {
-      ...rnEslintConfig.plugins,
-      react: pluginReact,
-      "react-hooks": pluginReactHooks,
-    },
+
     rules: {
-      ...rnEslintConfig.rules,
-      ...pluginReact.configs.recommended.rules,
-      ...pluginReactHooks.configs.recommended.rules,
-      "react/jsx-filename-extension": [1, { extensions: [".tsx", ".jsx", ".js"] }],
       "react/prop-types": "off",
+      "react/react-in-jsx-scope": "off",
+      "react/jsx-filename-extension": [
+        "warn",
+        { extensions: [".tsx", ".jsx", ".js"] },
+      ],
       "prettier/prettier": [
         "error",
         {
@@ -39,11 +42,13 @@ export default [
         },
       ],
     },
+
     settings: {
       react: {
         version: "detect",
       },
     },
   },
+
   eslintConfigPrettier,
 ];
