@@ -1,54 +1,54 @@
-// eslint.config.mjs
-
 import globals from "globals";
+import pluginJs from "@eslint/js";
+import tseslint from "typescript-eslint";
 import pluginReact from "eslint-plugin-react";
-import pluginReactHooks from "eslint-plugin-react-hooks";
-import eslintConfigPrettier from "eslint-config-prettier";
 import rnEslintConfig from "@react-native/eslint-config";
+import eslintConfigPrettier from "eslint-config-prettier";
 
 export default [
-  rnEslintConfig,
-
-  pluginReact.configs.recommended,
-
-  pluginReactHooks.configs.recommended,
-
   {
-    files: ["**/*.{js,mjs,cjs,jsx,ts,tsx}"],
-
+    ignores: [
+      "node_modules/",
+      "android/",
+      "ios/",
+      "build/",
+      "coverage/",
+      "*.js.map",
+    ],
+  },
+  pluginJs.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
     languageOptions: {
       globals: {
         ...globals.browser,
-        ...globals.es2020,
+        ...globals.es2021,
+        ...globals.node,
+        ...globals.jest,
+      },
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
       },
     },
-
-    rules: {
-      "react/prop-types": "off",
-      "react/react-in-jsx-scope": "off",
-      "react/jsx-filename-extension": [
-        "warn",
-        { extensions: [".tsx", ".jsx", ".js"] },
-      ],
-      "prettier/prettier": [
-        "error",
-        {
-          semi: true,
-          singleQuote: true,
-          trailingComma: "all",
-          printWidth: 80,
-          tabWidth: 2,
-          useTabs: false,
-        },
-      ],
+  },
+  {
+    files: ["**/*.{js,jsx,ts,tsx}"],
+    plugins: {
+      react: pluginReact,
     },
-
+    rules: {
+      ...rnEslintConfig.rules,
+      ...pluginReact.configs.recommended.rules,
+      "react/react-in-jsx-scope": "off",
+      "react/prop-types": "off",
+    },
     settings: {
       react: {
         version: "detect",
       },
     },
   },
-
-  eslintConfigPrettier,
+  eslintConfigPrettier, // 항상 맨 마지막에 위치해야 합니다.
 ];
