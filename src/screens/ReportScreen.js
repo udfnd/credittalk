@@ -39,7 +39,6 @@ const corporateCategories = [
   "노쇼",
   "노쇼 대리구매 사기",
   "공갈 협박 범죄",
-  "알바 범죄",
   "렌탈 사업 피해",
   "기타",
 ];
@@ -175,9 +174,7 @@ function ReportScreen({ navigation }) {
     setScamReportSourceOther("");
     setCompanyType("");
     setGender("");
-    // --- START: 수정된 부분 ---
     setPhoneNumbers([{ prefix: "", middle: "", last: "" }]);
-    // --- END: 수정된 부분 ---
     setImpersonatedPhonePrefix("");
     setImpersonatedPhoneMiddle("");
     setImpersonatedPhoneLast("");
@@ -754,13 +751,6 @@ function ReportScreen({ navigation }) {
                 onChangeText={setDamagePath}
                 placeholder="예: 중고나라, 번개장터 등"
               />
-              <Text style={styles.label}>피해 물품명</Text>
-              <TextInput
-                style={styles.input}
-                value={damagedItem}
-                onChangeText={setDamagedItem}
-                placeholder="예: 아이폰 15, 명품 가방 등"
-              />
               <Text style={styles.label}>거래물품 종류</Text>
               <TextInput
                 style={styles.input}
@@ -924,7 +914,8 @@ function ReportScreen({ navigation }) {
                 style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
                 value={categoryOther}
                 onChangeText={setCategoryOther}
-                placeholder="카테고리를 직접 입력해주세요."
+                placeholder="어떤 유형의 피해를 입으셨나요? 예) 대출 사기, 유심, 통장 양도"
+                placeholderTextColor="#FF0000"
               />
             )}
           </>
@@ -973,7 +964,7 @@ function ReportScreen({ navigation }) {
         {renderDetailedCrimeTypeFields()}
 
         <Text style={styles.label}>
-          사기를 당하게 된 경로 <Text style={styles.required}>*</Text>
+          피해를 당하게 된 경로 <Text style={styles.required}>*</Text>
         </Text>
         <View style={styles.checkboxContainer}>
           {scamReportSources.map((source) => (
@@ -1027,7 +1018,7 @@ function ReportScreen({ navigation }) {
         )}
 
         <Text style={styles.label}>
-          용의자 성별 <Text style={styles.required}>*</Text>
+          가해자 성별 <Text style={styles.required}>*</Text>
         </Text>
         <View style={styles.optionSelectorContainer}>
           {genders.map((gen) => (
@@ -1090,7 +1081,7 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>SNS 닉네임</Text>
+        <Text style={styles.label}>가해자가 썼던 SNS 닉네임</Text>
         <TextInput
           style={styles.input}
           value={nickname}

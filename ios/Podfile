@@ -1,6 +1,17 @@
 # React Native pods 스크립트 로드
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
+pre_install do |installer|
+  Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
+  installer.pod_targets.each do |pod|
+    if pod.name.start_with?('kakao-login')
+      def pod.build_type;
+        Pod::BuildType.static_library
+      end
+    end
+  end
+end
+
 # 최소 iOS 버전: Hermes 요구사항 확인 후 설정
 platform :ios, '15.6'
 

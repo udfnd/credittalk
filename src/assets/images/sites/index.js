@@ -8,6 +8,7 @@ export const siteImages = [
   },
   { name: "네이버 카페", source: require("./네이버 카페.png") },
   { name: "인스타그램", source: require("./인스타그램.png") },
+  { name: "유튜브", source: require("./유튜브.png") },
   { name: "텔레그램", source: require("./텔레그램.png") },
   { name: "당근마켓", source: require("./당근마켓.png") },
   { name: "중고나라", source: require("./중고나라.png") },
