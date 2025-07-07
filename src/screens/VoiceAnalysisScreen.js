@@ -16,9 +16,10 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../context/AuthContext";
 import RNBlobUtil from "react-native-blob-util";
 import { decode } from "base64-arraybuffer";
+import { useNavigation } from "@react-navigation/native";
 
 // 결과 모달 (변경 없음)
-const ResultModal = ({ isVisible, onClose, result }) => {
+const ResultModal = ({ isVisible, onClose, result, navigation }) => {
   if (!result) return null;
   return (
     <Modal visible={isVisible} transparent animationType="fade" onRequestClose={onClose}>
@@ -59,6 +60,19 @@ const ResultModal = ({ isVisible, onClose, result }) => {
                   ? "통화내용에서 금융사기 의심단어가 감지되었습니다. 일면식이 없는 사람이라면 개인정보, 금전거래를 급하게 하지마세요."
                   : "통화 내용에서 특별한 위험 단어가 감지되지 않았습니다."}
             </Text>
+            {result.status === "completed" && result.detected && (
+              <TouchableOpacity
+                style={styles.analysisRequestButton}
+                onPress={() => {
+                  onClose(); // 모달을 닫고
+                  navigation.navigate("HelpDeskCreate"); // 헬프데스크 생성 화면으로 이동
+                }}
+              >
+                <Text style={styles.analysisRequestButtonText}>
+                  사기인지 분석을 의뢰하시겠습니까?
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </View>
@@ -67,6 +81,7 @@ const ResultModal = ({ isVisible, onClose, result }) => {
 };
 
 export default function VoiceAnalysisScreen() {
+  const navigation = useNavigation();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
@@ -239,6 +254,7 @@ export default function VoiceAnalysisScreen() {
         isVisible={isModalVisible}
         onClose={() => setIsModalVisible(false)}
         result={result}
+        navigation={navigation}
       />
     </View>
   );
@@ -282,6 +298,21 @@ const styles = StyleSheet.create({
   closeIcon: { position: "absolute", top: 10, right: 10 },
   modalTitle: { fontSize: 22, fontWeight: "bold", marginVertical: 15, color: "#333" },
   modalMessage: { fontSize: 16, textAlign: "center", marginBottom: 20, lineHeight: 24, color: "#555" },
+  analysisRequestButton: {
+    backgroundColor: "#3498db",
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20
+  },
+  analysisRequestButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   detectedKeywordsTitle: { fontSize: 16, fontWeight: "bold", color: "#34495e", marginBottom: 8, textAlign: "center" },
   detectedKeywords: { fontSize: 15, color: "#c0392b", marginBottom: 20, fontWeight: "600", textAlign: "center", lineHeight: 22 },
   transcriptContainer: { width: "100%", marginTop: 10, backgroundColor: "#f8f9fa", borderRadius: 8, padding: 15, maxHeight: 200 },

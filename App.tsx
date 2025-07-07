@@ -419,7 +419,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="HelpDeskList"
             component={HelpDeskListScreen}
-            options={{ title: "헬프센터" }}
+            options={{ title: "헬프 상담게시판" }}
           />
           <RootStack.Screen
             name="HelpDeskCreate"

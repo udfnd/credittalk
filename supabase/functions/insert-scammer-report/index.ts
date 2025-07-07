@@ -30,6 +30,8 @@ interface ReportData {
   traded_item_image_urls?: string[] | null;
   is_cash_transaction?: boolean | null;
   detailed_crime_type?: string | null;
+  damage_amount?: number | null;
+  is_face_to_face?: boolean;
 }
 
 async function encryptAndInsert(
@@ -97,6 +99,8 @@ async function encryptAndInsert(
       traded_item_image_urls: reportData.traded_item_image_urls || null,
       is_cash_transaction: reportData.is_cash_transaction || false,
       detailed_crime_type: reportData.detailed_crime_type || null,
+      damage_amount: reportData.damage_amount,
+      is_face_to_face: reportData.is_face_to_face,
     });
 
   if (insertError) {
