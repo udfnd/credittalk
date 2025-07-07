@@ -56,7 +56,7 @@ const ResultModal = ({ isVisible, onClose, result }) => {
               {result.status === "error"
                 ? `분석 중 오류가 발생했습니다: ${result.error_message}`
                 : result.detected
-                  ? "통화 내용에서 보이스피싱 의심 단어가 감지되었습니다. 금전이나 재화를 요구했다면 즉시 관계 기관에 신고하세요."
+                  ? "통화내용에서 금융사기 의심단어가 감지되었습니다. 일면식이 없는 사람이라면 개인정보, 금전거래를 급하게 하지마세요."
                   : "통화 내용에서 특별한 위험 단어가 감지되지 않았습니다."}
             </Text>
           </View>
