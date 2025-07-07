@@ -12,7 +12,7 @@ import {
   Alert,
   ScrollView,
   ImageBackground,
-  Dimensions,
+  Dimensions, Image
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -30,6 +30,7 @@ const reviewBannerImg = require("../assets/images/review_banner.jpg");
 const incidentPhotosBannerImg = require("../assets/images/incident_photos_banner.jpg");
 const freeBoardBannerImg = require("../assets/images/free_board_banner.jpg");
 const helpCenterBannerImg = require("../assets/images/help_center_banner.jpg");
+const companyLogoImg = require("../assets/images/company_logo.png");
 
 function HomeScreen() {
   const navigation = useNavigation();
@@ -134,8 +135,12 @@ function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
         <View style={styles.bannerSection}>
+          <Image
+            source={companyLogoImg}
+            style={styles.companyLogo}
+            resizeMode="cover"
+          />
           {renderImageBanner(
             "공지사항",
             "크레디톡의 새로운 소식을 확인하세요.",
@@ -278,7 +283,12 @@ const styles = StyleSheet.create({
     bottom: -10,
     color: "rgba(255, 255, 255, 0.15)",
   },
-
+  companyLogo: {
+    width: '100%',
+    height: 150,
+    borderRadius: 10,
+    marginBottom: 15,
+  },
   bannerSection: { paddingHorizontal: 20, marginBottom: 10, marginTop: 25 },
   bannerTouchable: {
     height: BANNER_HEIGHT,
