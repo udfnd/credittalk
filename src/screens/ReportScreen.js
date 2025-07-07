@@ -128,6 +128,8 @@ function ReportScreen({ navigation }) {
   const [detailedCrimeTypeOther, setDetailedCrimeTypeOther] = useState("");
   const [showDetailedCrimeTypeOtherInput, setShowDetailedCrimeTypeOtherInput] =
     useState(false);
+  const [damageAmount, setDamageAmount] = useState("");
+  const [isFaceToFace, setIsFaceToFace] = useState(false);
 
   useEffect(() => {
     if (companyType === "개인") setCurrentCategories(individualCategories);
@@ -201,9 +203,10 @@ function ReportScreen({ navigation }) {
     setDetailedCrimeType("");
     setDetailedCrimeTypeOther("");
     setShowDetailedCrimeTypeOtherInput(false);
+    setDamageAmount("");
+    setIsFaceToFace(false);
   };
 
-  // --- START: 추가된 부분 (여러 전화번호 관리 핸들러) ---
   const handlePhoneNumberChange = (index, part, value) => {
     const newPhoneNumbers = [...phoneNumbers];
     newPhoneNumbers[index][part] = value;
@@ -220,7 +223,6 @@ function ReportScreen({ navigation }) {
       setPhoneNumbers(newPhoneNumbers);
     }
   };
-  // --- END: 추가된 부분 ---
 
   const handleChooseNicknamePhoto = () => {
     launchImageLibrary({ mediaType: "photo" }, (response) => {
@@ -395,13 +397,11 @@ function ReportScreen({ navigation }) {
       const tradedItemImageUrls = await Promise.all(tradedItemUploadPromises);
       setIsUploading(false);
 
-      // --- START: 수정된 부분 (여러 전화번호 조합) ---
       const fullPhoneNumbers = isPhoneUnknown
         ? null
         : phoneNumbers
             .map((p) => `${p.prefix}${p.middle}${p.last}`)
             .filter((p) => p.length >= 10);
-      // --- END: 수정된 부분 ---
 
       const impersonatedFullPhoneNumber =
         category === "노쇼 대리구매 사기" &&
@@ -445,12 +445,10 @@ function ReportScreen({ navigation }) {
       const reportData = {
         name: isCashTransaction ? null : accountHolderName.trim() || null,
         nickname: nickname.trim() || null,
-        // --- START: 수정된 부분 ---
         phone_numbers:
           fullPhoneNumbers && fullPhoneNumbers.length > 0
             ? fullPhoneNumbers
             : null,
-        // --- END: 수정된 부분 ---
         impersonated_phone_number: impersonatedFullPhoneNumber,
         account_number: isCashTransaction ? null : accountNumber.trim() || null,
         bank_name: isCashTransaction ? null : bankName.trim() || null,
@@ -473,6 +471,8 @@ function ReportScreen({ navigation }) {
         traded_item_image_urls: tradedItemImageUrls.filter(Boolean),
         is_cash_transaction: isCashTransaction,
         detailed_crime_type: finalDetailedCrimeType || null,
+        damage_amount: damageAmount ? parseInt(damageAmount, 10) : null,
+        is_face_to_face: isFaceToFace,
       };
 
       const { error: functionError } = await supabase.functions.invoke(
@@ -1118,9 +1118,64 @@ function ReportScreen({ navigation }) {
           </View>
         )}
 
-        {/* --- START: 수정된 부분 (전화번호 입력 UI) --- */}
         {category === "노쇼 대리구매 사기" ? (
-          <>{/* ... (기존 노쇼 사기 전화번호 입력 UI) ... */}</>
+          <>
+            <Text style={styles.label}>노쇼를 했던 전화번호</Text>
+            <View style={styles.phoneInputContainer}>
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhonePrefix}
+                onChangeText={setImpersonatedPhonePrefix}
+                placeholder="000"
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhoneMiddle}
+                onChangeText={setImpersonatedPhoneMiddle}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhoneLast}
+                onChangeText={setImpersonatedPhoneLast}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+            </View>
+
+            <Text style={styles.label}>사칭한 전화번호</Text>
+            <View style={styles.phoneInputContainer}>
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhonePrefix}
+                onChangeText={setImpersonatedPhonePrefix}
+                placeholder="000"
+                keyboardType="number-pad"
+                maxLength={3}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhoneMiddle}
+                onChangeText={setImpersonatedPhoneMiddle}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+              <TextInput
+                style={[styles.input, styles.phoneInputSegment]}
+                value={impersonatedPhoneLast}
+                onChangeText={setImpersonatedPhoneLast}
+                placeholder="0000"
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+            </View>
+          </>
         ) : (
           <>
             <View style={styles.labelContainer}>
@@ -1210,7 +1265,44 @@ function ReportScreen({ navigation }) {
             </TouchableOpacity>
           </>
         )}
-        {/* --- END: 수정된 부분 --- */}
+        {category !== "투자 사기, 전세 사기" && category !== "암호화폐" && (
+          <>
+            <View style={styles.labelContainer}>
+              <Text style={styles.label}>대면 피해</Text>
+              <TouchableOpacity
+                style={styles.checkboxItem}
+                onPress={() => {
+                  const nextState = !isFaceToFace;
+                  setIsFaceToFace(nextState);
+                  if (!nextState) {
+                    setDamagedItem(""); // 체크 해제 시 damagedItem 내용 초기화
+                  }
+                }}
+              >
+                <Icon
+                  name={
+                    isFaceToFace ? "checkbox-marked" : "checkbox-blank-outline"
+                  }
+                  size={24}
+                  color={isFaceToFace ? "#3d5afe" : "#555"}
+                />
+                <Text style={styles.checkboxLabel}>대면으로 피해를 입음</Text>
+              </TouchableOpacity>
+            </View>
+
+            {isFaceToFace && (
+              <>
+                <Text style={styles.label}>피해 물품</Text>
+                <TextInput
+                  style={styles.input}
+                  value={damagedItem} // << ⭐️ faceToFaceDamagedItem에서 변경
+                  onChangeText={setDamagedItem} // << ⭐️ setFaceToFaceDamagedItem에서 변경
+                  placeholder="피해 물품을 입력하세요 (예: 명품 가방, 현금)"
+                />
+              </>
+            )}
+          </>
+        )}
 
         <View style={styles.labelContainer}>
           <Text style={styles.label}>
@@ -1291,7 +1383,14 @@ function ReportScreen({ navigation }) {
             editable={!isCashTransaction}
           />
         )}
-
+        <Text style={styles.label}>피해 금액</Text>
+        <TextInput
+          style={styles.input}
+          value={damageAmount}
+          onChangeText={setDamageAmount}
+          placeholder="피해 금액을 숫자로 입력하세요 (예: 10000)"
+          keyboardType="number-pad"
+        />
         <Text style={styles.label}>
           사건 개요 <Text style={styles.required}>*</Text>
         </Text>
