@@ -188,7 +188,7 @@ function HomeScreen() {
             "헬프 상담게시판",
             "궁금한 사항들을 작성해주세요.",
             helpCenterBannerImg,
-            () => navigation.navigate("HelpDeskList"),
+            () => navigation.navigate("HelpCenterTab", { screen: "HelpDeskList" }),
           )}
         </View>
       </ScrollView>

@@ -30,7 +30,8 @@ const individualCategories = [
   "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기",
   "불법사금융",
   "중고물품 사기",
-  "투자 사기, 전세 사기",
+  "투자 사기",
+  "부동산 사기 (전, 월세 사기)",
   "암호화폐",
   "기타",
 ];
@@ -786,7 +787,7 @@ function ReportScreen({ navigation }) {
               </View>
             </>
           );
-        case individualCategories[4]: // 암호화폐
+        case individualCategories[5]: // 암호화폐
           return (
             <>
               <Text style={styles.label}>피해 경로</Text>
@@ -1268,9 +1269,9 @@ function ReportScreen({ navigation }) {
         {category !== "투자 사기, 전세 사기" && category !== "암호화폐" && (
           <>
             <View style={styles.labelContainer}>
-              <Text style={styles.label}>대면 피해</Text>
+              <Text style={styles.labelNoMargin}>대면 피해</Text>
               <TouchableOpacity
-                style={styles.checkboxItem}
+                style={styles.checkboxItemNoMargin}
                 onPress={() => {
                   const nextState = !isFaceToFace;
                   setIsFaceToFace(nextState);
@@ -1295,8 +1296,8 @@ function ReportScreen({ navigation }) {
                 <Text style={styles.label}>피해 물품</Text>
                 <TextInput
                   style={styles.input}
-                  value={damagedItem} // << ⭐️ faceToFaceDamagedItem에서 변경
-                  onChangeText={setDamagedItem} // << ⭐️ setFaceToFaceDamagedItem에서 변경
+                  value={damagedItem}
+                  onChangeText={setDamagedItem}
                   placeholder="피해 물품을 입력하세요 (예: 명품 가방, 현금)"
                 />
               </>
@@ -1442,6 +1443,11 @@ const styles = StyleSheet.create({
     color: "#495057",
     marginTop: 15,
   },
+  labelNoMargin: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#495057",
+  },
   required: { color: "#e03131" },
   input: {
     borderWidth: 1,
@@ -1487,6 +1493,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    paddingVertical: 3,
+  },
+  checkboxItemNoMargin: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 3,
   },
   checkboxLabel: { fontSize: 15, marginLeft: 8, color: "#333", flexShrink: 1 },
