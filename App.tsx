@@ -1,25 +1,19 @@
-// App.tsx
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
 import React, { useEffect } from "react";
 import {
-  Linking,
   Platform,
   View,
   StyleSheet,
   Text,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import {
   NavigationContainer,
-  EventArg,
-  useNavigation,
 } from "@react-navigation/native";
 import {
   createNativeStackNavigator,
-  NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -64,7 +58,7 @@ import HelpDeskListScreen from "./src/screens/HelpDeskListScreen";
 import HelpDeskCreateScreen from "./src/screens/HelpDeskCreateScreen";
 import HelpDeskDetailScreen from "./src/screens/HelpDeskDetailScreen";
 import AdditionalInfoScreen from "./src/screens/AdditionalInfoScreen";
-import NewCrimeCaseDetailScreen from "./src/screens/NewCrimeCaseDetailScreen"; // 새로 추가될 스크린
+import NewCrimeCaseDetailScreen from "./src/screens/NewCrimeCaseDetailScreen";
 
 const linking = {
   prefixes: ["credittalk://"],
@@ -75,15 +69,16 @@ const linking = {
   },
 };
 
+export type HelpDeskStackParamList = {
+  HelpDeskList: undefined;
+  HelpDeskCreate: undefined;
+  HelpDeskDetail: { questionId: number };
+};
+
 export type RootStackParamList = {
   MainApp: undefined;
   Report: undefined;
   MyReports: undefined;
-  NumericUnifiedSearch: {
-    searchTerm: string;
-    searchType: string;
-    title: string;
-  };
   UnifiedSearch: {
     searchType: string;
     title: string;
@@ -104,15 +99,12 @@ export type RootStackParamList = {
   IncidentPhotoList: undefined;
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
   NewCrimeCaseList: undefined;
-  NewCrimeCaseDetail: { caseId: number }; // 새로 추가
+  NewCrimeCaseDetail: { caseId: number };
   NewCrimeCaseCreate: undefined;
   VoiceAnalysis: undefined;
   FindEmail: undefined;
   ResetPassword: undefined;
   UpdatePassword: undefined;
-  HelpDeskList: undefined;
-  HelpDeskCreate: undefined;
-  HelpDeskDetail: { ticketId: number; ticketTitle: string };
   AdditionalInfo: undefined;
 };
 
@@ -122,17 +114,11 @@ export type CommunityStackParamList = {
   CommunityPostCreate: undefined;
 };
 
-export type ReviewStackParamList = {
-  ReviewList: undefined;
-  ReviewDetail: { reviewId: number; reviewTitle: string };
-  ReviewCreate: undefined;
-};
-
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const CommunityNativeStack =
   createNativeStackNavigator<CommunityStackParamList>();
-const ReviewNativeStack = createNativeStackNavigator<ReviewStackParamList>();
 const Tab = createBottomTabNavigator();
+const HelpDeskNativeStack = createNativeStackNavigator<HelpDeskStackParamList>();
 
 function CommunityStack() {
   return (
@@ -158,33 +144,30 @@ function CommunityStack() {
   );
 }
 
-function MainTabs() {
-  const rootNavigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  // 수정된 부분: useSafeAreaInsets Hook을 사용하여 inset 값을 가져옵니다.
-  const insets = useSafeAreaInsets();
+function HelpDeskStack() {
+  return (
+    <HelpDeskNativeStack.Navigator id={undefined} initialRouteName="HelpDeskList">
+      <HelpDeskNativeStack.Screen
+        name="HelpDeskList"
+        component={HelpDeskListScreen}
+        options={{ title: "1:1 문의" }}
+      />
+      <HelpDeskNativeStack.Screen
+        name="HelpDeskCreate"
+        component={HelpDeskCreateScreen}
+        options={{ title: "문의 작성" }}
+      />
+      <HelpDeskNativeStack.Screen
+        name="HelpDeskDetail"
+        component={HelpDeskDetailScreen}
+        options={{ title: "문의 상세" }}
+      />
+    </HelpDeskNativeStack.Navigator>
+  );
+}
 
-  const handleHelpCenterLink = () => {
-    Alert.alert(
-      "헬프센터 안내",
-      "한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.",
-      [
-        {
-          text: "확인",
-          onPress: () => {
-            Linking.openURL("https://naver.me/GhSYIDyA").catch(() =>
-              Alert.alert("오류", "링크를 열 수 없습니다."),
-            );
-          },
-        },
-        {
-          text: "취소",
-          style: "cancel",
-        },
-      ],
-      { cancelable: true },
-    );
-  };
+function MainTabs() {
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -207,7 +190,6 @@ function MainTabs() {
         },
         tabBarActiveTintColor: "#3d5afe",
         tabBarInactiveTintColor: "gray",
-        // 수정된 부분: 안드로이드에서 하단 네비게이션과 겹치지 않도록 스타일을 동적으로 조정합니다.
         tabBarStyle: {
           height: Platform.OS === "android" ? 65 + insets.bottom : 90,
           paddingBottom: Platform.OS === "android" ? insets.bottom + 5 : 30,
@@ -242,14 +224,8 @@ function MainTabs() {
       />
       <Tab.Screen
         name="HelpCenterTab"
-        component={View}
+        component={HelpDeskStack} // listener 방식 대신 스택 컴포넌트를 직접 연결
         options={{ title: "헬프센터" }}
-        listeners={{
-          tabPress: (e: EventArg<"tabPress", true, undefined>) => {
-            e.preventDefault();
-            handleHelpCenterLink();
-          },
-        }}
       />
     </Tab.Navigator>
   );
@@ -300,7 +276,6 @@ function AppNavigator() {
           />
         </>
       ) : !profile ? (
-        // 2. 소셜 로그인 후 추가 정보가 필요한 상태
         <>
           <RootStack.Screen
             name="AdditionalInfo"
@@ -309,7 +284,6 @@ function AppNavigator() {
           />
         </>
       ) : (
-        // 3. 로그인 완료 및 프로필 존재 상태: 메인 앱 스크린 그룹
         <>
           <RootStack.Screen
             name="MainApp"
@@ -340,10 +314,6 @@ function AppNavigator() {
             name="Report"
             component={ReportScreen}
             options={{ title: "사기 정보 입력" }}
-          />
-          <RootStack.Screen
-            name="NumericUnifiedSearch"
-            component={SearchBaseScreen}
           />
           <RootStack.Screen
             name="UnifiedSearch"
@@ -415,23 +385,6 @@ function AppNavigator() {
             name="UpdatePassword"
             component={UpdatePasswordScreen}
             options={{ title: "새 비밀번호 설정" }}
-          />
-          <RootStack.Screen
-            name="HelpDeskList"
-            component={HelpDeskListScreen}
-            options={{ title: "헬프 상담게시판" }}
-          />
-          <RootStack.Screen
-            name="HelpDeskCreate"
-            component={HelpDeskCreateScreen}
-            options={{ title: "상담 글 작성" }}
-          />
-          <RootStack.Screen
-            name="HelpDeskDetail"
-            component={HelpDeskDetailScreen}
-            options={({ route }) => ({
-              title: route.params.ticketTitle,
-            })}
           />
         </>
       )}

@@ -65,7 +65,7 @@ const ResultModal = ({ isVisible, onClose, result, navigation }) => {
                 style={styles.analysisRequestButton}
                 onPress={() => {
                   onClose(); // 모달을 닫고
-                  navigation.navigate("HelpDeskCreate"); // 헬프데스크 생성 화면으로 이동
+                  navigation.navigate("HelpDeskCreate");
                 }}
               >
                 <Text style={styles.analysisRequestButtonText}>
