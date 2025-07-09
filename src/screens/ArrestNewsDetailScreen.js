@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
+import CommentsSection from "../components/CommentsSection";
 
 const { width } = Dimensions.get('window');
 
@@ -84,7 +86,8 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
       <Text style={styles.title}>{news.title}</Text>
       <View style={styles.metaContainer}>
         <Text style={styles.author}>
@@ -104,7 +107,9 @@ function ArrestNewsDetailScreen({ route, navigation }) {
       <View style={styles.contentContainer}>
         <Text style={styles.content}>{news.content || '내용이 없습니다.'}</Text>
       </View>
-    </ScrollView>
+      <CommentsSection postId={newsId} boardType="arrest_news" />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

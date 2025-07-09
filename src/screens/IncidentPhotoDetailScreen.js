@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
   Image, // Image 추가
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
+import CommentsSection from "../components/CommentsSection";
 // import { useAuth } from '../context/AuthContext'; // 관리자 삭제 기능 시 필요
 
 const { width } = Dimensions.get('window');
@@ -90,7 +92,8 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container}>
+    <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
       <Text style={styles.title}>{photo.title}</Text>
       {photo.image_url && (
         <Image
@@ -113,14 +116,10 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
           {photo.description || '설명이 없습니다.'}
         </Text>
       </View>
-      {/* 관리자용 삭제 버튼 (선택적) */}
-      {/* {user && user.isAdmin && (
-        <TouchableOpacity onPress={handleDeletePhoto} style={styles.deleteButton}>
-            <Icon name="delete-outline" size={24} color="#e74c3c" />
-            <Text style={styles.deleteButtonText}>삭제 (관리자)</Text>
-        </TouchableOpacity>
-      )} */}
+      <CommentsSection postId={photoId} boardType="incident_photos" />
+
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
