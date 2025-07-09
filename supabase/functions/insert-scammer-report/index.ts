@@ -5,12 +5,17 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
+interface DamageAccount {
+  accountHolderName?: string | null;
+  accountNumber?: string | null;
+  bankName?: string | null;
+  isCashTransaction?: boolean | null;
+}
+
 interface ReportData {
-  name?: string | null;
+  damage_accounts?: DamageAccount[] | null; // 여러 계좌 정보
   phone_numbers?: (string | null)[] | null;
   impersonated_phone_number?: string | null;
-  account_number?: string | null;
-  bank_name?: string | null;
   site_name?: string | null;
   category: string;
   scam_report_source: string;
@@ -28,9 +33,9 @@ interface ReportData {
   nickname_evidence_url?: string | null;
   illegal_collection_evidence_urls?: string[] | null;
   traded_item_image_urls?: string[] | null;
-  is_cash_transaction?: boolean | null;
   detailed_crime_type?: string | null;
   damage_amount?: number | null;
+  no_damage_amount?: boolean;
   is_face_to_face?: boolean;
 }
 
@@ -61,23 +66,39 @@ async function encryptAndInsert(
     ? await Promise.all(reportData.phone_numbers.map((pn) => encrypt(pn)))
     : null;
 
-  const encryptedData = {
-    name: await encrypt(reportData.name),
-    impersonated_phone_number: await encrypt(
-      reportData.impersonated_phone_number,
-    ),
-    account_number: await encrypt(reportData.account_number),
-  };
+  const encryptedDamageAccounts =
+    reportData.damage_accounts && reportData.damage_accounts.length > 0
+      ? await Promise.all(
+        reportData.damage_accounts.map(async (acc) => {
+          if (acc.isCashTransaction) {
+            return {
+              isCashTransaction: true,
+              bankName: null,
+              accountHolderName: null,
+              accountNumber: null,
+            };
+          }
+          return {
+            isCashTransaction: false,
+            bankName: acc.bankName || null,
+            accountHolderName: await encrypt(acc.accountHolderName),
+            accountNumber: await encrypt(acc.accountNumber),
+          };
+        }),
+      )
+      : null;
+
+  const encryptedImpersonatedPhoneNumber = await encrypt(
+    reportData.impersonated_phone_number,
+  );
 
   const { error: insertError } = await supabaseAdminClient
     .from("scammer_reports")
     .insert({
       reporter_id: reporterId,
-      name: encryptedData.name,
+      damage_accounts: encryptedDamageAccounts, // 수정
       phone_numbers: encryptedPhoneNumbers,
-      impersonated_phone_number: encryptedData.impersonated_phone_number,
-      account_number: encryptedData.account_number,
-      bank_name: reportData.bank_name || null,
+      impersonated_phone_number: encryptedImpersonatedPhoneNumber,
       site_name: reportData.site_name || null,
       category: reportData.category,
       scam_report_source: reportData.scam_report_source,
@@ -97,10 +118,10 @@ async function encryptAndInsert(
       illegal_collection_evidence_urls:
         reportData.illegal_collection_evidence_urls || null,
       traded_item_image_urls: reportData.traded_item_image_urls || null,
-      is_cash_transaction: reportData.is_cash_transaction || false,
       detailed_crime_type: reportData.detailed_crime_type || null,
       damage_amount: reportData.damage_amount,
       is_face_to_face: reportData.is_face_to_face,
+      no_damage_amount: reportData.no_damage_amount,
     });
 
   if (insertError) {

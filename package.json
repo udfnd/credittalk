@@ -23,6 +23,8 @@
     "base64-arraybuffer": "^1.0.2",
     "base64-js": "^1.5.1",
     "buffer": "^6.0.3",
+    "date-fns": "^4.1.0",
+    "lodash": "^4.17.21",
     "node-libs-react-native": "^1.2.1",
     "react": "19.0.0",
     "react-native": "0.79.1",

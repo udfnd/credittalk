@@ -77,11 +77,22 @@ const victimCircumstanceOptions = [
 const albaCrimeTypes = ["절도", "사기", "횡령", "불성실", "기타"];
 const rentalCrimeTypes = ["렌트카", "명품 물건", "중장비 렌탈", "기타"];
 
+const initialDamageAccount = {
+  id: 1,
+  bankName: "",
+  accountNumber: "",
+  accountHolderName: "",
+  isCashTransaction: false,
+  showBankOtherInput: false,
+};
+
 function ReportScreen({ navigation }) {
   const { user } = useAuth();
 
-  const [accountHolderName, setAccountHolderName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
+  const [damageAccounts, setDamageAccounts] = useState([
+    { ...initialDamageAccount },
+  ]);
+
   const [nickname, setNickname] = useState("");
   const [category, setCategory] = useState("");
   const [categoryOther, setCategoryOther] = useState("");
@@ -117,13 +128,13 @@ function ReportScreen({ navigation }) {
   const [illegalCollectionPhotos, setIllegalCollectionPhotos] = useState([]);
   const [tradedItemPhotos, setTradedItemPhotos] = useState([]);
   const [isPhoneUnknown, setIsPhoneUnknown] = useState(false);
-  const [isCashTransaction, setIsCashTransaction] = useState(false);
 
-  const [bankName, setBankName] = useState("");
   const [siteName, setSiteName] = useState("");
-  const [isBankModalVisible, setIsBankModalVisible] = useState(false);
+  const [bankModalState, setBankModalState] = useState({
+    visible: false,
+    index: -1,
+  });
   const [isSiteModalVisible, setIsSiteModalVisible] = useState(false);
-  const [showBankOtherInput, setShowBankOtherInput] = useState(false);
 
   const [detailedCrimeType, setDetailedCrimeType] = useState("");
   const [detailedCrimeTypeOther, setDetailedCrimeTypeOther] = useState("");
@@ -131,6 +142,7 @@ function ReportScreen({ navigation }) {
     useState(false);
   const [damageAmount, setDamageAmount] = useState("");
   const [isFaceToFace, setIsFaceToFace] = useState(false);
+  const [noDamageAmount, setNoDamageAmount] = useState(false);
 
   useEffect(() => {
     if (companyType === "개인") setCurrentCategories(individualCategories);
@@ -167,8 +179,7 @@ function ReportScreen({ navigation }) {
   }, [category, attemptedFraud]);
 
   const clearInputs = () => {
-    setAccountHolderName("");
-    setAccountNumber("");
+    setDamageAccounts([{ ...initialDamageAccount, id: Date.now() }]);
     setNickname("");
     setCategory("");
     setCategoryOther("");
@@ -198,14 +209,13 @@ function ReportScreen({ navigation }) {
     setTradedItemPhotos([]);
     setIsLoading(false);
     setIsUploading(false);
-    setBankName("");
     setSiteName("");
-    setShowBankOtherInput(false);
     setDetailedCrimeType("");
     setDetailedCrimeTypeOther("");
     setShowDetailedCrimeTypeOtherInput(false);
     setDamageAmount("");
     setIsFaceToFace(false);
+    setNoDamageAmount(false);
   };
 
   const handlePhoneNumberChange = (index, part, value) => {
@@ -223,6 +233,54 @@ function ReportScreen({ navigation }) {
       const newPhoneNumbers = phoneNumbers.filter((_, i) => i !== index);
       setPhoneNumbers(newPhoneNumbers);
     }
+  };
+
+  const addDamageAccount = () => {
+    setDamageAccounts([
+      ...damageAccounts,
+      { ...initialDamageAccount, id: Date.now() },
+    ]);
+  };
+
+  const removeDamageAccount = (index) => {
+    if (damageAccounts.length > 1) {
+      const newAccounts = damageAccounts.filter((_, i) => i !== index);
+      setDamageAccounts(newAccounts);
+    }
+  };
+
+  const handleDamageAccountChange = (index, field, value) => {
+    const newAccounts = [...damageAccounts];
+    newAccounts[index][field] = value;
+    setDamageAccounts(newAccounts);
+  };
+
+  const handleCashTransactionToggle = (index) => {
+    const newAccounts = [...damageAccounts];
+    const currentAccount = newAccounts[index];
+    currentAccount.isCashTransaction = !currentAccount.isCashTransaction;
+    if (currentAccount.isCashTransaction) {
+      currentAccount.bankName = "";
+      currentAccount.accountNumber = "";
+      currentAccount.accountHolderName = "";
+      currentAccount.showBankOtherInput = false;
+    }
+    setDamageAccounts(newAccounts);
+  };
+
+  const handleBankSelect = (index, selectedBank) => {
+    const newAccounts = [...damageAccounts];
+    const currentAccount = newAccounts[index];
+
+    if (selectedBank === "기타") {
+      currentAccount.showBankOtherInput = true;
+      currentAccount.bankName = "";
+    } else {
+      currentAccount.showBankOtherInput = false;
+      currentAccount.bankName = selectedBank;
+    }
+    setDamageAccounts(newAccounts);
+    setBankModalState({ visible: false, index: -1 });
   };
 
   const handleChooseNicknamePhoto = () => {
@@ -291,6 +349,17 @@ function ReportScreen({ navigation }) {
       return;
     }
 
+    for (const account of damageAccounts) {
+      if (
+        account.showBankOtherInput &&
+        !account.bankName.trim() &&
+        !account.isCashTransaction
+      ) {
+        Alert.alert("입력 오류", "은행 이름을 직접 입력해주세요.");
+        return;
+      }
+    }
+
     if (category === "기타" && !categoryOther.trim()) {
       Alert.alert("입력 오류", '"카테고리"의 "기타" 항목을 입력해주세요.');
       return;
@@ -301,11 +370,6 @@ function ReportScreen({ navigation }) {
         "입력 오류",
         '"사기를 당하게 된 경로"의 "기타" 항목을 입력해주세요.',
       );
-      return;
-    }
-
-    if (showBankOtherInput && !bankName.trim()) {
-      Alert.alert("입력 오류", "은행 이름을 직접 입력해주세요.");
       return;
     }
 
@@ -401,8 +465,8 @@ function ReportScreen({ navigation }) {
       const fullPhoneNumbers = isPhoneUnknown
         ? null
         : phoneNumbers
-            .map((p) => `${p.prefix}${p.middle}${p.last}`)
-            .filter((p) => p.length >= 10);
+          .map((p) => `${p.prefix}${p.middle}${p.last}`)
+          .filter((p) => p.length >= 10);
 
       const impersonatedFullPhoneNumber =
         category === "노쇼 대리구매 사기" &&
@@ -443,16 +507,31 @@ function ReportScreen({ navigation }) {
           ? `기타: ${detailedCrimeTypeOther.trim()}`
           : detailedCrimeType;
 
+      const processedDamageAccounts = damageAccounts
+        .map((acc) => ({
+          bankName: acc.isCashTransaction ? null : acc.bankName.trim() || null,
+          accountNumber: acc.isCashTransaction
+            ? null
+            : acc.accountNumber.trim() || null,
+          accountHolderName: acc.isCashTransaction
+            ? null
+            : acc.accountHolderName.trim() || null,
+          isCashTransaction: acc.isCashTransaction,
+        }))
+        .filter(
+          (acc) =>
+            acc.isCashTransaction ||
+            (acc.accountHolderName && acc.accountNumber && acc.bankName),
+        );
+
       const reportData = {
-        name: isCashTransaction ? null : accountHolderName.trim() || null,
+        damage_accounts: processedDamageAccounts,
         nickname: nickname.trim() || null,
         phone_numbers:
           fullPhoneNumbers && fullPhoneNumbers.length > 0
             ? fullPhoneNumbers
             : null,
         impersonated_phone_number: impersonatedFullPhoneNumber,
-        account_number: isCashTransaction ? null : accountNumber.trim() || null,
-        bank_name: isCashTransaction ? null : bankName.trim() || null,
         site_name: siteName || null,
         category: finalCategory,
         scam_report_source: finalScamReportSource,
@@ -470,10 +549,14 @@ function ReportScreen({ navigation }) {
         illegal_collection_evidence_urls:
           illegalCollectionEvidenceUrls.filter(Boolean),
         traded_item_image_urls: tradedItemImageUrls.filter(Boolean),
-        is_cash_transaction: isCashTransaction,
         detailed_crime_type: finalDetailedCrimeType || null,
-        damage_amount: damageAmount ? parseInt(damageAmount, 10) : null,
+        damage_amount: noDamageAmount
+          ? null
+          : damageAmount
+            ? parseInt(damageAmount, 10)
+            : null,
         is_face_to_face: isFaceToFace,
+        no_damage_amount: noDamageAmount,
       };
 
       const { error: functionError } = await supabase.functions.invoke(
@@ -483,8 +566,8 @@ function ReportScreen({ navigation }) {
       if (functionError)
         throw new Error(
           functionError.context?.errorMessage ||
-            functionError.message ||
-            "알 수 없는 오류",
+          functionError.message ||
+          "알 수 없는 오류",
         );
 
       Alert.alert("등록 완료", "사기 정보가 성공적으로 등록되었습니다.");
@@ -519,16 +602,6 @@ function ReportScreen({ navigation }) {
     }
     if (newSource !== "기타") {
       setScamReportSourceOther("");
-    }
-  };
-
-  const handleBankSelect = (selectedBank) => {
-    if (selectedBank === "기타") {
-      setShowBankOtherInput(true);
-      setBankName("");
-    } else {
-      setShowBankOtherInput(false);
-      setBankName(selectedBank);
     }
   };
 
@@ -574,17 +647,6 @@ function ReportScreen({ navigation }) {
     setIsPhoneUnknown(nextState);
     if (nextState) {
       setPhoneNumbers([{ prefix: "", middle: "", last: "" }]);
-    }
-  };
-
-  const handleCashTransactionToggle = () => {
-    const nextState = !isCashTransaction;
-    setIsCashTransaction(nextState);
-    if (nextState) {
-      setBankName("");
-      setAccountNumber("");
-      setAccountHolderName("");
-      setShowBankOtherInput(false);
     }
   };
 
@@ -821,10 +883,12 @@ function ReportScreen({ navigation }) {
     >
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         <ImageSelectionModal
-          visible={isBankModalVisible}
-          onClose={() => setIsBankModalVisible(false)}
+          visible={bankModalState.visible}
+          onClose={() => setBankModalState({ visible: false, index: -1 })}
           items={bankImages}
-          onSelect={handleBankSelect}
+          onSelect={(selectedBank) =>
+            handleBankSelect(bankModalState.index, selectedBank)
+          }
           title="은행 선택"
         />
         <ImageSelectionModal
@@ -1057,7 +1121,7 @@ function ReportScreen({ navigation }) {
               style={[
                 styles.optionButtonText,
                 isPerpetratorIdentified === true &&
-                  styles.optionButtonTextSelected,
+                styles.optionButtonTextSelected,
               ]}
             >
               특정
@@ -1074,7 +1138,7 @@ function ReportScreen({ navigation }) {
               style={[
                 styles.optionButtonText,
                 isPerpetratorIdentified === false &&
-                  styles.optionButtonTextSelected,
+                styles.optionButtonTextSelected,
               ]}
             >
               불특정
@@ -1276,7 +1340,7 @@ function ReportScreen({ navigation }) {
                   const nextState = !isFaceToFace;
                   setIsFaceToFace(nextState);
                   if (!nextState) {
-                    setDamagedItem(""); // 체크 해제 시 damagedItem 내용 초기화
+                    setDamagedItem("");
                   }
                 }}
               >
@@ -1304,94 +1368,138 @@ function ReportScreen({ navigation }) {
             )}
           </>
         )}
-
         <View style={styles.labelContainer}>
           <Text style={styles.label}>
             {attemptedFraud === false
               ? "피해당할 뻔 했던 계좌번호 (선택)"
               : "피해금 송금 정보 (선택)"}
           </Text>
-          {(category === "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기" ||
-            category === "불법사금융") && (
-            <TouchableOpacity
-              style={styles.checkboxItem}
-              onPress={handleCashTransactionToggle}
-            >
-              <Icon
-                name={
-                  isCashTransaction
-                    ? "checkbox-marked"
-                    : "checkbox-blank-outline"
-                }
-                size={24}
-                color={isCashTransaction ? "#3d5afe" : "#555"}
-              />
-              <Text style={styles.checkboxLabel}>현금 전달</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        {!isCashTransaction && category !== "암호화폐" && (
-          <>
-            <View style={styles.inputWithButtonContainer}>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.inputWithButton,
-                  isCashTransaction && styles.disabledInput,
-                ]}
-                value={showBankOtherInput ? "기타 (직접입력)" : bankName}
-                placeholder="오른쪽 버튼으로 은행 선택"
-                editable={false}
-              />
-              <TouchableOpacity
-                style={styles.inlineButton}
-                onPress={() => setIsBankModalVisible(true)}
-                disabled={isCashTransaction}
-              >
-                <Text style={styles.inlineButtonText}>선택</Text>
-              </TouchableOpacity>
+        {damageAccounts.map((account, index) => (
+          <View key={account.id} style={styles.accountEntryContainer}>
+            <View style={styles.accountHeader}>
+              <Text style={styles.accountHeaderTitle}>
+                피해금 송금 정보 #{index + 1}
+              </Text>
+              {damageAccounts.length > 1 && (
+                <TouchableOpacity
+                  onPress={() => removeDamageAccount(index)}
+                  style={styles.removeAccountButton}
+                >
+                  <Icon name="trash-can-outline" size={24} color="#e74c3c" />
+                </TouchableOpacity>
+              )}
             </View>
 
-            {showBankOtherInput && (
+            {(category === "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기" ||
+              category === "불법사금융") && (
+              <TouchableOpacity
+                style={styles.checkboxItem}
+                onPress={() => handleCashTransactionToggle(index)}
+              >
+                <Icon
+                  name={
+                    account.isCashTransaction
+                      ? "checkbox-marked"
+                      : "checkbox-blank-outline"
+                  }
+                  size={24}
+                  color={account.isCashTransaction ? "#3d5afe" : "#555"}
+                />
+                <Text style={styles.checkboxLabel}>현금 전달</Text>
+              </TouchableOpacity>
+            )}
+
+            {!account.isCashTransaction && category !== "암호화폐" && (
+              <>
+                <View style={styles.inputWithButtonContainer}>
+                  <TextInput
+                    style={[styles.input, styles.inputWithButton]}
+                    value={
+                      account.showBankOtherInput
+                        ? "기타 (직접입력)"
+                        : account.bankName
+                    }
+                    placeholder="오른쪽 버튼으로 은행 선택"
+                    editable={false}
+                  />
+                  <TouchableOpacity
+                    style={styles.inlineButton}
+                    onPress={() =>
+                      setBankModalState({ visible: true, index: index })
+                    }
+                  >
+                    <Text style={styles.inlineButtonText}>선택</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {account.showBankOtherInput && (
+                  <TextInput
+                    style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
+                    value={account.bankName}
+                    onChangeText={(text) =>
+                      handleDamageAccountChange(index, "bankName", text)
+                    }
+                    placeholder="은행 이름을 직접 입력해주세요."
+                  />
+                )}
+                <TextInput
+                  style={styles.input}
+                  value={account.accountHolderName}
+                  onChangeText={(text) =>
+                    handleDamageAccountChange(index, "accountHolderName", text)
+                  }
+                  placeholder="예금주명"
+                />
+              </>
+            )}
+            {!account.isCashTransaction && (
               <TextInput
-                style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
-                value={bankName}
-                onChangeText={setBankName}
-                placeholder="은행 이름을 직접 입력해주세요."
+                style={[styles.input, { marginTop: 10 }]}
+                value={account.accountNumber}
+                onChangeText={(text) =>
+                  handleDamageAccountChange(index, "accountNumber", text)
+                }
+                placeholder={
+                  category === "암호화폐"
+                    ? "전자지갑주소"
+                    : "계좌번호 (- 없이 적어주세요)"
+                }
+                keyboardType={
+                  category === "암호화폐" ? "default" : "number-pad"
+                }
               />
             )}
-            <TextInput
-              style={[styles.input, isCashTransaction && styles.disabledInput]}
-              value={accountHolderName}
-              onChangeText={setAccountHolderName}
-              placeholder="예금주명"
-              editable={!isCashTransaction}
-            />
-          </>
-        )}
-        {!isCashTransaction && (
-          <TextInput
-            style={[styles.input, isCashTransaction && styles.disabledInput]}
-            value={accountNumber}
-            onChangeText={setAccountNumber}
-            placeholder={
-              category === "암호화폐"
-                ? "전자지갑주소"
-                : "계좌번호 (- 없이 적어주세요)"
-            }
-            keyboardType={category === "암호화폐" ? "default" : "number-pad"}
-            editable={!isCashTransaction}
-          />
-        )}
+          </View>
+        ))}
+        <TouchableOpacity onPress={addDamageAccount} style={styles.addPhoneButton}>
+          <Icon name="plus" size={20} color="#3d5afe" />
+          <Text style={styles.addPhoneButtonText}>피해금 송금 정보 추가</Text>
+        </TouchableOpacity>
+        {/* [수정 끝] */}
+
         <Text style={styles.label}>피해 금액</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, noDamageAmount && styles.disabledInput]}
           value={damageAmount}
           onChangeText={setDamageAmount}
           placeholder="피해 금액을 숫자로 입력하세요 (예: 10000)"
           keyboardType="number-pad"
+          editable={!noDamageAmount}
         />
+        <TouchableOpacity
+          style={styles.checkboxItem}
+          onPress={() => setNoDamageAmount(!noDamageAmount)}
+        >
+          <Icon
+            name={noDamageAmount ? "checkbox-marked" : "checkbox-blank-outline"}
+            size={24}
+            color={noDamageAmount ? "#3d5afe" : "#555"}
+          />
+          <Text style={styles.checkboxLabel}>피해 금액 없음</Text>
+        </TouchableOpacity>
+
         <Text style={styles.label}>
           사건 개요 <Text style={styles.required}>*</Text>
         </Text>
@@ -1561,7 +1669,7 @@ const styles = StyleSheet.create({
   inputWithButtonContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 10,
   },
   inlineButton: {
     height: 50,
@@ -1599,8 +1707,8 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 0,
     borderRightWidth: 0,
-    borderTopLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 8,
+    borderBottomRightRadius: 8,
   },
   phoneRowContainer: {
     flexDirection: "row",
@@ -1619,13 +1727,34 @@ const styles = StyleSheet.create({
     borderColor: "#3d5afe",
     borderStyle: "dashed",
     borderRadius: 8,
-    marginTop: 5,
+    marginTop: 10,
+    marginBottom: 10,
   },
   addPhoneButtonText: {
     color: "#3d5afe",
     marginLeft: 8,
     fontWeight: "bold",
   },
+  accountEntryContainer: {
+    borderWidth: 1,
+    borderColor: "#dee2e6",
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
+    backgroundColor: "#fff",
+  },
+  accountHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  accountHeaderTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#3d5afe",
+  },
+  removeAccountButton: {},
 });
 
 export default ReportScreen;
