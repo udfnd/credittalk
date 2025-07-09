@@ -4,6 +4,7 @@ import {
   View,
   Text,
   ScrollView,
+  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
@@ -15,6 +16,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigation } from "@react-navigation/native";
+import CommentsSection from "../components/CommentsSection";
 
 const { width } = Dimensions.get("window");
 
@@ -129,7 +131,8 @@ function CommunityPostDetailScreen({ route }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
       <View style={styles.headerContainer}>
         <Text style={styles.title}>{post.title}</Text>
         {user && post.author_auth_id === user.id && (
@@ -163,7 +166,9 @@ function CommunityPostDetailScreen({ route }) {
           ))}
         </View>
       )}
-    </ScrollView>
+        <CommentsSection postId={postId} boardType="community_posts" />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

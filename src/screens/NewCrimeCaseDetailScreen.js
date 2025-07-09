@@ -4,6 +4,7 @@ import {
   View,
   Text,
   ScrollView,
+  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
@@ -13,6 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigation } from "@react-navigation/native";
+import CommentsSection from "../components/CommentsSection";
 
 const { width } = Dimensions.get("window");
 
@@ -86,11 +88,12 @@ function NewCrimeCaseDetailScreen({ route }) {
   }
 
   return (
-    <ScrollView
+    <SafeAreaView
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
     >
-      <View style={styles.header}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+        <View style={styles.header}>
         <Text style={styles.label}>범죄 수법</Text>
         <Text style={styles.date}>
           게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
@@ -114,7 +117,9 @@ function NewCrimeCaseDetailScreen({ route }) {
             ))}
           </View>
         )}
-    </ScrollView>
+        <CommentsSection postId={caseId} boardType="new_crime_cases" />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
