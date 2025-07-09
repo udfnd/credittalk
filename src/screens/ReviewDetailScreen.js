@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  SafeAreaView,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
@@ -12,6 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import CommentsSection from "../components/CommentsSection";
 
 // 별점 표시 컴포넌트 (ReviewListScreen과 동일)
 const StarRating = ({ rating }) => {
@@ -137,33 +139,37 @@ function ReviewDetailScreen({ route }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.title}>{review.title}</Text>
-        {user && review.user_id === user.id && (
-          <TouchableOpacity
-            onPress={handleDeleteReview}
-            style={styles.deleteButton}
-          >
-            <Icon name="delete-outline" size={24} color="#e74c3c" />
-          </TouchableOpacity>
-        )}
-      </View>
-      <View style={styles.metaContainer}>
-        <Text style={styles.author}>
-          작성자: {review.author_name || '익명'}
-        </Text>
-        {review.rating && <StarRating rating={review.rating} />}
-        <Text style={styles.date}>
-          게시일: {new Date(review.created_at).toLocaleString()}
-        </Text>
-      </View>
-      <View style={styles.contentContainer}>
-        <Text style={styles.content}>
-          {review.content || '내용이 없습니다.'}
-        </Text>
-      </View>
-    </ScrollView>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
+
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>{review.title}</Text>
+          {user && review.user_id === user.id && (
+            <TouchableOpacity
+              onPress={handleDeleteReview}
+              style={styles.deleteButton}
+            >
+              <Icon name="delete-outline" size={24} color="#e74c3c" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.metaContainer}>
+          <Text style={styles.author}>
+            작성자: {review.author_name || '익명'}
+          </Text>
+          {review.rating && <StarRating rating={review.rating} />}
+          <Text style={styles.date}>
+            게시일: {new Date(review.created_at).toLocaleString()}
+          </Text>
+        </View>
+        <View style={styles.contentContainer}>
+          <Text style={styles.content}>
+            {review.content || '내용이 없습니다.'}
+          </Text>
+        </View>
+        <CommentsSection postId={reviewId} boardType="review" />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
