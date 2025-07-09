@@ -1,3 +1,4 @@
+// src/screens/SearchBaseScreen.js
 import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
@@ -8,14 +9,13 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Keyboard,
-  ScrollView,
 } from "react-native";
 import { supabase } from "../lib/supabaseClient";
 import { debounce } from "lodash";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { format, parseISO } from "date-fns";
+import { useRoute, useNavigation } from "@react-navigation/native";
 
-// 기존 카테고리별 스타일 정의
 const categoryStyles = {
   "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기": {
     backgroundColor: "#FFEBEE",
@@ -64,22 +64,24 @@ const HighlightedText = ({ text, highlight }) => {
   );
 };
 
-// [추가] 한 페이지에 보여줄 결과 수
 const RESULTS_PER_PAGE = 5;
 
 // 메인 검색 화면 컴포넌트
-const SearchBaseScreen = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+const SearchBaseScreen = ({ title }) => {
+  const route = useRoute();
+  const navigation = useNavigation();
+
+  const initialSearchTerm = route.params?.searchTerm ?? "";
+
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+  const [isLoading, setIsLoading] = useState(!!initialSearchTerm);
   const [error, setError] = useState("");
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(!!initialSearchTerm);
 
-  // [수정] 페이지네이션 상태 관리
-  const [allResults, setAllResults] = useState([]); // 모든 검색 결과를 저장
+  const [allResults, setAllResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagedResults, setPagedResults] = useState([]); // 현재 페이지에 보여줄 결과만 저장
+  const [pagedResults, setPagedResults] = useState([]);
 
-  // [수정] 검색 로직: 모든 결과를 한 번에 가져옴
   const debouncedSearch = useCallback(
     debounce(async (term) => {
       if (!term || term.trim().length < 2) {
@@ -93,10 +95,9 @@ const SearchBaseScreen = () => {
       setIsLoading(true);
       setSearched(true);
       setError("");
-      setCurrentPage(1); // 새로운 검색은 항상 1페이지부터
+      setCurrentPage(1);
 
       try {
-        // 기존 함수를 그대로 사용하여 모든 데이터를 가져옴
         const { data, error: rpcError } = await supabase.rpc("search_reports", {
           search_term: term.trim(),
         });
@@ -115,7 +116,12 @@ const SearchBaseScreen = () => {
     [],
   );
 
-  // [추가] 클라이언트 측에서 페이지를 나누는 로직
+  useEffect(() => {
+    if (initialSearchTerm) {
+      handleSearch(initialSearchTerm);
+    }
+  }, [initialSearchTerm]);
+
   useEffect(() => {
     const startIndex = (currentPage - 1) * RESULTS_PER_PAGE;
     const endIndex = startIndex + RESULTS_PER_PAGE;
@@ -139,12 +145,9 @@ const SearchBaseScreen = () => {
     const totalPages = Math.ceil(allResults.length / RESULTS_PER_PAGE);
     if (newPage > 0 && newPage <= totalPages) {
       setCurrentPage(newPage);
-      // FlatList가 최상단으로 스크롤되도록 하는 로직이 필요하다면 여기에 추가
     }
   };
 
-
-  // 검색 결과 아이템 렌더링 함수
   const renderItem = ({ item }) => {
     const style = getCategoryStyle(item.category);
     return (
@@ -227,7 +230,6 @@ const SearchBaseScreen = () => {
     );
   };
 
-  // [수정] 페이지네이션 UI 렌더링 함수
   const renderPagination = () => {
     const totalPages = Math.ceil(allResults.length / RESULTS_PER_PAGE);
     if (totalPages <= 1) return null;
@@ -262,9 +264,9 @@ const SearchBaseScreen = () => {
       <FlatList
         ListHeaderComponent={
           <>
-            <Text style={styles.title}>통합 검색</Text>
+            <Text style={styles.title}>{title}</Text>
             <Text style={styles.subtitle}>
-              피해 사례에 등록된 전화번호, 계좌번호, 이름, 닉네임, 사이트 주소 등으로 검색할 수 있습니다.
+              피해 사례에 등록된 전화번호 맟 계좌번호로 검색할 수 있습니다.
             </Text>
             <View style={styles.searchContainer}>
               <Icon name="magnify" size={22} color="#888" style={styles.searchIcon} />
@@ -291,17 +293,24 @@ const SearchBaseScreen = () => {
             )}
           </>
         }
-        data={pagedResults} // [수정] 페이지가 나눠진 결과를 FlatList에 전달
+        data={pagedResults}
         renderItem={renderItem}
         keyExtractor={(item, index) => `${item.id}-${index}`}
         ListEmptyComponent={
           !isLoading && searched ? (
             <View style={styles.noResultsContainer}>
-              <Icon name="information-outline" size={60} color="#ccc" />
+              <Icon name="shield-off-outline" size={60} color="#ccc" />
               <Text style={styles.noResultsText}>
-                '{searchTerm}'에 대한 검색 결과가 없습니다.
+                피해 사실이 없습니다.
               </Text>
-              <Text style={styles.noResultsSubtitle}>다른 검색어를 입력해보세요.</Text>
+              <TouchableOpacity
+                style={styles.registerButton}
+                onPress={() => navigation.navigate("Report")}
+              >
+                <Text style={styles.registerButtonText}>
+                  등록하시겠습니까?
+                </Text>
+              </TouchableOpacity>
             </View>
           ) : null
         }
@@ -312,7 +321,6 @@ const SearchBaseScreen = () => {
   );
 };
 
-// 기존 UI 스타일 유지 + 페이지네이션 스타일 추가
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -389,12 +397,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#888",
   },
+  registerButton: {
+    backgroundColor: "#3d5afe",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    marginTop: 20,
+
+  },
+  registerButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   resultItem: {
     backgroundColor: "#fff",
     borderRadius: 8,
     marginBottom: 15,
     marginHorizontal: 20,
-    marginTop: 15, // 검색 결과 텍스트와 간격
+    marginTop: 15,
     borderWidth: 1,
     borderColor: "#eee",
     elevation: 2,

@@ -18,7 +18,6 @@ import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
 import { useAuth } from "../context/AuthContext";
-import { SEARCH_TYPES } from "./SearchBaseScreen";
 
 const { width } = Dimensions.get("window");
 const BANNER_HEIGHT = 150;
@@ -119,10 +118,10 @@ function HomeScreen() {
           <View style={styles.searchBarContainer}>
             <TextInput
               style={styles.searchInput}
-              placeholder="연락처 또는 계좌번호 입력"
+              placeholder="연락처, 계좌번호, 이름 등 검색"
               value={searchTerm}
               onChangeText={setSearchTerm}
-              keyboardType="numeric"
+              keyboardType="default"
               onSubmitEditing={handleSearch}
               returnKeyType="search"
             />
