@@ -1,248 +1,220 @@
-// src/screens/NoticeDetailScreen.js
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
+  ScrollView,
   ActivityIndicator,
-  TouchableOpacity,
+  Alert,
+  SafeAreaView,
   Image,
   Dimensions,
-  Linking,
-  Alert,
-} from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { supabase } from "../lib/supabaseClient";
+  TouchableOpacity, // 1. 링크 버튼을 위해 TouchableOpacity import
+  Linking, // 2. 외부 링크를 열기 위해 Linking import
+} from 'react-native';
+import { useRoute } from '@react-navigation/native';
+import { supabase } from '../lib/supabaseClient';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const { width } = Dimensions.get("window");
+// 댓글 컴포넌트 import
+import CommentsSection from '../components/CommentsSection';
 
-function NoticeDetailScreen({ route, navigation }) {
-  const { noticeId, noticeTitle } = route.params;
+// 화면 너비 계산
+const { width } = Dimensions.get('window');
+const contentPadding = 20;
+const imageWidth = width - contentPadding * 2;
+
+const NoticeDetailScreen = () => {
+  const route = useRoute();
+  const { noticeId } = route.params;
   const [notice, setNotice] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (noticeTitle) {
-      navigation.setOptions({ title: noticeTitle });
-    }
-  }, [noticeTitle, navigation]);
-
-  const fetchNoticeDetail = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const { data, error: fetchError } = await supabase
-        .from("notices")
-        .select(
-          "id, title, content, created_at, author_name, image_urls, link_url", // image_url을 image_urls로 변경
-        )
-        .eq("id", noticeId)
-        .eq("is_published", true)
-        .single();
-
-      if (fetchError) {
-        if (fetchError.code === "PGRST116") {
-          // Not found
-          throw new Error("공지사항을 찾을 수 없거나 접근 권한이 없습니다.");
-        }
-        throw fetchError;
+    const fetchNoticeDetails = async () => {
+      if (!noticeId) {
+        Alert.alert('오류', '게시글 정보를 가져올 수 없습니다.');
+        setLoading(false);
+        return;
       }
-      setNotice(data);
-    } catch (err) {
-      setError(err.message || "공지사항 상세 정보를 불러오는데 실패했습니다.");
-    } finally {
-      setIsLoading(false);
-    }
+
+      try {
+        setLoading(true);
+        // 3. 'link_url'과 'image_urls' 컬럼을 모두 명시적으로 조회합니다.
+        const { data, error } = await supabase
+          .from('notices')
+          .select('*, link_url, image_urls')
+          .eq('id', noticeId)
+          .single();
+
+        if (error) throw error;
+        setNotice(data);
+      } catch (error) {
+        console.error('Error fetching notice:', error);
+        Alert.alert('오류', '공지사항을 불러오는 중 문제가 발생했습니다.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNoticeDetails();
   }, [noticeId]);
 
-  useEffect(() => {
-    fetchNoticeDetail();
-  }, [fetchNoticeDetail]);
-
-  const handleLinkPress = () => {
-    if (notice?.link_url) {
-      Linking.openURL(notice.link_url).catch(() =>
-        Alert.alert("오류", "링크를 열 수 없습니다."),
-      );
+  // 링크 열기 핸들러
+  const handleLinkPress = async (url) => {
+    const supported = await Linking.canOpenURL(url);
+    if (supported) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert('오류', `이 링크를 열 수 없습니다: ${url}`);
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <View style={styles.centered}>
+      <SafeAreaView style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#3d5afe" />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity
-          onPress={fetchNoticeDetail}
-          style={styles.retryButton}
-        >
-          <Text style={styles.retryButtonText}>다시 시도</Text>
-        </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!notice) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyText}>공지사항 정보를 찾을 수 없습니다.</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.errorText}>해당 공지사항을 찾을 수 없습니다.</Text>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainerScrollView}
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>{notice.title}</Text>
-        <View style={styles.metaContainer}>
-          {notice.author_name && (
-            <Text style={styles.author}>작성자: {notice.author_name}</Text>
-          )}
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.postContainer}>
+          <Text style={styles.title}>{notice.title}</Text>
           <Text style={styles.date}>
-            게시일: {new Date(notice.created_at).toLocaleDateString()}
+            {format(new Date(notice.created_at), 'yyyy년 MM월 dd일 HH:mm', {
+              locale: ko,
+            })}
           </Text>
+          <View style={styles.separator} />
+          <Text style={styles.content}>{notice.content}</Text>
+
+          {/* --- 4. 이미지 갤러리 렌더링 (원래 기능 복구) --- */}
+          {notice.image_urls && notice.image_urls.length > 0 && (
+            <View style={styles.imageGallery}>
+              {notice.image_urls.map((url, index) => (
+                <Image
+                  key={index}
+                  source={{ uri: url }}
+                  style={styles.image}
+                  resizeMode="cover"
+                />
+              ))}
+            </View>
+          )}
+
+          {/* --- 5. 링크 버튼 렌더링 (원래 기능 복구) --- */}
+          {notice.link_url && (
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => handleLinkPress(notice.link_url)}
+            >
+              <Icon name="link-variant" size={20} color="#fff" />
+              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
 
-      {/* 이미지 렌더링 수정: notice.image_urls 배열을 순회하며 Image 컴포넌트 렌더링 */}
-      {notice.image_urls && notice.image_urls.length > 0 && (
-        <View style={styles.imageSection}>
-          {notice.image_urls.slice(0, 3).map((url, index) => (
-            <Image
-              key={index}
-              source={{ uri: url }}
-              style={styles.mainImage}
-              resizeMode="contain"
-            />
-          ))}
-        </View>
-      )}
-
-      <View style={styles.contentWrapper}>
-        <Text style={styles.content}>
-          {notice.content || "내용이 없습니다."}
-        </Text>
-      </View>
-
-      {notice.link_url && (
-        <TouchableOpacity style={styles.linkButton} onPress={handleLinkPress}>
-          <Icon name="link-variant" size={20} color="white" />
-          <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+        {/* --- 6. 댓글 기능 추가 --- */}
+        <CommentsSection postId={noticeId} boardType="notices" />
+      </ScrollView>
+    </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#fff",
-  },
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: '#F8F9FA',
   },
-  contentContainerScrollView: {
-    padding: 20,
+  scrollContainer: {
+    flexGrow: 1,
   },
-  header: {
-    marginBottom: 20,
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  errorText: {
+    textAlign: 'center',
+    marginTop: 50,
+    fontSize: 16,
+    color: '#555',
+  },
+  postContainer: {
+    backgroundColor: '#fff',
+    padding: contentPadding,
+    borderBottomWidth: 8,
+    borderBottomColor: '#F8F9FA',
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    marginBottom: 10,
-  },
-  metaContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ecf0f1",
-  },
-  author: {
-    fontSize: 14,
-    color: "#7f8c8d",
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#212529',
   },
   date: {
     fontSize: 14,
-    color: "#7f8c8d",
-  },
-  // 이미지 섹션 스타일 추가
-  imageSection: {
+    color: '#868E96',
     marginBottom: 20,
   },
-  mainImage: {
-    width: "100%",
-    height: width * 0.6,
-    borderRadius: 8,
-    marginBottom: 15, // 이미지 간 간격
-    backgroundColor: "#e9ecef",
-  },
-  contentWrapper: {
-    marginTop: 10,
+  separator: {
+    height: 1,
+    backgroundColor: '#E9ECEF',
+    marginBottom: 25,
   },
   content: {
     fontSize: 16,
-    lineHeight: 26,
-    color: "#34495e",
-    textAlign: "left",
+    lineHeight: 28,
+    color: '#495057',
+    marginBottom: 20,
   },
-  linkButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 30,
-    marginBottom: 30,
-    backgroundColor: "#3d5afe",
+  imageGallery: {
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  image: {
+    width: imageWidth,
+    height: imageWidth * 0.75,
     borderRadius: 8,
+    marginBottom: 15,
+  },
+  // --- 링크 버튼 스타일 추가 ---
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3d5afe',
     paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
     elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   linkButtonText: {
-    color: "white",
+    color: '#fff',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginLeft: 8,
-  },
-  errorText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#e74c3c",
-    textAlign: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#7f8c8d",
-  },
-  retryButton: {
-    marginTop: 20,
-    backgroundColor: "#3d5afe",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-  },
-  retryButtonText: {
-    color: "white",
-    fontSize: 16,
   },
 });
 
