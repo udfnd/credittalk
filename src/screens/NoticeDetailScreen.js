@@ -9,8 +9,8 @@ import {
   SafeAreaView,
   Image,
   Dimensions,
-  TouchableOpacity, // 1. 링크 버튼을 위해 TouchableOpacity import
-  Linking, // 2. 외부 링크를 열기 위해 Linking import
+  TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
@@ -18,10 +18,8 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-// 댓글 컴포넌트 import
 import CommentsSection from '../components/CommentsSection';
 
-// 화면 너비 계산
 const { width } = Dimensions.get('window');
 const contentPadding = 20;
 const imageWidth = width - contentPadding * 2;
@@ -42,7 +40,6 @@ const NoticeDetailScreen = () => {
 
       try {
         setLoading(true);
-        // 3. 'link_url'과 'image_urls' 컬럼을 모두 명시적으로 조회합니다.
         const { data, error } = await supabase
           .from('notices')
           .select('*, link_url, image_urls')
@@ -62,7 +59,6 @@ const NoticeDetailScreen = () => {
     fetchNoticeDetails();
   }, [noticeId]);
 
-  // 링크 열기 핸들러
   const handleLinkPress = async (url) => {
     const supported = await Linking.canOpenURL(url);
     if (supported) {
@@ -117,8 +113,6 @@ const NoticeDetailScreen = () => {
               ))}
             </View>
           )}
-
-          {/* --- 5. 링크 버튼 렌더링 (원래 기능 복구) --- */}
           {notice.link_url && (
             <TouchableOpacity
               style={styles.linkButton}
@@ -129,8 +123,6 @@ const NoticeDetailScreen = () => {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* --- 6. 댓글 기능 추가 --- */}
         <CommentsSection postId={noticeId} boardType="notices" />
       </ScrollView>
     </SafeAreaView>
