@@ -117,7 +117,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
         </Text>
       </View>
       <CommentsSection postId={photoId} boardType="incident_photos" />
-
     </ScrollView>
     </SafeAreaView>
   );
