@@ -43,9 +43,8 @@ function HomeScreen() {
       Alert.alert("검색어 입력", "연락처 또는 계좌번호를 입력해주세요.");
       return;
     }
-    navigation.navigate("NumericUnifiedSearch", {
+    navigation.navigate("UnifiedSearch", {
       searchTerm: searchTerm.trim(),
-      searchType: SEARCH_TYPES.NUMERIC_UNIFIED,
       title: `'${searchTerm.trim()}' 검색 결과`,
     });
   };
