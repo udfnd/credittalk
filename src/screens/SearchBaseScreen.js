@@ -1,572 +1,475 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
+  TextInput,
   Text,
   FlatList,
-  ActivityIndicator,
   StyleSheet,
-  Button,
-  TextInput,
-  Keyboard,
+  ActivityIndicator,
   TouchableOpacity,
-  Alert,
+  Keyboard,
+  ScrollView,
 } from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
+import { debounce } from "lodash";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { format, parseISO } from "date-fns";
 
-const ITEMS_PER_PAGE = 10;
-
-export const SEARCH_TYPES = {
-  UNIFIED: "unified",
-  ACCOUNT: "account",
-  PHONE: "phone",
-  NUMERIC_UNIFIED: "numeric_unified",
+// 기존 카테고리별 스타일 정의
+const categoryStyles = {
+  "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기": {
+    backgroundColor: "#FFEBEE",
+    color: "#D32F2F",
+  },
+  "불법사금융": { backgroundColor: "#E8EAF6", color: "#303F9F" },
+  "중고물품 사기": { backgroundColor: "#E0F2F1", color: "#00796B" },
+  "투자 사기": { backgroundColor: "#FFF8E1", color: "#FFA000" },
+  "부동산 사기 (전, 월세 사기)": {
+    backgroundColor: "#F3E5F5",
+    color: "#7B1FA2",
+  },
+  "암호화폐": { backgroundColor: "#E1F5FE", color: "#0288D1" },
+  "노쇼": { backgroundColor: "#F1F8E9", color: "#689F38" },
+  "노쇼 대리구매 사기": { backgroundColor: "#FFFDE7", color: "#FBC02D" },
+  "공갈 협박 범죄": { backgroundColor: "#212121", color: "#FFFFFF" },
+  "렌탈 사업 피해": { backgroundColor: "#FBE9E7", color: "#D84315" },
+  "기타": { backgroundColor: "#ECEFF1", color: "#455A64" },
 };
 
-const maskNameMiddle = (name) => {
-  if (!name || typeof name !== "string" || name.length <= 1) {
-    return name || "";
-  }
-  if (name.length === 2) {
-    return `${name[0]}*`;
-  }
-  const middleIndex = Math.floor(name.length / 2);
-  return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
+const getCategoryStyle = (category) => {
+  return categoryStyles[category] || categoryStyles["기타"];
 };
 
-const maskPhoneNumberCustom = (phoneNumber) => {
-  if (!phoneNumber || typeof phoneNumber !== "string") {
-    return phoneNumber || "";
+// 하이라이트 텍스트 렌더링 컴포넌트
+const HighlightedText = ({ text, highlight }) => {
+  if (!text) return null;
+  if (!highlight || !highlight.trim()) {
+    return <Text style={styles.resultText}>{text}</Text>;
   }
-  const cleanNumber = phoneNumber.replace(/-/g, "");
-  const len = cleanNumber.length;
+  const regex = new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  const parts = text.split(regex);
 
-  if (len === 11) {
-    const p1 = cleanNumber.substring(0, 3);
-    const p2 = cleanNumber.substring(3, 7);
-    const p3 = cleanNumber.substring(7, 11);
-    const maskedP2 = `${p2.substring(0, 1)}*${p2.substring(2)}`;
-    const maskedP3 = `${p3.substring(0, 1)}*${p3.substring(2)}`;
-    return `${p1}-${maskedP2}-${maskedP3}`;
-  }
-  if (len === 10) {
-    if (cleanNumber.startsWith("02")) {
-      const p1 = cleanNumber.substring(0, 2);
-      const p2 = cleanNumber.substring(2, 6);
-      const p3 = cleanNumber.substring(6, 10);
-      const maskedP2 = `${p2.substring(0, 2)}*${p2.substring(3)}`;
-      const maskedP3 = `${p3.substring(0, 1)}*${p3.substring(2)}`;
-      return `${p1}-${maskedP2}-${maskedP3}`;
-    }
-    const p1 = cleanNumber.substring(0, 3);
-    const p2 = cleanNumber.substring(3, 6);
-    const p3 = cleanNumber.substring(6, 10);
-    const maskedP2 = `${p2.substring(0, 1)}*${p2.substring(2)}`;
-    const maskedP3 = `${p3.substring(0, 1)}*${p3.substring(2)}`;
-    return `${p1}-${maskedP2}-${maskedP3}`;
-  }
-
-  const midIndex = Math.floor(len / 2) - 1;
-  if (midIndex <= 0) return cleanNumber;
-  return `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(
-    midIndex + 2,
-  )}`;
-};
-
-const maskAccountNumber = (accountNumber) => {
-  if (!accountNumber || typeof accountNumber !== "string") {
-    return accountNumber || "";
-  }
-  const cleanAccount = accountNumber.replace(/-/g, "");
-  const len = cleanAccount.length;
-
-  if (len < 5) {
-    return accountNumber;
-  }
-  const startIndex = Math.max(1, Math.floor(len / 3));
-  if (startIndex + 1 >= len - 1) {
-    return `${cleanAccount.substring(0, len - 2)}**`;
-  }
-  const maskedAccount =
-    cleanAccount.substring(0, startIndex) +
-    "**" +
-    cleanAccount.substring(startIndex + 2);
-  return maskedAccount;
-};
-
-function SearchBaseScreen({
-  route,
-  navigation,
-  searchType: propSearchType,
-  title: propTitle,
-}) {
-  const { user, profile, isLoading: authIsLoading } = useAuth();
-
-  const searchTypeFromParams = route?.params?.searchType;
-  const initialSearchTermFromParams = route?.params?.searchTerm || "";
-  const screenTitleFromParams = route?.params?.title;
-
-  const currentSearchType =
-    searchTypeFromParams || propSearchType || SEARCH_TYPES.UNIFIED;
-  const currentScreenTitle = screenTitleFromParams || propTitle || "검색";
-
-  const [reports, setReports] = useState([]);
-  const [dataFetchLoading, setDataFetchLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [page, setPage] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const [searchTerm, setSearchTerm] = useState(initialSearchTermFromParams);
-  const [submittedSearchTerm, setSubmittedSearchTerm] = useState(
-    initialSearchTermFromParams,
+  return (
+    <Text style={styles.resultText}>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <Text key={i} style={styles.highlighted}>
+            {part}
+          </Text>
+        ) : (
+          part
+        ),
+      )}
+    </Text>
   );
-  const [initialAuthCheckComplete, setInitialAuthCheckComplete] =
-    useState(false);
+};
 
-  const fetchReports = useCallback(
-    async (pageNum, termToSearch) => {
-      if (!user || !profile?.job_type) {
-        setError(
-          "사용자 정보 또는 프로필(직업 정보)을 불러올 수 없습니다. 잠시 후 다시 시도해주세요.",
-        );
-        setDataFetchLoading(false);
-        setReports([]);
-        setTotalCount(0);
+// [추가] 한 페이지에 보여줄 결과 수
+const RESULTS_PER_PAGE = 5;
+
+// 메인 검색 화면 컴포넌트
+const SearchBaseScreen = () => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [searched, setSearched] = useState(false);
+
+  // [수정] 페이지네이션 상태 관리
+  const [allResults, setAllResults] = useState([]); // 모든 검색 결과를 저장
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagedResults, setPagedResults] = useState([]); // 현재 페이지에 보여줄 결과만 저장
+
+  // [수정] 검색 로직: 모든 결과를 한 번에 가져옴
+  const debouncedSearch = useCallback(
+    debounce(async (term) => {
+      if (!term || term.trim().length < 2) {
+        setAllResults([]);
+        setSearched(false);
+        setIsLoading(false);
         return;
       }
 
-      if (
-        termToSearch.trim() === "" &&
-        currentSearchType !== SEARCH_TYPES.UNIFIED
-      ) {
-        setReports([]);
-        setTotalCount(0);
-        setDataFetchLoading(false);
-        setError(null);
-        return;
-      }
-
-      setDataFetchLoading(true);
-      setError(null);
-      const from = pageNum * ITEMS_PER_PAGE;
-      const to = from + ITEMS_PER_PAGE - 1;
-
-      let query = supabase
-        .from("masked_scammer_reports")
-        .select("*", { count: "exact" });
-
-      const trimmedTerm = termToSearch.trim();
-
-      if (trimmedTerm !== "") {
-        let orConditions = [];
-        if (currentSearchType === SEARCH_TYPES.UNIFIED) {
-          orConditions.push(`name.ilike.%${trimmedTerm}%`);
-          orConditions.push(`nickname.ilike.%${trimmedTerm}%`);
-          orConditions.push(`phone_number.eq.${trimmedTerm}`);
-          orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
-        } else if (currentSearchType === SEARCH_TYPES.ACCOUNT) {
-          orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
-        } else if (currentSearchType === SEARCH_TYPES.PHONE) {
-          orConditions.push(`phone_number.eq.${trimmedTerm}`);
-        } else if (currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED) {
-          orConditions.push(`phone_number.eq.${trimmedTerm}`);
-          orConditions.push(`account_number.ilike.%${trimmedTerm}%`);
-        }
-
-        if (orConditions.length > 0) {
-          query = query.or(orConditions.join(","));
-        }
-      }
-
-      query = query.order("created_at", { ascending: false }).range(from, to);
+      Keyboard.dismiss();
+      setIsLoading(true);
+      setSearched(true);
+      setError("");
+      setCurrentPage(1); // 새로운 검색은 항상 1페이지부터
 
       try {
-        const { data, error: fetchError, count } = await query;
-        if (fetchError) throw fetchError;
-        setReports(data || []);
-        setTotalCount(count ?? 0);
-      } catch (err) {
-        setError(`데이터 조회 실패: ${err.message || "알 수 없는 오류"}`);
-        setReports([]);
-        setTotalCount(0);
+        // 기존 함수를 그대로 사용하여 모든 데이터를 가져옴
+        const { data, error: rpcError } = await supabase.rpc("search_reports", {
+          search_term: term.trim(),
+        });
+
+        if (rpcError) throw rpcError;
+
+        setAllResults(data || []);
+      } catch (e) {
+        setError("검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        setAllResults([]);
+        console.error("Search error:", e);
       } finally {
-        setDataFetchLoading(false);
+        setIsLoading(false);
       }
-    },
-    [currentSearchType, user, profile],
+    }, 500),
+    [],
   );
 
+  // [추가] 클라이언트 측에서 페이지를 나누는 로직
   useEffect(() => {
-    if (currentScreenTitle && navigation) {
-      navigation.setOptions({ title: currentScreenTitle });
-    }
-  }, [currentScreenTitle, navigation]);
+    const startIndex = (currentPage - 1) * RESULTS_PER_PAGE;
+    const endIndex = startIndex + RESULTS_PER_PAGE;
+    setPagedResults(allResults.slice(startIndex, endIndex));
+  }, [currentPage, allResults]);
 
-  useEffect(() => {
-    if (!authIsLoading) {
-      if (!initialAuthCheckComplete) {
-        setInitialAuthCheckComplete(true);
-      }
-      if (user && profile?.job_type) {
-        fetchReports(page, submittedSearchTerm);
-      } else {
-        const specificError = !user
-          ? "로그인이 필요합니다."
-          : "사용자 프로필(직업 정보)을 찾을 수 없습니다.";
-        setError(specificError);
-        setReports([]);
-        setTotalCount(0);
-        setDataFetchLoading(false);
-      }
-    }
-  }, [
-    authIsLoading,
-    user,
-    profile,
-    page,
-    submittedSearchTerm,
-    fetchReports,
-    initialAuthCheckComplete,
-  ]);
-
-  const handleSearch = () => {
-    Keyboard.dismiss();
-    const trimmedTerm = searchTerm.trim();
-    setPage(0);
-    setSubmittedSearchTerm(trimmedTerm);
-  };
-
-  const handleClearSearch = () => {
-    Keyboard.dismiss();
-    setSearchTerm("");
-    setPage(0);
-    setSubmittedSearchTerm("");
-  };
-
-  const handlePreviousPage = () => {
-    if (page > 0) {
-      setPage(page - 1);
+  const handleSearch = (text) => {
+    setSearchTerm(text);
+    if (text.trim().length === 0) {
+      setSearched(false);
+      setAllResults([]);
+      setIsLoading(false);
+      debouncedSearch.cancel();
+    } else {
+      setIsLoading(true);
+      debouncedSearch(text);
     }
   };
 
-  const handleNextPage = () => {
-    const lastPage = Math.max(0, Math.ceil(totalCount / ITEMS_PER_PAGE) - 1);
-    if (page < lastPage && totalCount > (page + 1) * ITEMS_PER_PAGE) {
-      setPage(page + 1);
+  const handlePageChange = (newPage) => {
+    const totalPages = Math.ceil(allResults.length / RESULTS_PER_PAGE);
+    if (newPage > 0 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      // FlatList가 최상단으로 스크롤되도록 하는 로직이 필요하다면 여기에 추가
     }
   };
 
-  const renderItem = useCallback(({ item }) => {
-    const categoryColor =
-      item.category === "노쇼"
-        ? "#3498db"
-        : item.category.includes("보이스피싱")
-          ? "#e74c3c"
-          : item.category === "중고물품 사기"
-            ? "#f39c12"
-            : item.category === "불법 사채" || item.category === "불법사금융"
-              ? "#8e44ad"
-              : "#34495e";
 
-    let circumstanceContent = null;
-    let circumstanceLabel = "피해 정황";
-
-    if (item.category.includes("보이스피싱") && item.impersonated_person) {
-      circumstanceLabel = "사칭 인물";
-      circumstanceContent = item.impersonated_person;
-    } else if (item.category === "불법사금융" && item.victim_circumstances) {
-      circumstanceLabel = "피해 정황";
-      circumstanceContent = Array.isArray(item.victim_circumstances)
-        ? item.victim_circumstances.join(", ")
-        : item.victim_circumstances;
-    }
-
+  // 검색 결과 아이템 렌더링 함수
+  const renderItem = ({ item }) => {
+    const style = getCategoryStyle(item.category);
     return (
-      <View style={styles.itemContainer}>
-        <Text style={styles.itemText}>
-          카테고리:{" "}
-          <Text style={{ color: categoryColor, fontWeight: "bold" }}>
-            {item.category || "N/A"}
+      <View style={styles.resultItem}>
+        <View style={[styles.categoryBadge, { backgroundColor: style.backgroundColor }]}>
+          <Text style={[styles.categoryText, { color: style.color }]}>
+            {item.category || "기타"}
           </Text>
-        </Text>
-        {item.name && (
-          <Text style={styles.itemText}>
-            예금주명:{" "}
-            <Text style={styles.maskedText}>{maskNameMiddle(item.name)}</Text>
-          </Text>
-        )}
-        {item.phone_number && (
-          <Text style={styles.itemText}>
-            연락처:{" "}
-            <Text style={styles.maskedText}>
-              {maskPhoneNumberCustom(item.phone_number)}
-            </Text>
-          </Text>
-        )}
-        {item.account_number && (
-          <Text style={styles.itemText}>
-            계좌번호:{" "}
-            <Text style={styles.maskedText}>
-              {maskAccountNumber(item.account_number)}
-            </Text>
-          </Text>
-        )}
-        {item.nickname && (
-          <Text style={styles.itemText}>
-            닉네임: <Text>{item.nickname}</Text>
-          </Text>
-        )}
+        </View>
 
-        {/* 조건부로 피해 정황/사칭 인물 표시 */}
-        {circumstanceContent && (
-          <Text style={styles.itemDesc}>
-            {circumstanceLabel}: {circumstanceContent}
-          </Text>
-        )}
+        <View style={styles.resultContent}>
+          {item.damage_accounts && item.damage_accounts.length > 0 ? (
+            item.damage_accounts.map((account, index) => (
+              <View key={`account-${index}`} style={styles.infoRow}>
+                <Text style={styles.infoLabel}>계좌정보:</Text>
+                {account.isCashTransaction ? (
+                  <Text style={[styles.resultText, styles.cashText]}>현금 전달</Text>
+                ) : (
+                  <Text style={styles.resultText} numberOfLines={1} ellipsizeMode="tail">
+                    <Text style={{ fontWeight: "bold" }}>
+                      {account.bankName || "은행 정보 없음"}
+                    </Text>
+                    {" / "}
+                    <HighlightedText
+                      text={account.accountHolderName}
+                      highlight={searchTerm}
+                    />
+                    {" / "}
+                    <HighlightedText
+                      text={account.accountNumber}
+                      highlight={searchTerm}
+                    />
+                  </Text>
+                )}
+              </View>
+            ))
+          ) : null}
 
-        <Text style={styles.dateText}>
-          등록일: {new Date(item.created_at).toLocaleDateString()}
-        </Text>
-      </View>
-    );
-  }, []);
+          {item.phone_numbers && item.phone_numbers.length > 0 ? (
+            item.phone_numbers.map(
+              (phone, index) =>
+                phone && (
+                  <View key={`phone-${index}`} style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>전화번호:</Text>
+                    <HighlightedText text={phone} highlight={searchTerm} />
+                  </View>
+                ),
+            )
+          ) : null}
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / ITEMS_PER_PAGE));
+          {item.nickname && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>닉네임:</Text>
+              <HighlightedText text={item.nickname} highlight={searchTerm} />
+            </View>
+          )}
 
-  if (authIsLoading || (!initialAuthCheckComplete && dataFetchLoading)) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#3d5afe" />
-          <Text style={{ marginTop: 10 }}>
-            {authIsLoading
-              ? "사용자 정보 확인 중..."
-              : "데이터를 불러오는 중..."}
+          {item.site_name && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>사이트:</Text>
+              <HighlightedText text={item.site_name} highlight={searchTerm} />
+            </View>
+          )}
+
+          {item.description && (
+            <View style={styles.descriptionContainer}>
+              <Text style={styles.infoLabel}>내용:</Text>
+              <HighlightedText
+                text={item.description.replace(/\n/g, " ")}
+                highlight={searchTerm}
+              />
+            </View>
+          )}
+
+          <Text style={styles.dateText}>
+            등록일: {item.created_at ? format(parseISO(item.created_at), "yyyy-MM-dd") : "알 수 없음"}
           </Text>
         </View>
       </View>
     );
-  }
+  };
+
+  // [수정] 페이지네이션 UI 렌더링 함수
+  const renderPagination = () => {
+    const totalPages = Math.ceil(allResults.length / RESULTS_PER_PAGE);
+    if (totalPages <= 1) return null;
+
+    return (
+      <View style={styles.paginationContainer}>
+        <TouchableOpacity
+          onPress={() => handlePageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          style={[styles.pageButton, currentPage === 1 && styles.disabledButton]}
+        >
+          <Icon name="chevron-left" size={24} color={currentPage === 1 ? '#ccc' : '#333'} />
+        </TouchableOpacity>
+
+        <Text style={styles.pageInfoText}>
+          {currentPage} / {totalPages}
+        </Text>
+
+        <TouchableOpacity
+          onPress={() => handlePageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]}
+        >
+          <Icon name="chevron-right" size={24} color={currentPage === totalPages ? '#ccc' : '#333'} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.searchBarContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder={
-            currentSearchType === SEARCH_TYPES.UNIFIED
-              ? "이름, 닉네임, 전화번호, 계좌번호"
-              : currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED
-                ? "연락처 또는 계좌번호"
-                : currentSearchType === SEARCH_TYPES.ACCOUNT
-                  ? "계좌번호 입력"
-                  : currentSearchType === SEARCH_TYPES.PHONE
-                    ? "전화번호 입력"
-                    : "검색어 입력"
-          }
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-          keyboardType={
-            currentSearchType === SEARCH_TYPES.PHONE ||
-            currentSearchType === SEARCH_TYPES.NUMERIC_UNIFIED ||
-            currentSearchType === SEARCH_TYPES.ACCOUNT
-              ? "numeric"
-              : "default"
-          }
-        />
-        {searchTerm ? (
-          <TouchableOpacity
-            onPress={handleClearSearch}
-            style={styles.clearButton}
-          >
-            <Icon name="close-circle" size={22} color="#888" />
-          </TouchableOpacity>
-        ) : null}
-        <TouchableOpacity
-          onPress={handleSearch}
-          style={styles.searchIconTouchable}
-          disabled={dataFetchLoading}
-        >
-          <Icon name="magnify" size={28} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      {error && <Text style={styles.errorText}>{error}</Text>}
-
-      {dataFetchLoading && !reports.length ? (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#3d5afe" />
-          <Text style={{ marginTop: 10 }}>데이터를 불러오는 중...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={reports}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
-          ListEmptyComponent={
-            !dataFetchLoading && (
-              <View style={styles.emptyContainer}>
-                <Icon name="alert-circle-outline" size={50} color="#aaa" />
-                <Text style={styles.emptyText}>피해 사실이 없습니다.</Text>
-                <TouchableOpacity
-                  style={styles.reportButton}
-                  onPress={() => navigation.navigate("Report")}
-                >
-                  <Text style={styles.reportButtonText}>등록하시겠습니까?</Text>
+      <FlatList
+        ListHeaderComponent={
+          <>
+            <Text style={styles.title}>통합 검색</Text>
+            <Text style={styles.subtitle}>
+              피해 사례에 등록된 전화번호, 계좌번호, 이름, 닉네임, 사이트 주소 등으로 검색할 수 있습니다.
+            </Text>
+            <View style={styles.searchContainer}>
+              <Icon name="magnify" size={22} color="#888" style={styles.searchIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="검색어를 입력하세요..."
+                value={searchTerm}
+                onChangeText={handleSearch}
+                placeholderTextColor="#888"
+                autoFocus
+              />
+              {searchTerm.length > 0 && (
+                <TouchableOpacity onPress={() => handleSearch("")}>
+                  <Icon name="close-circle" size={22} color="#888" style={styles.clearIcon} />
                 </TouchableOpacity>
-              </View>
-            )
-          }
-          contentContainerStyle={{ paddingBottom: 20 }}
-          keyboardShouldPersistTaps="handled"
-          ListFooterComponent={
-            dataFetchLoading && reports.length > 0 ? (
-              <ActivityIndicator style={{ marginVertical: 10 }} size="small" />
-            ) : null
-          }
-        />
-      )}
-
-      {!dataFetchLoading && totalCount > 0 && (
-        <View style={styles.paginationContainer}>
-          <Button
-            title="이전"
-            onPress={handlePreviousPage}
-            disabled={page === 0}
-            color="#3d5afe"
-          />
-          <Text style={styles.pageInfoText}>
-            페이지 {page + 1} / {totalPages} (총 {totalCount}건)
-          </Text>
-          <Button
-            title="다음"
-            onPress={handleNextPage}
-            disabled={
-              page >= totalPages - 1 ||
-              totalCount <= (page + 1) * ITEMS_PER_PAGE
-            }
-            color="#3d5afe"
-          />
-        </View>
-      )}
+              )}
+            </View>
+            {isLoading && (
+              <ActivityIndicator size="large" color="#3d5afe" style={styles.loader} />
+            )}
+            {error && <Text style={styles.errorText}>{error}</Text>}
+            {allResults.length > 0 && !isLoading && (
+              <Text style={styles.totalResultsText}>총 {allResults.length}건의 검색 결과</Text>
+            )}
+          </>
+        }
+        data={pagedResults} // [수정] 페이지가 나눠진 결과를 FlatList에 전달
+        renderItem={renderItem}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
+        ListEmptyComponent={
+          !isLoading && searched ? (
+            <View style={styles.noResultsContainer}>
+              <Icon name="information-outline" size={60} color="#ccc" />
+              <Text style={styles.noResultsText}>
+                '{searchTerm}'에 대한 검색 결과가 없습니다.
+              </Text>
+              <Text style={styles.noResultsSubtitle}>다른 검색어를 입력해보세요.</Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={renderPagination}
+        contentContainerStyle={{ flexGrow: 1 }}
+      />
     </View>
   );
-}
+};
 
+// 기존 UI 스타일 유지 + 페이지네이션 스타일 추가
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 15,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "white",
   },
-  searchBarContainer: {
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+    marginTop: 20,
+    paddingHorizontal: 20,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 20,
+    lineHeight: 20,
+    paddingHorizontal: 20,
+  },
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
-    backgroundColor: "white",
+    backgroundColor: "#f5f5f5",
     borderRadius: 8,
+    marginHorizontal: 20,
+    paddingHorizontal: 15,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    height: 45,
+    fontSize: 16,
+    color: "#333",
+  },
+  clearIcon: {
+    marginLeft: 10,
+  },
+  loader: {
+    marginTop: 50,
+  },
+  errorText: {
+    marginTop: 20,
+    color: "red",
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  totalResultsText: {
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#3d5afe'
+  },
+  noResultsContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    marginTop: 30,
+  },
+  noResultsText: {
+    marginTop: 15,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#555",
+  },
+  noResultsSubtitle: {
+    marginTop: 5,
+    fontSize: 14,
+    color: "#888",
+  },
+  resultItem: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginBottom: 15,
+    marginHorizontal: 20,
+    marginTop: 15, // 검색 결과 텍스트와 간격
+    borderWidth: 1,
+    borderColor: "#eee",
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  searchInput: {
-    flex: 1,
-    height: 50,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    color: "#212529",
-  },
-  clearButton: { padding: 10 },
-  searchIconTouchable: {
-    backgroundColor: "#3d5afe",
-    padding: 12,
+  categoryBadge: {
+    borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
-    borderBottomRightRadius: 8,
-    height: 50,
-    justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: "flex-start",
   },
-  loader: {
-    flex: 1,
-    justifyContent: "center",
+  categoryText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  resultContent: {
+    padding: 12,
+  },
+  infoRow: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingTop: 50,
+    marginBottom: 6,
   },
-  errorText: {
-    color: "#e74c3c",
-    textAlign: "center",
-    marginVertical: 15,
-    fontSize: 16,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 50,
-  },
-  emptyText: {
-    textAlign: "center",
-    marginTop: 10,
-    color: "#868e96",
-    fontSize: 16,
-  },
-  itemContainer: {
-    backgroundColor: "#ffffff",
-    padding: 18,
-    marginBottom: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#dee2e6",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  itemText: { fontSize: 16, marginBottom: 7, color: "#495057", lineHeight: 22 },
-  maskedText: {
-    color: "#212529",
-  },
-  itemDesc: {
+  infoLabel: {
     fontSize: 14,
-    color: "#6c757d",
-    marginTop: 8,
-    lineHeight: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#e9ecef",
-    paddingTop: 8,
+    fontWeight: "bold",
+    color: "#555",
+    width: 65,
+  },
+  resultText: {
+    fontSize: 14,
+    color: "#333",
+    flex: 1,
+  },
+  highlighted: {
+    backgroundColor: "#FFDDAA",
+    borderRadius: 3,
+  },
+  descriptionContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 6,
   },
   dateText: {
     fontSize: 12,
-    color: "#adb5bd",
-    marginTop: 12,
+    color: "#999",
     textAlign: "right",
+    marginTop: 8,
+  },
+  cashText: {
+    color: "#D32F2F",
+    fontWeight: "bold",
   },
   paginationContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 15,
-    borderTopWidth: 1,
-    borderTopColor: "#e9ecef",
-    backgroundColor: "#f8f9fa",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
   },
-  pageInfoText: { fontSize: 14, color: "#495057", fontWeight: "600" },
-  reportButton: {
-    marginTop: 25,
-    backgroundColor: "#3d5afe",
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 8,
+  pageButton: {
+    padding: 8,
+    marginHorizontal: 10,
+    borderRadius: 5,
   },
-  reportButtonText: {
-    color: "white",
+  disabledButton: {
+    opacity: 0.5,
+  },
+  pageInfoText: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
+    color: '#333',
   },
 });
 
