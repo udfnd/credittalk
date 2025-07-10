@@ -18,6 +18,8 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import RNBlobUtil from "react-native-blob-util";
+import { Buffer } from "buffer";
 
 import ImageSelectionModal from "../components/ImageSelectionModal";
 import { bankImages } from "../assets/images/banks";
@@ -424,20 +426,44 @@ function ReportScreen({ navigation }) {
     setIsLoading(true);
 
     try {
+      const getFilePath = async (uri) => {
+        if (Platform.OS === "android" && uri.startsWith("content://")) {
+          const stat = await RNBlobUtil.fs.stat(uri);
+          return stat.path;
+        }
+        if (uri.startsWith("file://")) {
+          return uri.replace("file://", "");
+        }
+        return uri;
+      };
+
+
       const uploadFile = async (asset, folder) => {
         if (!asset) return null;
+
+        // 1. 실제 파일 경로 가져오기
+        const path = await getFilePath(asset.uri);
+        // 2. 파일을 base64로 읽기
+        const base64Data = await RNBlobUtil.fs.readFile(path, "base64");
+        // 3. base64를 ArrayBuffer로 변환
+        const arrayBuffer = Buffer.from(base64Data, "base64");
+
         const fileExt = asset.fileName.split(".").pop();
         const fileName = `${folder}-${user.id}-${Date.now()}-${Math.random()}.${fileExt}`;
         const filePath = `public/${fileName}`;
 
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-
+        // 4. ArrayBuffer를 Supabase에 업로드
         const { error } = await supabase.storage
           .from("report-evidence")
-          .upload(filePath, blob, { contentType: asset.type });
-        if (error)
+          .upload(filePath, arrayBuffer, {
+            contentType: asset.type,
+            upsert: false,
+          });
+
+        if (error) {
+          console.error("Supabase upload error:", error);
           throw new Error(`${folder} 사진 업로드 실패: ${error.message}`);
+        }
 
         const { data: urlData } = supabase.storage
           .from("report-evidence")
@@ -574,7 +600,7 @@ function ReportScreen({ navigation }) {
       clearInputs();
       navigation.goBack();
     } catch (error) {
-      Alert.alert("등록 실패", `오류 발생: ${error.message}`);
+      Alert.alert("등록 실패", `오류 발생: ${error}`);
     } finally {
       setIsLoading(false);
       setIsUploading(false);
