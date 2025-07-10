@@ -18,7 +18,6 @@ import RNBlobUtil from "react-native-blob-util";
 import { decode } from "base64-arraybuffer";
 import { useNavigation } from "@react-navigation/native";
 
-// 결과 모달 (변경 없음)
 const ResultModal = ({ isVisible, onClose, result, navigation }) => {
   if (!result) return null;
   return (
@@ -65,7 +64,12 @@ const ResultModal = ({ isVisible, onClose, result, navigation }) => {
                 style={styles.analysisRequestButton}
                 onPress={() => {
                   onClose(); // 모달을 닫고
-                  navigation.navigate("HelpDeskCreate");
+                  navigation.navigate("MainApp", {
+                    screen: "HelpCenterTab",
+                    params: {
+                      screen: "HelpDeskCreate",
+                    },
+                  });
                 }}
               >
                 <Text style={styles.analysisRequestButtonText}>
