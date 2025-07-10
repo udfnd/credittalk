@@ -12,6 +12,8 @@ import {
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
+import { logPageView } from "../lib/pageViewLogger";
+import { useAuth } from "../context/AuthContext";
 
 function ArrestNewsListScreen() {
   const navigation = useNavigation();
@@ -20,6 +22,14 @@ function ArrestNewsListScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'ArrestNewsListScreen');
+    }
+  }, [user]);
 
   const fetchNews = useCallback(async () => {
     if (!refreshing) setIsLoading(true);
