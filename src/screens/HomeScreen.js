@@ -1,6 +1,6 @@
 // src/screens/HomeScreen.js
 import "react-native-get-random-values";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
 import { useAuth } from "../context/AuthContext";
+import { logPageView } from "../lib/pageViewLogger";
 
 const { width } = Dimensions.get("window");
 const BANNER_HEIGHT = 150;
@@ -36,6 +37,13 @@ function HomeScreen() {
   const navigation = useNavigation();
   const { user, profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'HomeScreen');
+    }
+  }, [user]);
 
   const handleSearch = () => {
     Keyboard.dismiss();

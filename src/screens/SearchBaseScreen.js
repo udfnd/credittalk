@@ -14,6 +14,8 @@ import { debounce } from "lodash";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { format, parseISO } from "date-fns";
 import { useRoute, useNavigation } from "@react-navigation/native";
+import { logPageView } from "../lib/pageViewLogger";
+import { useAuth } from "../context/AuthContext";
 
 export const SEARCH_TYPES = {
   UNIFIED: "unified",
@@ -217,6 +219,14 @@ const SearchBaseScreen = ({ title }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagedResults, setPagedResults] = useState([]);
   const [searchStats, setSearchStats] = useState(null);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'SearchBaseScreen');
+    }
+  }, [user]);
 
   const debouncedSearch = useCallback(
     debounce(async (term) => {

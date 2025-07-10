@@ -14,6 +14,7 @@ import { useNavigation, useIsFocused } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { logPageView } from "../lib/pageViewLogger";
 
 function NewCrimeCaseListScreen() {
   const navigation = useNavigation();
@@ -24,6 +25,13 @@ function NewCrimeCaseListScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'NewCrimeCaseListScreen');
+    }
+  }, [user]);
 
   const fetchCases = useCallback(async () => {
     setIsLoading(true);
