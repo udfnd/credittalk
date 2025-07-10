@@ -369,6 +369,103 @@ $$;
 ALTER FUNCTION "public"."get_allowed_scammer_reports_for_user"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_bank_account_stats"() RETURNS TABLE("bank_name" "text", "report_count" bigint)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+    RETURN QUERY
+    WITH bank_names AS (
+        SELECT
+            public.decrypt_secret((account ->> 'bankName')::bytea) as decrypted_bank_name
+        FROM
+            public.scammer_reports,
+            jsonb_array_elements(damage_accounts) AS account
+        WHERE
+            damage_accounts IS NOT NULL
+            AND (account ->> 'isCashTransaction')::boolean = false
+    )
+    SELECT
+        decrypted_bank_name,
+        COUNT(*) AS report_count
+    FROM bank_names
+    WHERE decrypted_bank_name IS NOT NULL AND decrypted_bank_name != '[DECRYPTION FAILED]'
+    GROUP BY decrypted_bank_name
+    ORDER BY report_count DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_bank_account_stats"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_crime_summary_stats"() RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    result jsonb;
+    category_counts jsonb;
+    monthly_trends jsonb;
+    damage_distribution jsonb;
+    total_reports BIGINT;
+BEGIN
+    -- 1. 전체 신고 건수
+    SELECT count(*) INTO total_reports FROM public.scammer_reports;
+
+    -- 2. 카테고리별 신고 건수
+    SELECT jsonb_object_agg(category, count)
+    INTO category_counts
+    FROM (
+        SELECT category, COUNT(*) as count
+        FROM public.scammer_reports
+        GROUP BY category
+    ) AS a;
+
+    -- 3. 최근 12개월 월별 신고 추이
+    SELECT jsonb_object_agg(month, count)
+    INTO monthly_trends
+    FROM (
+        SELECT
+            to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+            COUNT(*) AS count
+        FROM public.scammer_reports
+        WHERE created_at >= date_trunc('month', now()) - interval '11 months'
+        GROUP BY date_trunc('month', created_at)
+        ORDER BY month
+    ) AS b;
+
+    -- 4. 피해 금액 분포
+    SELECT jsonb_object_agg(range, count)
+    INTO damage_distribution
+    FROM (
+        SELECT
+            CASE
+                WHEN damage_amount IS NULL OR no_damage_amount = true THEN '피해액 없음'
+                WHEN damage_amount BETWEEN 1 AND 100000 THEN '10만원 이하'
+                WHEN damage_amount BETWEEN 100001 AND 1000000 THEN '10만원-100만원'
+                WHEN damage_amount BETWEEN 1000001 AND 10000000 THEN '100만원-1000만원'
+                ELSE '1000만원 초과'
+            END AS range,
+            COUNT(*) AS count
+        FROM public.scammer_reports
+        GROUP BY range
+    ) AS c;
+
+    -- 최종 결과 JSON으로 조합
+    result := jsonb_build_object(
+        'totalReports', total_reports,
+        'categoryCounts', category_counts,
+        'monthlyTrends', monthly_trends,
+        'damageDistribution', damage_distribution
+    );
+
+    RETURN result;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_crime_summary_stats"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_current_user_id"() RETURNS bigint
     LANGUAGE "sql" STABLE
     AS $$
@@ -410,6 +507,30 @@ $$;
 ALTER FUNCTION "public"."get_decrypted_report_for_admin"("report_id_input" bigint) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_phone_number_stats"() RETURNS TABLE("phone_number" "text", "report_count" bigint)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+    RETURN QUERY
+    WITH decrypted_numbers AS (
+        SELECT public.decrypt_secret(unnest(sr.phone_numbers)) AS phone
+        FROM public.scammer_reports sr
+        WHERE sr.phone_numbers IS NOT NULL
+    )
+    SELECT
+        phone,
+        COUNT(*) AS report_count
+    FROM decrypted_numbers
+    WHERE phone IS NOT NULL AND phone != '[DECRYPTION FAILED]'
+    GROUP BY phone
+    ORDER BY report_count DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_phone_number_stats"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_user_job_type"() RETURNS "text"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -438,6 +559,27 @@ $$;
 
 
 ALTER FUNCTION "public"."handle_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."handle_user_login"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+    -- users 테이블의 마지막 로그인 시간 업데이트
+    UPDATE public.users
+    SET last_login_at = NOW()
+    WHERE auth_user_id = NEW.id;
+
+    -- user_login_logs 테이블에 로그인 기록 추가
+    INSERT INTO public.user_login_logs (user_id, user_name, user_email, ip_address)
+    VALUES (NEW.id, NEW.raw_user_meta_data->>'name', NEW.email, inet_client_addr());
+
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."handle_user_login"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."is_admin"("user_uuid" "uuid") RETURNS boolean
@@ -815,12 +957,20 @@ CREATE TABLE IF NOT EXISTS "public"."users" (
     "is_admin" boolean DEFAULT false,
     "naver_id" "text",
     "nickname" "text",
+    "sign_up_source" "text",
+    "last_login_at" timestamp with time zone,
+    "is_dormant" boolean DEFAULT false,
+    "last_seen_at" timestamp with time zone,
     CONSTRAINT "nickname_length_check" CHECK ((("char_length"("nickname") >= 2) AND ("char_length"("nickname") <= 20))),
     CONSTRAINT "users_job_type_check" CHECK (("job_type" = ANY (ARRAY['일반'::"text", '사업자'::"text"])))
 );
 
 
 ALTER TABLE "public"."users" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."users"."last_seen_at" IS '사용자의 마지막 활동 시간';
+
 
 
 CREATE OR REPLACE VIEW "public"."chat_messages_with_sender_profile" AS
@@ -1213,6 +1363,33 @@ ALTER TABLE "public"."notices" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDE
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."page_views" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "user_id" "uuid",
+    "page_path" "text" NOT NULL,
+    "ip_address" "inet"
+);
+
+
+ALTER TABLE "public"."page_views" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."page_views" IS '페이지별 방문 기록';
+
+
+
+ALTER TABLE "public"."page_views" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."page_views_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."phone_verifications" (
     "id" bigint NOT NULL,
     "phone" "text" NOT NULL,
@@ -1309,6 +1486,30 @@ ALTER TABLE "public"."scammer_reports" ALTER COLUMN "id" ADD GENERATED BY DEFAUL
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."user_login_logs" (
+    "id" bigint NOT NULL,
+    "user_id" "uuid",
+    "user_name" "text",
+    "user_email" "text",
+    "login_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "ip_address" "inet"
+);
+
+
+ALTER TABLE "public"."user_login_logs" OWNER TO "postgres";
+
+
+ALTER TABLE "public"."user_login_logs" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME "public"."user_login_logs_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
 ALTER TABLE "public"."users" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME "public"."users_id_seq"
     START WITH 1
@@ -1390,6 +1591,11 @@ ALTER TABLE ONLY "public"."notices"
 
 
 
+ALTER TABLE ONLY "public"."page_views"
+    ADD CONSTRAINT "page_views_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."phone_verifications"
     ADD CONSTRAINT "phone_verifications_pkey" PRIMARY KEY ("id");
 
@@ -1402,6 +1608,11 @@ ALTER TABLE ONLY "public"."reviews"
 
 ALTER TABLE ONLY "public"."scammer_reports"
     ADD CONSTRAINT "scammer_reports_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."user_login_logs"
+    ADD CONSTRAINT "user_login_logs_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1530,6 +1741,11 @@ ALTER TABLE ONLY "public"."new_crime_cases"
 
 
 
+ALTER TABLE ONLY "public"."page_views"
+    ADD CONSTRAINT "page_views_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
 ALTER TABLE ONLY "public"."reviews"
     ADD CONSTRAINT "reviews_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
@@ -1542,6 +1758,11 @@ ALTER TABLE ONLY "public"."scammer_reports"
 
 ALTER TABLE ONLY "public"."scammer_reports"
     ADD CONSTRAINT "scammer_reports_reporter_id_fkey" FOREIGN KEY ("reporter_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."user_login_logs"
+    ADD CONSTRAINT "user_login_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
 
 
@@ -1561,7 +1782,15 @@ CREATE POLICY "Admins can view all user profiles" ON "public"."users" FOR SELECT
 
 
 
+CREATE POLICY "Allow admin to read all login logs" ON "public"."user_login_logs" FOR SELECT TO "service_role" USING (true);
+
+
+
 CREATE POLICY "Allow admins to insert answers" ON "public"."help_answers" FOR INSERT WITH CHECK ("public"."is_admin"("auth"."uid"()));
+
+
+
+CREATE POLICY "Allow admins to read page_views" ON "public"."page_views" FOR SELECT USING ("public"."is_current_user_admin"());
 
 
 
@@ -1582,6 +1811,10 @@ CREATE POLICY "Allow all users to view comments" ON "public"."comments" FOR SELE
 
 
 CREATE POLICY "Allow authenticated users to insert comments" ON "public"."comments" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Allow authenticated users to insert page_views" ON "public"."page_views" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -1771,6 +2004,9 @@ ALTER TABLE "public"."new_crime_cases" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."notices" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."page_views" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."phone_verifications" ENABLE ROW LEVEL SECURITY;
 
 
@@ -1778,6 +2014,9 @@ ALTER TABLE "public"."reviews" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."scammer_reports" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."user_login_logs" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;
@@ -2038,6 +2277,18 @@ GRANT ALL ON FUNCTION "public"."get_allowed_scammer_reports_for_user"() TO "serv
 
 
 
+GRANT ALL ON FUNCTION "public"."get_bank_account_stats"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_bank_account_stats"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_bank_account_stats"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_crime_summary_stats"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_crime_summary_stats"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_crime_summary_stats"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_current_user_id"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_current_user_id"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_current_user_id"() TO "service_role";
@@ -2050,6 +2301,12 @@ GRANT ALL ON FUNCTION "public"."get_decrypted_report_for_admin"("report_id_input
 
 
 
+GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "service_role";
@@ -2059,6 +2316,12 @@ GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "service_role";
 
 
 
@@ -2321,6 +2584,18 @@ GRANT ALL ON SEQUENCE "public"."notices_id_seq" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."page_views" TO "anon";
+GRANT ALL ON TABLE "public"."page_views" TO "authenticated";
+GRANT ALL ON TABLE "public"."page_views" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."page_views_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."page_views_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."page_views_id_seq" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."phone_verifications" TO "anon";
 GRANT ALL ON TABLE "public"."phone_verifications" TO "authenticated";
 GRANT ALL ON TABLE "public"."phone_verifications" TO "service_role";
@@ -2354,6 +2629,18 @@ GRANT ALL ON TABLE "public"."reviews_with_author_profile" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."scammer_reports_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."scammer_reports_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."scammer_reports_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_login_logs" TO "anon";
+GRANT ALL ON TABLE "public"."user_login_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_login_logs" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."user_login_logs_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."user_login_logs_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."user_login_logs_id_seq" TO "service_role";
 
 
 
