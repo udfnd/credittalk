@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,20 @@ import { supabase } from "../lib/supabaseClient";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { logPageView } from "../lib/pageViewLogger";
 
 export default function HelpDeskListScreen({ navigation }) {
   const { user } = useAuth();
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'HelpDeskListScreen');
+    }
+  }, [user]);
 
   const fetchQuestions = async () => {
     if (!user) {

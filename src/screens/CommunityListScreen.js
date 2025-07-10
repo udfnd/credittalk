@@ -15,11 +15,19 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { logPageView } from "../lib/pageViewLogger";
 
 function CommunityListScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { user } = useAuth();
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'CommunityListScreen');
+    }
+  }, [user]);
 
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

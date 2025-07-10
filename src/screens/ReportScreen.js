@@ -24,6 +24,7 @@ import { Buffer } from "buffer";
 import ImageSelectionModal from "../components/ImageSelectionModal";
 import { bankImages } from "../assets/images/banks";
 import { siteImages } from "../assets/images/sites";
+import { logPageView } from "../lib/pageViewLogger";
 
 const accountTypes = ["사업자", "개인"];
 const genders = ["남성", "여성", "모름"];
@@ -90,6 +91,13 @@ const initialDamageAccount = {
 
 function ReportScreen({ navigation }) {
   const { user } = useAuth();
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'ReportScreen');
+    }
+  }, [user]);
 
   const [damageAccounts, setDamageAccounts] = useState([
     { ...initialDamageAccount },

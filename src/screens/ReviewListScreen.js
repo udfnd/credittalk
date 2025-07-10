@@ -13,6 +13,7 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { logPageView } from "../lib/pageViewLogger";
 
 // 별점 표시 컴포넌트 (간단 예시)
 const StarRating = ({ rating }) => {
@@ -36,6 +37,13 @@ function ReviewListScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { user } = useAuth();
+
+  useEffect(() => {
+    // 로그인한 사용자만 기록합니다.
+    if (user) {
+      logPageView(user.id, 'ReviewListScreen');
+    }
+  }, [user]);
 
   const [reviews, setReviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
