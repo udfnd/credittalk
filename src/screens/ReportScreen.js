@@ -693,6 +693,8 @@ function ReportScreen({ navigation }) {
             value={detailedCrimeTypeOther}
             onChangeText={setDetailedCrimeTypeOther}
             placeholder="세부 피해 종류를 직접 입력해주세요."
+            placeholderTextColor="#6c757d"
+
           />
         )}
       </>
@@ -733,6 +735,7 @@ function ReportScreen({ navigation }) {
                   value={impersonatedPersonOther}
                   onChangeText={setImpersonatedPersonOther}
                   placeholder="사칭 인물을 직접 적어주세요."
+                  placeholderTextColor="#6c757d"
                 />
               )}
             </>
@@ -769,6 +772,7 @@ function ReportScreen({ navigation }) {
                   value={victimCircumstancesOther}
                   onChangeText={setVictimCircumstancesOther}
                   placeholder="기타 피해 정황을 직접 입력해주세요."
+                  placeholderTextColor="#6c757d"
                   multiline
                 />
               )}
@@ -813,6 +817,7 @@ function ReportScreen({ navigation }) {
                 value={damagePath}
                 onChangeText={setDamagePath}
                 placeholder="예: 중고나라, 번개장터 등"
+                placeholderTextColor="#6c757d"
               />
               <Text style={styles.label}>거래물품 종류</Text>
               <TextInput
@@ -820,6 +825,7 @@ function ReportScreen({ navigation }) {
                 value={tradedItemCategory}
                 onChangeText={setTradedItemCategory}
                 placeholder="예: 디지털기기, 의류, 상품권 등"
+                placeholderTextColor="#6c757d"
               />
               <Text style={styles.label}>거래물품 증빙 사진 (최대 3장)</Text>
               <View style={styles.multiPhotoContainer}>
@@ -858,6 +864,7 @@ function ReportScreen({ navigation }) {
                 value={damagePath}
                 onChangeText={setDamagePath}
                 placeholder="예: 코인거래소, 텔레그램 등"
+                placeholderTextColor="#6c757d"
               />
               <Text style={styles.label}>피해 물품</Text>
               <TextInput
@@ -865,6 +872,7 @@ function ReportScreen({ navigation }) {
                 value={damagedItem}
                 onChangeText={setDamagedItem}
                 placeholder="예: 비트코인, 이더리움 등"
+                placeholderTextColor="#6c757d"
               />
             </>
           );
@@ -979,7 +987,7 @@ function ReportScreen({ navigation }) {
                 style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
                 value={categoryOther}
                 onChangeText={setCategoryOther}
-                placeholder="어떤 유형의 피해를 입으셨나요? 예) 대출 사기, 유심, 통장 양도"
+                placeholder="어떤 유형의 피해를 입으셨나요? 예) 대출 사기, 유심"
                 placeholderTextColor="#FF0000"
               />
             )}
@@ -1058,6 +1066,7 @@ function ReportScreen({ navigation }) {
             value={scamReportSourceOther}
             onChangeText={setScamReportSourceOther}
             placeholder="사기 경로를 직접 입력해주세요."
+            placeholderTextColor="#6c757d"
           />
         )}
 
@@ -1069,6 +1078,7 @@ function ReportScreen({ navigation }) {
                 style={[styles.input, styles.inputWithButton]}
                 value={siteName}
                 placeholder="오른쪽 버튼으로 사이트 선택"
+                placeholderTextColor="#6c757d"
                 editable={false}
                 pointerEvents="none"
               />
@@ -1152,6 +1162,7 @@ function ReportScreen({ navigation }) {
           value={nickname}
           onChangeText={setNickname}
           placeholder="닉네임 (입력 시 사진 첨부 필수)"
+          placeholderTextColor="#6c757d"
         />
         {nickname.trim() !== "" && (
           <View style={styles.photoUploadContainer}>
@@ -1192,6 +1203,7 @@ function ReportScreen({ navigation }) {
                 value={impersonatedPhonePrefix}
                 onChangeText={setImpersonatedPhonePrefix}
                 placeholder="000"
+                placeholderTextColor="#6c757d"
                 keyboardType="number-pad"
                 maxLength={3}
               />
@@ -1200,6 +1212,7 @@ function ReportScreen({ navigation }) {
                 value={impersonatedPhoneMiddle}
                 onChangeText={setImpersonatedPhoneMiddle}
                 placeholder="0000"
+                placeholderTextColor="#6c757d"
                 keyboardType="number-pad"
                 maxLength={4}
               />
@@ -1208,6 +1221,7 @@ function ReportScreen({ navigation }) {
                 value={impersonatedPhoneLast}
                 onChangeText={setImpersonatedPhoneLast}
                 placeholder="0000"
+                placeholderTextColor="#6c757d"
                 keyboardType="number-pad"
                 maxLength={4}
               />
@@ -1220,6 +1234,7 @@ function ReportScreen({ navigation }) {
                 value={impersonatedPhonePrefix}
                 onChangeText={setImpersonatedPhonePrefix}
                 placeholder="000"
+                placeholderTextColor="#6c757d"
                 keyboardType="number-pad"
                 maxLength={3}
               />
@@ -1228,6 +1243,7 @@ function ReportScreen({ navigation }) {
                 value={impersonatedPhoneMiddle}
                 onChangeText={setImpersonatedPhoneMiddle}
                 placeholder="0000"
+                placeholderTextColor="#6c757d"
                 keyboardType="number-pad"
                 maxLength={4}
               />
@@ -1236,6 +1252,7 @@ function ReportScreen({ navigation }) {
                 value={impersonatedPhoneLast}
                 onChangeText={setImpersonatedPhoneLast}
                 placeholder="0000"
+                placeholderTextColor="#6c757d"
                 keyboardType="number-pad"
                 maxLength={4}
               />
@@ -1279,6 +1296,7 @@ function ReportScreen({ navigation }) {
                       handlePhoneNumberChange(index, "prefix", text)
                     }
                     placeholder="000"
+                    placeholderTextColor="#6c757d"
                     keyboardType="number-pad"
                     maxLength={3}
                     editable={!isPhoneUnknown}
@@ -1290,6 +1308,7 @@ function ReportScreen({ navigation }) {
                       handlePhoneNumberChange(index, "middle", text)
                     }
                     placeholder="0000"
+                    placeholderTextColor="#6c757d"
                     keyboardType="number-pad"
                     maxLength={4}
                     editable={!isPhoneUnknown}
@@ -1301,6 +1320,7 @@ function ReportScreen({ navigation }) {
                       handlePhoneNumberChange(index, "last", text)
                     }
                     placeholder="0000"
+                    placeholderTextColor="#6c757d"
                     keyboardType="number-pad"
                     maxLength={4}
                     editable={!isPhoneUnknown}
@@ -1363,6 +1383,7 @@ function ReportScreen({ navigation }) {
                   value={damagedItem}
                   onChangeText={setDamagedItem}
                   placeholder="피해 물품을 입력하세요 (예: 명품 가방, 현금)"
+                  placeholderTextColor="#6c757d"
                 />
               </>
             )}
@@ -1422,6 +1443,7 @@ function ReportScreen({ navigation }) {
                         : account.bankName
                     }
                     placeholder="오른쪽 버튼으로 은행 선택"
+                    placeholderTextColor="#6c757d"
                     editable={false}
                   />
                   <TouchableOpacity
@@ -1442,6 +1464,7 @@ function ReportScreen({ navigation }) {
                       handleDamageAccountChange(index, "bankName", text)
                     }
                     placeholder="은행 이름을 직접 입력해주세요."
+                    placeholderTextColor="#6c757d"
                   />
                 )}
                 <TextInput
@@ -1451,6 +1474,7 @@ function ReportScreen({ navigation }) {
                     handleDamageAccountChange(index, "accountHolderName", text)
                   }
                   placeholder="예금주명"
+                  placeholderTextColor="#6c757d"
                 />
               </>
             )}
@@ -1477,14 +1501,13 @@ function ReportScreen({ navigation }) {
           <Icon name="plus" size={20} color="#3d5afe" />
           <Text style={styles.addPhoneButtonText}>피해금 송금 정보 추가</Text>
         </TouchableOpacity>
-        {/* [수정 끝] */}
-
         <Text style={styles.label}>피해 금액</Text>
         <TextInput
           style={[styles.input, noDamageAmount && styles.disabledInput]}
           value={damageAmount}
           onChangeText={setDamageAmount}
           placeholder="피해 금액을 숫자로 입력하세요 (예: 10000)"
+          placeholderTextColor="#6c757d"
           keyboardType="number-pad"
           editable={!noDamageAmount}
         />
@@ -1509,6 +1532,7 @@ function ReportScreen({ navigation }) {
           onChangeText={setCaseSummary}
           multiline
           placeholder="사건의 개요를 상세히 적어주세요. 누가 언제 어디서 무엇을 어떻게 왜? 피해를 당했는지, 육하원칙에 맞게 상세히 써주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
+          placeholderTextColor="#6c757d"
           numberOfLines={5}
         />
 

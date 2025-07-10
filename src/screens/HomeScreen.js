@@ -12,7 +12,8 @@ import {
   Alert,
   ScrollView,
   ImageBackground,
-  Dimensions, Image
+  Dimensions,
+  Linking
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -134,11 +135,12 @@ function HomeScreen() {
           </View>
         </View>
         <View style={styles.bannerSection}>
-          <Image
-            source={companyLogoImg}
-            style={styles.companyLogo}
-            resizeMode="cover"
-          />
+          {renderImageBanner(
+            "크레디톡 개발 회사 소개",
+            "한국금융범죄예방연구센터 소개입니다.",
+            companyLogoImg,
+            () => Linking.openURL("https://www.xn--jj0bj76bm2k.com/page/about")
+          )}
           {renderImageBanner(
             "공지사항",
             "크레디톡의 새로운 소식을 확인하세요.",
