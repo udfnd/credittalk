@@ -1,4 +1,3 @@
-// src/screens/SearchBaseScreen.js
 import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
@@ -28,19 +27,19 @@ const categoryStyles = {
     backgroundColor: "#FFEBEE",
     color: "#D32F2F",
   },
-  불법사금융: { backgroundColor: "#E8EAF6", color: "#303F9F" },
+  "불법사금융": { backgroundColor: "#E8EAF6", color: "#303F9F" },
   "중고물품 사기": { backgroundColor: "#E0F2F1", color: "#00796B" },
   "투자 사기": { backgroundColor: "#FFF8E1", color: "#FFA000" },
   "부동산 사기 (전, 월세 사기)": {
     backgroundColor: "#F3E5F5",
     color: "#7B1FA2",
   },
-  암호화폐: { backgroundColor: "#E1F5FE", color: "#0288D1" },
-  노쇼: { backgroundColor: "#F1F8E9", color: "#689F38" },
+  "암호화폐": { backgroundColor: "#E1F5FE", color: "#0288D1" },
+  "노쇼": { backgroundColor: "#F1F8E9", color: "#689F38" },
   "노쇼 대리구매 사기": { backgroundColor: "#FFFDE7", color: "#FBC02D" },
   "공갈 협박 범죄": { backgroundColor: "#212121", color: "#FFFFFF" },
   "렌탈 사업 피해": { backgroundColor: "#FBE9E7", color: "#D84315" },
-  기타: { backgroundColor: "#ECEFF1", color: "#455A64" },
+  "기타": { backgroundColor: "#ECEFF1", color: "#455A64" },
 };
 
 const getCategoryStyle = (category) => {
@@ -150,6 +149,7 @@ const SearchStatistics = ({ stats }) => {
     relatedPhones,
     relatedNicknames,
     searchedTerm,
+    categoryStats, // 카테고리 통계 데이터 추출
   } = stats;
 
   const isProbablyPhone =
@@ -186,6 +186,14 @@ const SearchStatistics = ({ stats }) => {
         {relatedNicknames.length > 0 && (
           <Text style={styles.statsSubText}>
             ∙ 사용 닉네임: {relatedNicknames.join(", ")}
+          </Text>
+        )}
+        {categoryStats && categoryStats.length > 0 && (
+          <Text style={styles.statsSubText}>
+            ∙ 연관 카테고리:{" "}
+            {categoryStats
+              .map((stat) => `${stat.category}(${stat.count}건)`)
+              .join(", ")}
           </Text>
         )}
       </View>
@@ -236,77 +244,76 @@ const SearchBaseScreen = ({ title }) => {
         if (rpcError) throw rpcError;
         setAllResults(data || []);
 
-        // --- 통계 추출 로직 ---
+        // --- 통계 추출 로직 (개선됨) ---
         if (data && data.length > 0) {
+          const stats = {
+            reportCount: data.length,
+            relatedAccounts: new Set(),
+            relatedPhones: new Set(),
+            relatedNicknames: new Set(),
+            searchedTerm: trimmedTerm,
+          };
+
+          let isExactMatchFound = false;
           const cleanedSearchTerm = trimmedTerm.replace(/-/g, "");
           const isNumeric = /^\d+$/.test(cleanedSearchTerm);
-          let isExactMatchFound = false;
+          const isPhoneSearch = isNumeric && cleanedSearchTerm.length >= 10 && cleanedSearchTerm.startsWith("0");
+          const categoryCounts = {}; // 카테고리 집계를 위한 객체
 
-          if (isNumeric) {
-            const stats = {
-              reportCount: 0,
-              relatedAccounts: new Set(),
-              relatedPhones: new Set(),
-              relatedNicknames: new Set(),
-              searchedTerm: trimmedTerm,
-            };
+          data.forEach((report) => {
+            let matchInThisReport = false;
 
-            const isPhoneSearch =
-              cleanedSearchTerm.length >= 10 &&
-              cleanedSearchTerm.startsWith("0");
-
-            data.forEach((report) => {
-              let matchInThisReport = false;
-              if (
-                report.phone_numbers?.some(
-                  (p) => p?.replace(/-/g, "") === cleanedSearchTerm,
-                )
-              ) {
+            if (isNumeric) {
+              if (report.phone_numbers?.some((p) => p?.replace(/-/g, "") === cleanedSearchTerm)) {
                 isExactMatchFound = true;
                 matchInThisReport = true;
               }
-              if (
-                report.damage_accounts?.some(
-                  (acc) =>
-                    acc.accountNumber?.replace(/-/g, "") === cleanedSearchTerm,
-                )
-              ) {
+              if (report.damage_accounts?.some((acc) => acc.accountNumber?.replace(/-/g, "") === cleanedSearchTerm)) {
                 isExactMatchFound = true;
                 matchInThisReport = true;
               }
-
-              if (matchInThisReport) {
-                stats.reportCount++;
-                if (report.nickname) stats.relatedNicknames.add(report.nickname);
-
-                if (isPhoneSearch) {
-                  report.damage_accounts?.forEach((acc) => {
-                    if (acc.accountNumber)
-                      stats.relatedAccounts.add(
-                        `${acc.bankName} ${maskAccountNumber(
-                          acc.accountNumber,
-                        )}`,
-                      );
-                  });
-                } else {
-                  report.phone_numbers?.forEach((p) => {
-                    if (p) stats.relatedPhones.add(maskPhoneNumberCustom(p));
-                  });
-                }
-              }
-            });
-
-            if (isExactMatchFound) {
-              setSearchStats({
-                ...stats,
-                relatedAccounts: Array.from(stats.relatedAccounts),
-                relatedPhones: Array.from(stats.relatedPhones),
-                relatedNicknames: Array.from(stats.relatedNicknames),
-              });
+            } else {
+              isExactMatchFound = true;
+              matchInThisReport = true;
             }
+
+            if (matchInThisReport) {
+              if (report.nickname) stats.relatedNicknames.add(report.nickname);
+
+              if (isPhoneSearch) {
+                report.damage_accounts?.forEach((acc) => {
+                  if (acc.accountNumber) stats.relatedAccounts.add(`${acc.bankName} ${maskAccountNumber(acc.accountNumber)}`);
+                });
+              } else {
+                report.phone_numbers?.forEach((p) => {
+                  if (p) stats.relatedPhones.add(maskPhoneNumberCustom(p));
+                });
+              }
+
+              // 카테고리 통계 집계
+              const category = report.category || "기타";
+              categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+            }
+          });
+
+          // 최종 통계 설정
+          if (isExactMatchFound) {
+            const sortedCategoryStats = Object.entries(categoryCounts)
+              .sort(([, a], [, b]) => b - a)
+              .map(([category, count]) => ({ category, count }));
+
+            setSearchStats({
+              reportCount: stats.reportCount,
+              relatedAccounts: Array.from(stats.relatedAccounts),
+              relatedPhones: Array.from(stats.relatedPhones),
+              relatedNicknames: Array.from(stats.relatedNicknames),
+              searchedTerm: stats.searchedTerm,
+              categoryStats: sortedCategoryStats,
+            });
+          } else {
+            setSearchStats(null);
           }
         }
-        // --- 통계 추출 로직 끝 ---
       } catch (e) {
         setError("검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
         setAllResults([]);
