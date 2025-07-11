@@ -53,6 +53,13 @@ function SettingsScreen() {
     );
   };
 
+  const handlePlaceShareService = () => {
+    const url = "https://creditplacecheck.netlify.app/";
+    Linking.openURL(url).catch(() =>
+      Alert.alert("오류", "링크를 열 수 없습니다."),
+    );
+  };
+
   const menuItems = [
     {
       id: "myReports",
@@ -149,7 +156,6 @@ function SettingsScreen() {
             </View>
             <Icon name="chevron-right" size={24} color="#ccc" />
           </TouchableOpacity>
-          {/* [수정된 부분] 상대방 본인인증 서비스 버튼 추가 */}
           <TouchableOpacity
             style={styles.menuItem}
             onPress={handleRealNameCheckService}
@@ -161,6 +167,19 @@ function SettingsScreen() {
               style={styles.menuIcon}
             />
             <Text style={styles.menuText}>상대방 본인인증 서비스</Text>
+            <Icon name="chevron-right" size={24} color="#ccc" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handlePlaceShareService}
+          >
+            <Icon
+              name="card-account-details-outline"
+              size={24}
+              color="#555"
+              style={styles.menuIcon}
+            />
+            <Text style={styles.menuText}>내 위치 공유 서비스</Text>
             <Icon name="chevron-right" size={24} color="#ccc" />
           </TouchableOpacity>
         </View>
