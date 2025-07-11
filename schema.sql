@@ -12,6 +12,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
+CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
+
+
+
+
+
+
 CREATE EXTENSION IF NOT EXISTS "pgsodium";
 
 
@@ -714,38 +721,42 @@ ALTER FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integ
 
 CREATE OR REPLACE VIEW "public"."decrypted_scammer_reports" AS
  SELECT "r"."id",
-    "r"."reporter_id",
-    ( SELECT "jsonb_agg"(
-                CASE
-                    WHEN (("elem"."value" ->> 'isCashTransaction'::"text"))::boolean THEN "elem"."value"
-                    ELSE "jsonb_build_object"('bankName', ("elem"."value" ->> 'bankName'::"text"), 'isCashTransaction', ("elem"."value" -> 'isCashTransaction'::"text"), 'accountHolderName', "public"."decrypt_secret"((("elem"."value" ->> 'accountHolderName'::"text"))::"bytea"), 'accountNumber', "public"."decrypt_secret"((("elem"."value" ->> 'accountNumber'::"text"))::"bytea"))
-                END) AS "jsonb_agg"
-           FROM "jsonb_array_elements"("r"."damage_accounts") "elem"("value")) AS "damage_accounts",
-    ( SELECT "jsonb_agg"("public"."decrypt_secret"("pn"."pn")) AS "jsonb_agg"
-           FROM "unnest"("r"."phone_numbers") "pn"("pn")) AS "phone_numbers",
-    "public"."decrypt_secret"("r"."impersonated_phone_number") AS "impersonated_phone_number",
-    "r"."site_name",
-    "r"."category",
-    "r"."scam_report_source",
-    "r"."company_type",
-    "r"."description",
-    "r"."nickname",
-    "r"."ip_address",
     "r"."created_at",
-    "r"."gender",
+    "r"."category",
+    "r"."description",
+    "r"."ip_address",
+    "r"."company_type",
+    "r"."scam_report_source",
+    "r"."nickname",
     "r"."victim_circumstances",
     "r"."traded_item_category",
     "r"."perpetrator_identified",
+    "r"."analysis_result",
+    "r"."analysis_message",
+    "r"."analyzed_at",
+    "r"."analyzer_id",
+    "r"."gender",
+    "r"."reporter_id",
     "r"."attempted_fraud",
     "r"."damage_path",
     "r"."damaged_item",
     "r"."impersonated_person",
     "r"."nickname_evidence_url",
     "r"."illegal_collection_evidence_urls",
+    "r"."site_name",
     "r"."traded_item_image_urls",
+    "public"."decrypt_secret"("r"."impersonated_phone_number") AS "impersonated_phone_number",
     "r"."detailed_crime_type",
     "r"."damage_amount",
-    "r"."no_damage_amount"
+    "r"."no_damage_amount",
+    ( SELECT "jsonb_agg"("public"."decrypt_secret"("pn"."pn")) AS "jsonb_agg"
+           FROM "unnest"("r"."phone_numbers") "pn"("pn")) AS "phone_numbers",
+    ( SELECT "jsonb_agg"(
+                CASE
+                    WHEN (("elem"."value" ->> 'isCashTransaction'::"text"))::boolean THEN "elem"."value"
+                    ELSE "jsonb_build_object"('bankName', ("elem"."value" ->> 'bankName'::"text"), 'isCashTransaction', ("elem"."value" -> 'isCashTransaction'::"text"), 'accountHolderName', "public"."decrypt_secret"((("elem"."value" ->> 'accountHolderName'::"text"))::"bytea"), 'accountNumber', "public"."decrypt_secret"((("elem"."value" ->> 'accountNumber'::"text"))::"bytea"))
+                END) AS "jsonb_agg"
+           FROM "jsonb_array_elements"("r"."damage_accounts") "elem"("value")) AS "damage_accounts"
    FROM "public"."scammer_reports" "r";
 
 
@@ -800,35 +811,39 @@ ALTER FUNCTION "public"."update_room_last_message_at"() OWNER TO "postgres";
 
 CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
  SELECT "r"."id",
-    "r"."reporter_id",
-    "r"."damage_accounts",
-    "r"."phone_numbers",
-    "r"."impersonated_phone_number",
-    "r"."site_name",
-    "r"."category",
-    "r"."scam_report_source",
-    "r"."company_type",
-    "r"."description",
-    "r"."nickname",
-    "r"."ip_address",
     "r"."created_at",
-    "r"."gender",
+    "r"."category",
+    "r"."description",
+    "r"."ip_address",
+    "r"."company_type",
+    "r"."scam_report_source",
+    "r"."nickname",
     "r"."victim_circumstances",
     "r"."traded_item_category",
     "r"."perpetrator_identified",
+    "r"."analysis_result",
+    "r"."analysis_message",
+    "r"."analyzed_at",
+    "r"."analyzer_id",
+    "r"."gender",
+    "r"."reporter_id",
     "r"."attempted_fraud",
     "r"."damage_path",
     "r"."damaged_item",
     "r"."impersonated_person",
     "r"."nickname_evidence_url",
     "r"."illegal_collection_evidence_urls",
+    "r"."site_name",
     "r"."traded_item_image_urls",
+    "r"."impersonated_phone_number",
     "r"."detailed_crime_type",
     "r"."damage_amount",
     "r"."no_damage_amount",
+    "r"."phone_numbers",
+    "r"."damage_accounts",
     "u"."email" AS "reporter_email"
    FROM ("public"."decrypted_scammer_reports" "r"
-     JOIN "auth"."users" "u" ON (("r"."reporter_id" = "u"."id")));
+     LEFT JOIN "auth"."users" "u" ON (("r"."reporter_id" = "u"."id")));
 
 
 ALTER TABLE "public"."admin_scammer_reports_view" OWNER TO "postgres";
@@ -842,7 +857,8 @@ CREATE TABLE IF NOT EXISTS "public"."arrest_news" (
     "content" "text",
     "author_name" "text",
     "image_url" "text",
-    "is_published" boolean DEFAULT true NOT NULL
+    "is_published" boolean DEFAULT true NOT NULL,
+    "link_url" "text"
 );
 
 
@@ -1244,7 +1260,8 @@ CREATE TABLE IF NOT EXISTS "public"."incident_photos" (
     "image_url" "text",
     "category" "text",
     "uploader_id" "uuid",
-    "is_published" boolean DEFAULT true
+    "is_published" boolean DEFAULT true,
+    "link_url" "text"
 );
 
 
@@ -1265,8 +1282,8 @@ ALTER TABLE "public"."incident_photos" ALTER COLUMN "id" ADD GENERATED BY DEFAUL
 CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
  SELECT "r"."id",
     "public"."mask_damage_accounts"("r"."damage_accounts") AS "damage_accounts",
-    ( SELECT "jsonb_agg"("public"."mask_phone_number"(("pn"."value")::"text")) AS "jsonb_agg"
-           FROM "jsonb_array_elements"("r"."phone_numbers") "pn"("value")) AS "phone_numbers",
+    ( SELECT "jsonb_agg"("public"."mask_phone_number"("pn"."value")) AS "jsonb_agg"
+           FROM "jsonb_array_elements_text"("r"."phone_numbers") "pn"("value")) AS "phone_numbers",
     "public"."mask_phone_number"("r"."impersonated_phone_number") AS "impersonated_phone_number",
     "r"."site_name",
     "r"."category",
@@ -1656,6 +1673,10 @@ CREATE OR REPLACE TRIGGER "handle_chat_rooms_updated_at" BEFORE UPDATE ON "publi
 
 
 
+CREATE OR REPLACE TRIGGER "notify_on_new_help_question" AFTER INSERT ON "public"."help_questions" FOR EACH ROW EXECUTE FUNCTION "supabase_functions"."http_request"('https://lmwtidqrmfclrbapmtdm.supabase.co/functions/v1/send-sens-notification', 'POST', '{"Content-type":"application/json","apikey":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"}', '{}', '5000');
+
+
+
 CREATE OR REPLACE TRIGGER "on_comment_updated" BEFORE UPDATE ON "public"."comments" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
 
@@ -2036,6 +2057,9 @@ ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."audio_analysis_re
 
 
 ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."comments";
+
+
+
 
 
 
