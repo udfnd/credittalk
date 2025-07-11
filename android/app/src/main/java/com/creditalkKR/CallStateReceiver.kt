@@ -1,4 +1,4 @@
-package com.credittalk
+package com.credittalk // 현재 프로젝트의 패키지명
 
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -10,98 +10,240 @@ import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.ContactsContract
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import java.util.Calendar
+import org.json.JSONArray
+
+// 사기 정보 데이터 클래스 (Supabase 연동용)
+data class ScamInfo(val scamType: String, val nickname: String, val phoneNumber: String)
 
 class CallStateReceiver : BroadcastReceiver() {
 
     companion object {
+        // 핸들러 및 Runnable 관리
         private var handler: Handler? = null
-        private var runnable: Runnable? = null
-        private var isUnknownNumberDuringCall = false
+        private var unknownRunnable3min: Runnable? = null
+        private var unknownRunnable5min: Runnable? = null
+
+        // 통화 상태 추적 변수
+        private var currentNumber: String? = null
+        private var isUnknownNumber = false
         private var isRecentlyAddedContact = false
-    }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != "android.intent.action.PHONE_STATE") return
+        // Supabase에서 받아온 블랙리스트
+        private var scamList: List<ScamInfo> = emptyList()
 
-        val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
-
-        when (state) {
-            TelephonyManager.EXTRA_STATE_RINGING -> {
-                cancelAlarm()
-                val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
-
-                if (incomingNumber != null) {
-                    if (!isContact(context, incomingNumber)) {
-                        // 모르는 번호일 경우
-                        isUnknownNumberDuringCall = true
-                        isRecentlyAddedContact = false
-                    } else {
-                        // 아는 번호일 경우, 최근 저장 여부 확인
-                        isUnknownNumberDuringCall = false
-                        val contactTimestamp = getContactUpdateTimestamp(context, incomingNumber)
-
-                        // 현재로부터 30일 전 타임스탬프 계산
-                        val thirtyDaysInMillis = 30L * 24 * 60 * 60 * 1000
-                        val oneMonthAgo = System.currentTimeMillis() - thirtyDaysInMillis
-
-                        if (contactTimestamp > oneMonthAgo) {
-                            isRecentlyAddedContact = true
-                        } else {
-                            isRecentlyAddedContact = false
-                        }
+        // 리액트 네이티브에서 블랙리스트를 업데이트하는 함수
+        fun updateBlacklist(jsonString: String) {
+            val newList = mutableListOf<ScamInfo>()
+            try {
+                val jsonArray = JSONArray(jsonString)
+                for (i in 0 until jsonArray.length()) {
+                    val jsonObject = jsonArray.getJSONObject(i)
+                    val phoneNumber = jsonObject.optString("phoneNumber", null)
+                    if (phoneNumber != null) {
+                       newList.add(
+                           ScamInfo(
+                               scamType = jsonObject.optString("scamType", "N/A"),
+                               nickname = jsonObject.optString("nickname", "N/A"),
+                               phoneNumber = phoneNumber
+                           )
+                       )
                     }
                 }
-            }
-            TelephonyManager.EXTRA_STATE_OFFHOOK -> {
-                if (isUnknownNumberDuringCall) {
-                    // 모르는 번호: 30초 뒤에 경고 알림 및 진동
-                    handler = Handler(Looper.getMainLooper())
-                    runnable = Runnable { vibrateAndNotifyForUnknown(context) }
-                    handler?.postDelayed(runnable!!, 30000) // 30초
-                } else if (isRecentlyAddedContact) {
-                    // 최근 저장된 번호: 즉시 경고 알림 및 진동
-                    vibrateAndNotifyForRecent(context)
-                }
-            }
-            TelephonyManager.EXTRA_STATE_IDLE -> {
-                cancelAlarm()
-                isUnknownNumberDuringCall = false
-                isRecentlyAddedContact = false
+                scamList = newList
+                Log.d("CallStateReceiver", "Blacklist updated with ${scamList.size} numbers.")
+            } catch(e: Exception) {
+                Log.e("CallStateReceiver", "Failed to parse blacklist JSON", e)
             }
         }
     }
 
-    private fun cancelAlarm() {
-        handler?.removeCallbacks(runnable ?: return)
+    override fun onReceive(context: Context, intent: Intent) {
+        val action = intent.action ?: return
+
+        when (action) {
+            Intent.ACTION_NEW_OUTGOING_CALL -> {
+                val outgoingNumber = intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER)
+                handleCall(context, outgoingNumber, "발신")
+            }
+            TelephonyManager.ACTION_PHONE_STATE_CHANGED -> {
+                val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE)
+                val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+
+                when (state) {
+                    TelephonyManager.EXTRA_STATE_RINGING -> {
+                        handleCall(context, incomingNumber, "수신")
+                    }
+                    TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                        if (isRecentlyAddedContact) {
+                            // 최근 저장된 번호: 즉시 경고
+                            vibrateAndNotifyForRecent(context)
+                        } else if (isUnknownNumber) {
+                            // 모르는 번호: 3분, 5분 뒤 경고 예약
+                            scheduleUnknownCallWarnings(context)
+                        }
+                    }
+                    TelephonyManager.EXTRA_STATE_IDLE -> {
+                        cancelAlarms()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleCall(context: Context, number: String?, direction: String) {
+        if (number == null) return
+
+        cancelAlarms() // 새로운 통화 시작 시 이전 경보 모두 취소
+
+        var normalizedNumber = number.replace("[^0-9+]".toRegex(), "")
+        if (normalizedNumber.startsWith("+82")) {
+            normalizedNumber = normalizedNumber.replaceFirst("+82", "0")
+        }
+        currentNumber = normalizedNumber
+
+        // 1순위: 사기 이력 확인
+        val scamInfo = checkBlacklist(normalizedNumber)
+        if (scamInfo != null) {
+            vibrateAndNotifyForScam(context, scamInfo, "$direction 전화입니다.")
+            return // 사기 전화는 다른 검사를 할 필요 없음
+        }
+
+        // 2순위: 주소록 저장 여부 확인
+        if (!isContact(context, normalizedNumber)) {
+            isUnknownNumber = true
+            vibrateAndNotifyForUnknown(context, "$direction 전화입니다.")
+        } else {
+            // 3순위: 최근 저장 여부 확인 (주소록에 있는 번호 대상)
+            val contactTimestamp = getContactUpdateTimestamp(context, normalizedNumber)
+            val thirtyDaysInMillis = 30L * 24 * 60 * 60 * 1000
+            val oneMonthAgo = System.currentTimeMillis() - thirtyDaysInMillis
+
+            if (contactTimestamp > oneMonthAgo) {
+                isRecentlyAddedContact = true
+                // 통화가 연결되면(OFFHOOK) 알림이 가도록 플래그만 설정
+            }
+        }
+    }
+
+    private fun scheduleUnknownCallWarnings(context: Context) {
+        handler = Handler(Looper.getMainLooper())
+        // 3분, 5분 경고는 기존 "모르는 번호"와 다른 메시지로 제공하여 혼동을 방지
+        unknownRunnable3min = Runnable { notifyLongCallWarning(context, "3분") }
+        unknownRunnable5min = Runnable { notifyLongCallWarning(context, "5분") }
+        handler?.postDelayed(unknownRunnable3min!!, 180000) // 3분
+        handler?.postDelayed(unknownRunnable5min!!, 300000) // 5분
+    }
+
+    private fun cancelAlarms() {
+        handler?.removeCallbacks(unknownRunnable3min ?: Runnable {})
+        handler?.removeCallbacks(unknownRunnable5min ?: Runnable {})
         handler = null
-        runnable = null
+        unknownRunnable3min = null
+        unknownRunnable5min = null
+        currentNumber = null
+        isUnknownNumber = false
+        isRecentlyAddedContact = false
+    }
+
+    // --- 알림 생성 함수들 ---
+
+    private fun vibrateAndNotifyForScam(context: Context, scamInfo: ScamInfo, direction: String) {
+        vibrate(context, 2000)
+        val channelId = "scam_call_warning_channel"
+        createNotificationChannel(context, channelId, "사기 의심 전화 경고", NotificationManager.IMPORTANCE_HIGH)
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("$direction 사기 이력이 있는 전화입니다.")
+            .setContentText("사기 유형: ${scamInfo.scamType}, 닉네임: ${scamInfo.nickname}")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("금융 거래에 각별히 유의하세요. 통화 내용을 녹음하는 것을 권장합니다."))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(getAppLaunchIntent(context))
+
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(111, builder.build())
+    }
+
+    private fun vibrateAndNotifyForUnknown(context: Context, direction: String) {
+        vibrate(context, 1000)
+        val channelId = "unknown_call_warning_channel"
+        createNotificationChannel(context, channelId, "모르는 번호 경고", NotificationManager.IMPORTANCE_HIGH)
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("$direction 저장되지 않은 번호입니다.")
+            .setContentText("보이스피싱 피해가 우려되니 통화를 녹음하고, 크레디톡에서 분석하세요.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(getAppLaunchIntent(context))
+
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(112, builder.build())
+    }
+
+    private fun vibrateAndNotifyForRecent(context: Context) {
+        vibrate(context, 1000)
+        val channelId = "recent_contact_warning_channel"
+        createNotificationChannel(context, channelId, "최근 저장 번호 경고", NotificationManager.IMPORTANCE_DEFAULT)
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setContentTitle("저장한 지 얼마 안 된 번호입니다.")
+            .setContentText("금융거래 시 사기 피해에 유의하세요. 사기는 예방이 중요합니다.")
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText("금융거래 시 피해가 발생할 수 있으니 크레디톡 범죄수법을 활용하세요. 사기는 예방이 중요합니다."))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(getAppLaunchIntent(context))
+
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(113, builder.build())
+    }
+
+    private fun notifyLongCallWarning(context: Context, duration: String) {
+         val channelId = "long_call_warning_channel"
+         createNotificationChannel(context, channelId, "장시간 통화 경고", NotificationManager.IMPORTANCE_DEFAULT)
+
+         val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setContentTitle("모르는 번호와 $duration 넘게 통화중입니다.")
+            .setContentText("개인정보나 금융정보 요구에 절대 응하지 마세요.")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(114, builder.build())
+    }
+
+    // --- 유틸리티 함수들 ---
+
+    private fun checkBlacklist(number: String): ScamInfo? {
+        return scamList.firstOrNull { it.phoneNumber == number }
     }
 
     @SuppressLint("Range")
     private fun isContact(context: Context, phoneNumber: String): Boolean {
+        if (phoneNumber.isBlank()) return false
         try {
             val uri = android.net.Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, android.net.Uri.encode(phoneNumber))
-            val projection = arrayOf(ContactsContract.PhoneLookup._ID)
-            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-                return cursor.moveToFirst()
+            // 👇 [수정됨] 존재하지 않는 ContactsKey._ID 대신 정확한 ContactsContract.PhoneLookup._ID 를 사용합니다.
+            context.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup._ID), null, null, null)?.use {
+                return it.moveToFirst()
             }
         } catch (e: Exception) {
             Log.e("CallStateReceiver", "Failed to query contacts", e)
-            return false
         }
         return false
     }
 
     @SuppressLint("Range")
     private fun getContactUpdateTimestamp(context: Context, phoneNumber: String): Long {
+        if (phoneNumber.isBlank()) return 0L
         try {
             val uri = android.net.Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, android.net.Uri.encode(phoneNumber))
-            // 연락처의 최종 수정 시간을 함께 조회
             val projection = arrayOf(ContactsContract.PhoneLookup.CONTACT_LAST_UPDATED_TIMESTAMP)
             context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -114,52 +256,13 @@ class CallStateReceiver : BroadcastReceiver() {
         return 0L
     }
 
-    private fun vibrateAndNotifyForUnknown(context: Context) {
-        vibrate(context)
-        val channelId = "unknown_call_warning_channel"
-        createNotificationChannel(context, channelId, "모르는 번호 경고", NotificationManager.IMPORTANCE_HIGH)
-
-        val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
-            .setContentTitle("저장되지 않은 번호입니다. 금융 거래에 유의하세요.")
-            .setContentText("피해가 우려된다면 통화를 녹음하고, 크레디톡에서 분석하세요.")
-            .setStyle(NotificationCompat.BigTextStyle()
-                .bigText("보이스피싱 피해가 우려되니 통화를 녹음하세요. 녹음 후 크레디톡 보이스피싱 검사 기능을 활용하세요."))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(getAppLaunchIntent(context))
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(112, builder.build())
-    }
-
-    // '최근 저장된 번호'를 위한 새로운 알림 함수
-    private fun vibrateAndNotifyForRecent(context: Context) {
-        vibrate(context)
-        val channelId = "recent_contact_warning_channel"
-        createNotificationChannel(context, channelId, "최근 저장 번호 경고", NotificationManager.IMPORTANCE_DEFAULT)
-
-        val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_notify_more)
-            .setContentTitle("저장한 지 얼마 안 된 번호입니다.")
-            .setContentText("금융거래 시 사기 피해에 유의하세요. 사기는 예방이 중요합니다.")
-            .setStyle(NotificationCompat.BigTextStyle()
-                .bigText("금융거래시 피해가 발생할수 있으니 크레디톡 범죄수법을 활용하세요. 사기는 예방이 중요합니다."))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .setContentIntent(getAppLaunchIntent(context))
-
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(113, builder.build()) // 알림 ID를 다르게 설정
-    }
-
-    private fun vibrate(context: Context) {
-        val vib = context.getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+    private fun vibrate(context: Context, duration: Long) {
+        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vib.vibrate(android.os.VibrationEffect.createOneShot(1000, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
             @Suppress("DEPRECATION")
-            vib.vibrate(1000)
+            vibrator.vibrate(duration)
         }
     }
 
@@ -174,8 +277,12 @@ class CallStateReceiver : BroadcastReceiver() {
     }
 
     private fun getAppLaunchIntent(context: Context): PendingIntent {
-        val appIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        appIntent?.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        return PendingIntent.getActivity(context, 0, appIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        return PendingIntent.getActivity(context, 0, intent, flags)
     }
 }
