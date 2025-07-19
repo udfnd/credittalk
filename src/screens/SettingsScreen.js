@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Linking,
-  Alert,
+  Alert, Platform
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../context/AuthContext";
@@ -38,12 +38,24 @@ function SettingsScreen() {
     );
   };
 
-  const handleMaliciousAppDetection = () => {
-    Alert.alert(
-      "악성앱 감지 안내",
-      "플레이스토어, 앱스토어에서 'V3'를 검색하십시오. 해당 프로그램을 설치 후 '보안 점검' 기능을 활용하십시오.",
-      [{ text: "확인" }],
-    );
+  const handleMaliciousAppDetection = async () => {
+    try {
+      const playStoreUrl = "market://details?id=com.infinigru.police.phishingeyes";
+      const appStoreUrl  = "itms-apps://itunes.apple.com/app/id<YOUR_IOS_APP_ID>";
+      const storeUrl = Platform.OS === "android" ? playStoreUrl : appStoreUrl;
+
+      const supported = await Linking.canOpenURL(storeUrl);
+
+      if (supported) {
+        await Linking.openURL(storeUrl);
+      } else {
+        await Linking.openURL(
+          "https://play.google.com/store/apps/details?id=com.infinigru.police.phishingeyes&hl=ko"
+        );
+      }
+    } catch (err) {
+      Alert.alert("오류", "스토어를 열 수 없습니다:\n" + err.message);
+    }
   };
 
   const handleRealNameCheckService = () => {

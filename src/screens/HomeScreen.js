@@ -1,6 +1,5 @@
-// src/screens/HomeScreen.js
 import "react-native-get-random-values";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,13 +12,15 @@ import {
   ScrollView,
   ImageBackground,
   Dimensions,
-  Linking
+  Linking,
+  ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
 import { useAuth } from "../context/AuthContext";
 import { logPageView } from "../lib/pageViewLogger";
+import { supabase } from "../lib/supabaseClient"; // Supabase 클라이언트 임포트
 
 const { width } = Dimensions.get("window");
 const BANNER_HEIGHT = 150;
@@ -36,14 +37,39 @@ const companyLogoImg = require("../assets/images/company_logo.png");
 function HomeScreen() {
   const navigation = useNavigation();
   const { user, profile } = useAuth();
+  const isFocused = useIsFocused(); // 화면 포커스 상태 확인
   const [searchTerm, setSearchTerm] = useState("");
 
+  const [stats, setStats] = useState({
+    todayHelpCount: 0,
+    totalHelpCount: 0,
+    totalScamCount: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  const fetchStats = useCallback(async () => {
+    setLoadingStats(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("get-home-stats");
+      if (error) throw error;
+      setStats(data);
+    } catch (error) {
+      console.error("Error fetching stats:", error.message);
+      // 에러 발생 시 통계가 0으로 표시되도록 초기화
+      setStats({ todayHelpCount: 0, totalHelpCount: 0, totalScamCount: 0 });
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
   useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
     if (user) {
       logPageView(user.id, 'HomeScreen');
     }
-  }, [user]);
+    if (isFocused) {
+      fetchStats();
+    }
+  }, [user, isFocused, fetchStats]);
 
   const handleSearch = () => {
     Keyboard.dismiss();
@@ -54,6 +80,17 @@ function HomeScreen() {
     navigation.navigate("UnifiedSearch", {
       searchTerm: searchTerm.trim(),
       title: `'${searchTerm.trim()}' 검색 결과`,
+    });
+  };
+
+  const handleAdminPageNavigation = () => {
+    const adminUrl = 'https://credittalk-admin.vercel.app/';
+    Linking.canOpenURL(adminUrl).then(supported => {
+      if (supported) {
+        Linking.openURL(adminUrl);
+      } else {
+        console.log(`Don't know how to open this URL: ${adminUrl}`);
+      }
     });
   };
 
@@ -75,6 +112,24 @@ function HomeScreen() {
         </View>
       </ImageBackground>
     </TouchableOpacity>
+  );
+
+  // ✨ 통계 섹션을 렌더링하는 컴포넌트 추가
+  const renderStatsSection = () => (
+    <View style={styles.statsSection}>
+      <View style={styles.statItem}>
+        <Text style={styles.statLabel}>오늘의 사기 예방</Text>
+        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.todayHelpCount.toLocaleString()}</Text>}
+      </View>
+      <View style={styles.statItem}>
+        <Text style={styles.statLabel}>누적 사기 예방</Text>
+        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.totalHelpCount.toLocaleString()}</Text>}
+      </View>
+      <View style={styles.statItem}>
+        <Text style={styles.statLabel}>전체 피해 사례</Text>
+        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.totalScamCount.toLocaleString()}</Text>}
+      </View>
+    </View>
   );
 
   return (
@@ -122,6 +177,17 @@ function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
+
+        {user && user.email === 'credittalkadmin@gmail.com' && (
+          <TouchableOpacity
+            style={styles.adminButton}
+            onPress={handleAdminPageNavigation}
+          >
+            <Icon name="cog-outline" size={22} color="#fff" />
+            <Text style={styles.adminButtonText}>관리자 페이지</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.searchSection}>
           <Text style={styles.sectionTitle}>사기 피해사례 검색</Text>
           <View style={styles.searchBarContainer}>
@@ -142,6 +208,7 @@ function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        {renderStatsSection()}
         <View style={styles.bannerSection}>
           {renderImageBanner(
             "크레디톡 개발 회사 소개",
@@ -217,6 +284,7 @@ function HomeScreen() {
   );
 }
 
+// ✨ 새로운 스타일 추가
 const styles = StyleSheet.create({
   scrollView: { flex: 1, backgroundColor: "#f0f2f5" },
   scrollContentContainer: { paddingBottom: 100 },
@@ -277,7 +345,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    alignSelf: "flex-start", // 중요: 컨테이너 크기를 내용에 맞춤
+    alignSelf: "flex-start",
   },
   analysisCtaText: {
     color: "white",
@@ -290,6 +358,31 @@ const styles = StyleSheet.create({
     right: -10,
     bottom: -10,
     color: "rgba(255, 255, 255, 0.15)",
+  },
+  // ✨ 통계 섹션 스타일
+  statsSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#ffffff',
+    marginHorizontal: 20,
+    marginTop: 25,
+    paddingVertical: 20,
+    borderRadius: 12,
+    elevation: 3,
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#546e7a',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#3d5afe',
   },
   companyLogo: {
     width: '100%',
@@ -325,6 +418,24 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   bannerSubtitle: { fontSize: 13, color: "#f0f0f0" },
+  adminButton: {
+    flexDirection: 'row',
+    backgroundColor: '#e67e22',
+    marginHorizontal: 20,
+    marginTop: 20,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 3,
+  },
+  adminButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
   searchSection: {
     backgroundColor: "#ffffff",
     borderRadius: 12,
