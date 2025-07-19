@@ -5,15 +5,17 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
+// ✨ 인터페이스 수정: isCashTransaction -> is_other_method, other_method_details 추가
 interface DamageAccount {
   accountHolderName?: string | null;
   accountNumber?: string | null;
   bankName?: string | null;
-  isCashTransaction?: boolean | null;
+  is_other_method?: boolean | null;
+  other_method_details?: string | null;
 }
 
 interface ReportData {
-  damage_accounts?: DamageAccount[] | null; // 여러 계좌 정보
+  damage_accounts?: DamageAccount[] | null;
   phone_numbers?: (string | null)[] | null;
   impersonated_phone_number?: string | null;
   site_name?: string | null;
@@ -22,6 +24,7 @@ interface ReportData {
   company_type: string;
   description?: string | null;
   nickname?: string | null;
+  perpetrator_id?: string | null;
   gender: string;
   victim_circumstances?: string | null;
   traded_item_category?: string | null;
@@ -66,20 +69,25 @@ async function encryptAndInsert(
     ? await Promise.all(reportData.phone_numbers.map((pn) => encrypt(pn)))
     : null;
 
+  // ✨ 피해금 송금 정보 처리 로직 수정
   const encryptedDamageAccounts =
     reportData.damage_accounts && reportData.damage_accounts.length > 0
       ? await Promise.all(
         reportData.damage_accounts.map(async (acc) => {
-          if (acc.isCashTransaction) {
+          // '기타' 방식일 경우
+          if (acc.is_other_method) {
             return {
-              isCashTransaction: true,
+              is_other_method: true,
+              other_method_details: acc.other_method_details || null,
               bankName: null,
               accountHolderName: null,
               accountNumber: null,
             };
           }
+          // 계좌번호 방식일 경우
           return {
-            isCashTransaction: false,
+            is_other_method: false,
+            other_method_details: null,
             bankName: acc.bankName || null,
             accountHolderName: await encrypt(acc.accountHolderName),
             accountNumber: await encrypt(acc.accountNumber),
@@ -96,7 +104,7 @@ async function encryptAndInsert(
     .from("scammer_reports")
     .insert({
       reporter_id: reporterId,
-      damage_accounts: encryptedDamageAccounts, // 수정
+      damage_accounts: encryptedDamageAccounts, // 수정된 데이터 삽입
       phone_numbers: encryptedPhoneNumbers,
       impersonated_phone_number: encryptedImpersonatedPhoneNumber,
       site_name: reportData.site_name || null,
@@ -105,6 +113,7 @@ async function encryptAndInsert(
       company_type: reportData.company_type,
       description: reportData.description || null,
       nickname: reportData.nickname || null,
+      perpetrator_id: reportData.perpetrator_id || null,
       ip_address: clientIp || null,
       gender: reportData.gender,
       victim_circumstances: reportData.victim_circumstances || null,
@@ -199,7 +208,7 @@ serve(async (req: Request) => {
       (field) =>
         reportData[field] === undefined ||
         reportData[field] === null ||
-        reportData[field] === "",
+        String(reportData[field]).trim() === ""
     );
 
     if (
