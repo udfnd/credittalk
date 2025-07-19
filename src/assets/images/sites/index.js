@@ -54,4 +54,5 @@ export const siteImages = [
   { name: "헝그리앱", source: require("./hungry_app.png") },
   { name: "헬로마켓", source: require("./hello_market.png") },
   { name: "후루츠", source: require("./fruits.png") },
+  { name: "기타", source: null }
 ];
