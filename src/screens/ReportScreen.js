@@ -33,7 +33,7 @@ const individualCategories = [
   "보이스피싱, 전기통신금융사기, 로맨스 스캠 사기",
   "불법사금융",
   "중고물품 사기",
-  "투자 사기",
+  "알바 사기",
   "부동산 사기 (전, 월세 사기)",
   "암호화폐",
   "기타",
@@ -69,7 +69,6 @@ const impersonationTypes = [
 ];
 
 const victimCircumstanceOptions = [
-  "불법 추심",
   "과도한 이자 갈취",
   "허위 해외문자 발신",
   "SNS 불법 업로드",
@@ -858,7 +857,7 @@ function ReportScreen({ navigation }) {
                 style={styles.input}
                 value={tradedItemCategory}
                 onChangeText={setTradedItemCategory}
-                placeholder="예: 디지털기기, 의류, 상품권 등"
+                placeholder="예: 노트북, 청소기, 스마트폰, 상품권 등"
                 placeholderTextColor="#6c757d"
               />
               <Text style={styles.label}>거래물품 증빙 사진 (최대 3장)</Text>
@@ -892,14 +891,6 @@ function ReportScreen({ navigation }) {
         case individualCategories[5]: // 암호화폐
           return (
             <>
-              <Text style={styles.label}>피해 경로</Text>
-              <TextInput
-                style={styles.input}
-                value={damagePath}
-                onChangeText={setDamagePath}
-                placeholder="예: 코인거래소, 텔레그램 등"
-                placeholderTextColor="#6c757d"
-              />
               <Text style={styles.label}>피해 물품</Text>
               <TextInput
                 style={styles.input}
@@ -1190,7 +1181,7 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>가해자가 썼던 SNS 닉네임</Text>
+        <Text style={styles.label}>가해자가 썼던 SNS 닉네임이나 가명</Text>
         <TextInput
           style={styles.input}
           value={nickname}
@@ -1387,7 +1378,7 @@ function ReportScreen({ navigation }) {
         {category !== "투자 사기, 전세 사기" && category !== "암호화폐" && (
           <>
             <View style={styles.labelContainer}>
-              <Text style={styles.labelNoMargin}>대면 피해</Text>
+              <Text style={styles.labelNoMargin}>노쇼 피해</Text>
               <TouchableOpacity
                 style={styles.checkboxItemNoMargin}
                 onPress={() => {
@@ -1405,7 +1396,7 @@ function ReportScreen({ navigation }) {
                   size={24}
                   color={isFaceToFace ? "#3d5afe" : "#555"}
                 />
-                <Text style={styles.checkboxLabel}>대면으로 피해를 입음</Text>
+                <Text style={styles.checkboxLabel}>대면 노쇼피해</Text>
               </TouchableOpacity>
             </View>
 
@@ -1416,7 +1407,7 @@ function ReportScreen({ navigation }) {
                   style={styles.input}
                   value={damagedItem}
                   onChangeText={setDamagedItem}
-                  placeholder="피해 물품을 입력하세요 (예: 명품 가방, 현금)"
+                  placeholder="피해 물품을 입력하세요 (예: 현금, 상품권, 시계)"
                   placeholderTextColor="#6c757d"
                 />
               </>
@@ -1522,8 +1513,9 @@ function ReportScreen({ navigation }) {
                 placeholder={
                   category === "암호화폐"
                     ? "전자지갑주소"
-                    : "계좌번호 (- 없이 적어주세요)"
+                    : "계좌번호 (- 부호 없이 숫자만 적어주세요)"
                 }
+                placeholderTextColor="#6c757d"
                 keyboardType={
                   category === "암호화폐" ? "default" : "number-pad"
                 }
