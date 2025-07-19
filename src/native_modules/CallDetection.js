@@ -1,5 +1,5 @@
 import { NativeModules } from 'react-native';
-import { supabase } from '../lib/supabase'; // supabase 클라이언트 경로 확인 필요
+import { supabase } from '../lib/supabaseClient'; // supabase 클라이언트 경로 확인 필요
 
 const { CallDetectionModule } = NativeModules;
 
