@@ -1,4 +1,4 @@
-package com.credittalk // 자신의 패키지명으로 변경하세요
+package com.credittalka // 자신의 패키지명으로 변경하세요
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

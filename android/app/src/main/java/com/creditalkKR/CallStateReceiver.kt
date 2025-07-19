@@ -1,4 +1,4 @@
-package com.credittalk // 현재 프로젝트의 패키지명
+package com.credittalka // 현재 프로젝트의 패키지명
 
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
