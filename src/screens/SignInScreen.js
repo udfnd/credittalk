@@ -86,7 +86,7 @@ function SignInScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>CreditTalk</Text>
+      <Text style={styles.title}>크레디톡</Text>
       <TextInput
         style={styles.input}
         placeholder="이메일 주소"
