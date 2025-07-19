@@ -1,4 +1,4 @@
-package com.credittalk
+package com.credittalka
 
 import android.Manifest
 import android.content.pm.PackageManager
