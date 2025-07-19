@@ -84,7 +84,8 @@ const initialDamageAccount = {
   bankName: "",
   accountNumber: "",
   accountHolderName: "",
-  isCashTransaction: false,
+  isOtherMethod: false,
+  otherMethodDetails: "",
   showBankOtherInput: false,
 };
 
@@ -103,6 +104,8 @@ function ReportScreen({ navigation }) {
   ]);
 
   const [nickname, setNickname] = useState("");
+  const [perpetratorId, setPerpetratorId] = useState("");
+  const [isIdUnknown, setIsIdUnknown] = useState(false);
   const [category, setCategory] = useState("");
   const [categoryOther, setCategoryOther] = useState("");
   const [showCategoryOtherInput, setShowCategoryOtherInput] = useState(false);
@@ -139,6 +142,7 @@ function ReportScreen({ navigation }) {
   const [isPhoneUnknown, setIsPhoneUnknown] = useState(false);
 
   const [siteName, setSiteName] = useState("");
+  const [showSiteOtherInput, setShowSiteOtherInput] = useState(false);
   const [bankModalState, setBankModalState] = useState({
     visible: false,
     index: -1,
@@ -190,6 +194,8 @@ function ReportScreen({ navigation }) {
   const clearInputs = () => {
     setDamageAccounts([{ ...initialDamageAccount, id: Date.now() }]);
     setNickname("");
+    setPerpetratorId("");
+    setIsIdUnknown(false);
     setCategory("");
     setCategoryOther("");
     setShowCategoryOtherInput(false);
@@ -264,15 +270,20 @@ function ReportScreen({ navigation }) {
     setDamageAccounts(newAccounts);
   };
 
-  const handleCashTransactionToggle = (index) => {
+  const handleOtherMethodToggle = (index) => {
     const newAccounts = [...damageAccounts];
     const currentAccount = newAccounts[index];
-    currentAccount.isCashTransaction = !currentAccount.isCashTransaction;
-    if (currentAccount.isCashTransaction) {
+    currentAccount.isOtherMethod = !currentAccount.isOtherMethod;
+
+    if (currentAccount.isOtherMethod) {
+      // '기타'가 선택되면 계좌 정보 필드를 비웁니다.
       currentAccount.bankName = "";
       currentAccount.accountNumber = "";
       currentAccount.accountHolderName = "";
       currentAccount.showBankOtherInput = false;
+    } else {
+      // '기타'가 해제되면 상세 설명 필드를 비웁니다.
+      currentAccount.otherMethodDetails = "";
     }
     setDamageAccounts(newAccounts);
   };
@@ -362,7 +373,7 @@ function ReportScreen({ navigation }) {
       if (
         account.showBankOtherInput &&
         !account.bankName.trim() &&
-        !account.isCashTransaction
+        !account.isOtherMethod
       ) {
         Alert.alert("입력 오류", "은행 이름을 직접 입력해주세요.");
         return;
@@ -542,24 +553,29 @@ function ReportScreen({ navigation }) {
 
       const processedDamageAccounts = damageAccounts
         .map((acc) => ({
-          bankName: acc.isCashTransaction ? null : acc.bankName.trim() || null,
-          accountNumber: acc.isCashTransaction
+          bankName: acc.isOtherMethod ? null : acc.bankName.trim() || null,
+          accountNumber: acc.isOtherMethod
             ? null
             : acc.accountNumber.trim() || null,
-          accountHolderName: acc.isCashTransaction
+          accountHolderName: acc.isOtherMethod
             ? null
             : acc.accountHolderName.trim() || null,
-          isCashTransaction: acc.isCashTransaction,
+          is_other_method: acc.isOtherMethod,
+          other_method_details: acc.isOtherMethod
+            ? acc.otherMethodDetails.trim()
+            : null,
         }))
         .filter(
           (acc) =>
-            acc.isCashTransaction ||
+            acc.is_other_method ||
             (acc.accountHolderName && acc.accountNumber && acc.bankName),
         );
+
 
       const reportData = {
         damage_accounts: processedDamageAccounts,
         nickname: nickname.trim() || null,
+        perpetrator_id: isIdUnknown ? null : perpetratorId.trim() || null,
         phone_numbers:
           fullPhoneNumbers && fullPhoneNumbers.length > 0
             ? fullPhoneNumbers
@@ -929,25 +945,15 @@ function ReportScreen({ navigation }) {
           onClose={() => setIsSiteModalVisible(false)}
           items={siteImages}
           onSelect={(name) => {
-            setSiteName(name);
-            if (name === "직접쓰기") {
-              setTimeout(
-                () =>
-                  Alert.prompt(
-                    "사이트 직접 입력",
-                    "사이트 이름을 입력해주세요.",
-                    [
-                      { text: "취소", style: "cancel" },
-                      {
-                        text: "확인",
-                        onPress: (text) => setSiteName(text || ""),
-                      },
-                    ],
-                    "plain-text",
-                    siteName !== "직접쓰기" ? siteName : "",
-                  ),
-                Platform.OS === "ios" ? 500 : 0,
-              );
+            setIsSiteModalVisible(false);
+            if (name === "기타") {
+              // "기타" 선택 시 커스텀 입력 모드로 전환
+              setSiteName("");
+              setShowSiteOtherInput(true);
+            } else {
+              // 일반 선택 시 값 설정
+              setSiteName(name);
+              setShowSiteOtherInput(false);
             }
           }}
           title="사이트 선택"
@@ -1114,6 +1120,15 @@ function ReportScreen({ navigation }) {
                 <Text style={styles.inlineButtonText}>선택</Text>
               </TouchableOpacity>
             </View>
+            {showSiteOtherInput && (
+              <TextInput
+                style={[styles.input, { marginTop: -10, marginBottom: 18 }]}
+                value={siteName}
+                onChangeText={setSiteName}
+                placeholder="사이트 이름을 직접 입력해주세요."
+                placeholderTextColor="#6c757d"
+              />
+            )}
           </View>
         )}
 
@@ -1218,7 +1233,37 @@ function ReportScreen({ navigation }) {
             )}
           </View>
         )}
-
+        <Text style={styles.label}>가해자 아이디</Text>
+        <View style={styles.idInputContainer}>
+          <TextInput
+            style={[styles.input, { flex: 1 }, isIdUnknown && styles.disabledInput]}
+            value={perpetratorId}
+            onChangeText={setPerpetratorId}
+            placeholder="가해자의 아이디를 입력하세요"
+            placeholderTextColor="#6c757d"
+            editable={!isIdUnknown}
+            autoCapitalize="none"
+          />
+          <TouchableOpacity
+            style={styles.idCheckbox}
+            onPress={() => {
+              const nextState = !isIdUnknown;
+              setIsIdUnknown(nextState);
+              if (nextState) {
+                setPerpetratorId("");
+              }
+            }}
+          >
+            <Icon
+              name={
+                isIdUnknown ? "checkbox-marked" : "checkbox-blank-outline"
+              }
+              size={24}
+              color={isIdUnknown ? "#3d5afe" : "#555"}
+            />
+            <Text style={styles.checkboxLabel}>모름</Text>
+          </TouchableOpacity>
+        </View>
         {category === "노쇼 대리구매 사기" ? (
           <>
             <Text style={styles.label}>노쇼를 했던 전화번호</Text>
@@ -1442,22 +1487,33 @@ function ReportScreen({ navigation }) {
               category === "불법사금융") && (
               <TouchableOpacity
                 style={styles.checkboxItem}
-                onPress={() => handleCashTransactionToggle(index)}
+                onPress={() => handleOtherMethodToggle(index)}
               >
                 <Icon
                   name={
-                    account.isCashTransaction
+                    account.isOtherMethod
                       ? "checkbox-marked"
                       : "checkbox-blank-outline"
                   }
                   size={24}
-                  color={account.isCashTransaction ? "#3d5afe" : "#555"}
+                  color={account.isOtherMethod ? "#3d5afe" : "#555"}
                 />
-                <Text style={styles.checkboxLabel}>현금 전달</Text>
+                <Text style={styles.checkboxLabel}>기타</Text>
               </TouchableOpacity>
             )}
+            {account.isOtherMethod && (
+              <TextInput
+                style={[styles.input, { marginBottom: 10 }]}
+                value={account.otherMethodDetails}
+                onChangeText={(text) =>
+                  handleDamageAccountChange(index, "otherMethodDetails", text)
+                }
+                placeholder="어떤 방식으로 전달되었는지 입력하세요."
+                placeholderTextColor="#6c757d"
+              />
+            )}
 
-            {!account.isCashTransaction && category !== "암호화폐" && (
+            {!account.isOtherMethod && category !== "암호화폐" && (
               <>
                 <View style={styles.inputWithButtonContainer}>
                   <TextInput
@@ -1503,7 +1559,7 @@ function ReportScreen({ navigation }) {
                 />
               </>
             )}
-            {!account.isCashTransaction && (
+            {!account.isOtherMethod && (
               <TextInput
                 style={[styles.input, { marginTop: 10 }]}
                 value={account.accountNumber}
@@ -1805,6 +1861,16 @@ const styles = StyleSheet.create({
     color: "#3d5afe",
   },
   removeAccountButton: {},
+  idInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  idCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+  }
 });
 
 export default ReportScreen;

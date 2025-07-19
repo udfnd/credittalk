@@ -102,17 +102,23 @@ const maskAccountNumber = (accountNumber) => {
   if (!accountNumber || typeof accountNumber !== "string") {
     return accountNumber || "";
   }
-  const cleanAccount = accountNumber.replace(/-/g, "");
-  const len = cleanAccount.length;
 
-  if (len < 5) {
+  const clean = accountNumber.replace(/-/g, "");
+
+  if (clean.length < 6) {
     return accountNumber;
   }
-  const start = 2;
-  const end = len - 2;
-  return `${cleanAccount.substring(0, start)}${"*".repeat(
-    end - start,
-  )}${cleanAccount.substring(end)}`;
+
+  const PREFIX_COUNT = 2;
+  const MASK_COUNT = 4;
+
+  const endMaskedIndex= PREFIX_COUNT + MASK_COUNT;
+
+  return (
+    clean.substring(0, PREFIX_COUNT) +
+    "*".repeat(MASK_COUNT) +
+    clean.substring(endMaskedIndex)
+  );
 };
 
 const HighlightedText = ({ text, highlight }) => {
@@ -254,7 +260,6 @@ const SearchBaseScreen = ({ title }) => {
         if (rpcError) throw rpcError;
         setAllResults(data || []);
 
-        // --- 통계 추출 로직 (개선됨) ---
         if (data && data.length > 0) {
           const stats = {
             reportCount: data.length,
@@ -268,7 +273,7 @@ const SearchBaseScreen = ({ title }) => {
           const cleanedSearchTerm = trimmedTerm.replace(/-/g, "");
           const isNumeric = /^\d+$/.test(cleanedSearchTerm);
           const isPhoneSearch = isNumeric && cleanedSearchTerm.length >= 10 && cleanedSearchTerm.startsWith("0");
-          const categoryCounts = {}; // 카테고리 집계를 위한 객체
+          const categoryCounts = {};
 
           data.forEach((report) => {
             let matchInThisReport = false;
@@ -306,7 +311,6 @@ const SearchBaseScreen = ({ title }) => {
             }
           });
 
-          // 최종 통계 설정
           if (isExactMatchFound) {
             const sortedCategoryStats = Object.entries(categoryCounts)
               .sort(([, a], [, b]) => b - a)
@@ -387,7 +391,7 @@ const SearchBaseScreen = ({ title }) => {
           {item.damage_accounts?.map((account, index) => (
             <View key={`account-${index}`} style={styles.infoRow}>
               <Text style={styles.infoLabel}>계좌정보:</Text>
-              {account.isCashTransaction ? (
+              {account.isOtherMethod ? (
                 <Text style={[styles.resultText, styles.cashText]}>현금 전달</Text>
               ) : (
                 <Text style={styles.resultText} ellipsizeMode="tail">

@@ -139,7 +139,7 @@ function MyReportsScreen({ navigation }) {
             </View>
             {item.damage_accounts.map((account, index) => (
               <Text key={`account-${index}`} style={styles.listItemText} selectable>
-                {account.isCashTransaction
+                {account.isOtherMethod
                   ? '현금 전달'
                   : `${account.bankName} / ${account.accountHolderName} / ${account.accountNumber}`
                 }
