@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "credittalk.app"
-               BlueprintName = "credittalk"
-               ReferencedContainer = "container:credittalk.xcodeproj">
+               BuildableName = "CreditTalk.app"
+               BlueprintName = "CreditTalk"
+               ReferencedContainer = "container:CreditTalk.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "credittalkTests.xctest"
-               BlueprintName = "credittalkTests"
-               ReferencedContainer = "container:credittalk.xcodeproj">
+               BuildableName = "CreditTalkTests.xctest"
+               BlueprintName = "CreditTalkTests"
+               ReferencedContainer = "container:CreditTalk.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "credittalk.app"
-            BlueprintName = "credittalk"
-            ReferencedContainer = "container:credittalk.xcodeproj">
+            BuildableName = "CreditTalk.app"
+            BlueprintName = "CreditTalk"
+            ReferencedContainer = "container:CreditTalk.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "credittalk.app"
-            BlueprintName = "credittalk"
-            ReferencedContainer = "container:credittalk.xcodeproj">
+            BuildableName = "CreditTalk.app"
+            BlueprintName = "CreditTalk"
+            ReferencedContainer = "container:CreditTalk.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
@@ -83,7 +83,7 @@
    </AnalyzeAction>
    <ArchiveAction
       buildConfiguration = "Release"
-      customArchiveName = "credittalk"
+      customArchiveName = "CreditTalk"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>
