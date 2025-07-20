@@ -41,6 +41,7 @@ function NewCrimeCaseListScreen() {
         .from("new_crime_cases")
         .select("id, created_at, method")
         .eq("is_published", true)
+        .order('is_pinned', { ascending: false })
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
