@@ -44,6 +44,7 @@ function CommunityListScreen() {
       const { data, error: fetchError } = await supabase
         .from('community_posts_with_author_profile') // 생성한 뷰 사용
         .select('id, title, created_at, author_auth_id, views, author_name, image_urls') // image_urls 추가
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;

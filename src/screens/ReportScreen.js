@@ -47,6 +47,42 @@ const corporateCategories = [
   "기타",
 ];
 
+const cryptoCurrencies = [
+  { name: "비트코인 (Bitcoin)" },
+  { name: "이더리움 (Ethereum)" },
+  { name: "테더 (Tether)" },
+  { name: "바이낸스코인 (BNB)" },
+  { name: "솔라나 (Solana)" },
+  { name: "리플 (XRP)" },
+  { name: "USD 코인 (USD Coin)" },
+  { name: "도지코인 (Dogecoin)" },
+  { name: "카르다노 (Cardano)" },
+  { name: "시바이누 (Shiba Inu)" },
+  { name: "아발란체 (Avalanche)" },
+  { name: "트론 (Tron)" },
+  { name: "폴카닷 (Polkadot)" },
+  { name: "체인링크 (Chainlink)" },
+  { name: "폴리곤 (Polygon)" },
+  { name: "라이트코인 (Litecoin)" },
+  { name: "인터넷컴퓨터 (Internet Computer)" },
+  { name: "비트코인캐시 (Bitcoin Cash)" },
+  { name: "이더리움클래식 (Ethereum Classic)" },
+  { name: "유니스왑 (Uniswap)" },
+  { name: "앱토스 (Aptos)" },
+  { name: "코스모스 (Cosmos)" },
+  { name: "스텔라 (Stellar)" },
+  { name: "오케이비 (OKB)" },
+  { name: "모네로 (Monero)" },
+  { name: "크로노스 (Cronos)" },
+  { name: "파일코인 (Filecoin)" },
+  { name: "인젝티브 (Injective)" },
+  { name: "렌더토큰 (Render Token)" },
+  { name: "헤데라 (Hedera)" },
+  { name: "비체인 (VeChain)" },
+  { name: "알고랜드 (Algorand)" },
+  { name: "기타" },
+];
+
 const scamReportSources = [
   "지인",
   "지인소개",
@@ -156,6 +192,17 @@ function ReportScreen({ navigation }) {
   const [damageAmount, setDamageAmount] = useState("");
   const [isFaceToFace, setIsFaceToFace] = useState(false);
   const [noDamageAmount, setNoDamageAmount] = useState(false);
+  const [isCryptoModalVisible, setIsCryptoModalVisible] = useState(false);
+  const [showDamagedItemOtherInput, setShowDamagedItemOtherInput] = useState(false);
+
+  const isNoShowCategory = category === "노쇼" || category === "노쇼 대리구매 사기";
+
+  const faceToFaceLabel = isNoShowCategory ? "노쇼 피해" : "대면 피해";
+  const faceToFaceCheckboxLabel = isNoShowCategory ? "대면 노쇼피해" : "대면으로 피해를 입음";
+  const damagedItemPlaceholder = isNoShowCategory
+    ? "피해 물품을 입력하세요 (예: 소고기, 회, 대게)"
+    : "피해 물품을 입력하세요 (예: 현금, 상품권, 시계)";
+
 
   useEffect(() => {
     if (companyType === "개인") setCurrentCategories(individualCategories);
@@ -178,6 +225,7 @@ function ReportScreen({ navigation }) {
     setTradedItemPhotos([]);
     setSiteName("");
     setDetailedCrimeType("");
+    setShowDamagedItemOtherInput(false);
   }, [category]);
 
   useEffect(() => {
@@ -231,6 +279,8 @@ function ReportScreen({ navigation }) {
     setDamageAmount("");
     setIsFaceToFace(false);
     setNoDamageAmount(false);
+    setIsCryptoModalVisible(false);
+    setShowDamagedItemOtherInput(false);
   };
 
   const handlePhoneNumberChange = (index, part, value) => {
@@ -437,6 +487,10 @@ function ReportScreen({ navigation }) {
           "입력 오류",
           '"세부 피해 종류"의 "기타" 항목을 직접 입력해주세요.',
         );
+        return;
+      }
+      if (category === "암호화폐" && showDamagedItemOtherInput && !damagedItem.trim()) {
+        Alert.alert("입력 오류", "피해 물품(암호화폐 이름)을 직접 입력해주세요.");
         return;
       }
     }
@@ -908,13 +962,22 @@ function ReportScreen({ navigation }) {
           return (
             <>
               <Text style={styles.label}>피해 물품</Text>
-              <TextInput
-                style={styles.input}
-                value={damagedItem}
-                onChangeText={setDamagedItem}
-                placeholder="예: 비트코인, 이더리움 등"
-                placeholderTextColor="#6c757d"
-              />
+              <View style={styles.inputWithButtonContainer}>
+                <TextInput
+                  style={[styles.input, styles.inputWithButton, showDamagedItemOtherInput && {backgroundColor: '#fff'}]}
+                  value={damagedItem}
+                  placeholder={showDamagedItemOtherInput ? "암호화폐 이름을 직접 입력" : "오른쪽 버튼으로 암호화폐 선택"}
+                  placeholderTextColor="#6c757d"
+                  editable={showDamagedItemOtherInput}
+                  onChangeText={setDamagedItem}
+                />
+                <TouchableOpacity
+                  style={styles.inlineButton}
+                  onPress={() => setIsCryptoModalVisible(true)}
+                >
+                  <Text style={styles.inlineButtonText}>선택</Text>
+                </TouchableOpacity>
+              </View>
             </>
           );
         default:
@@ -957,6 +1020,22 @@ function ReportScreen({ navigation }) {
             }
           }}
           title="사이트 선택"
+        />
+        <ImageSelectionModal
+          visible={isCryptoModalVisible}
+          onClose={() => setIsCryptoModalVisible(false)}
+          items={cryptoCurrencies.map(c => ({...c, key: c.name}))} // `key` 속성 추가
+          onSelect={(name) => {
+            setIsCryptoModalVisible(false);
+            if (name === "기타") {
+              setDamagedItem("");
+              setShowDamagedItemOtherInput(true);
+            } else {
+              setDamagedItem(name);
+              setShowDamagedItemOtherInput(false);
+            }
+          }}
+          title="암호화폐 선택"
         />
 
         <Text style={styles.title}>사기 정보 입력</Text>
@@ -1423,7 +1502,7 @@ function ReportScreen({ navigation }) {
         {category !== "투자 사기, 전세 사기" && category !== "암호화폐" && (
           <>
             <View style={styles.labelContainer}>
-              <Text style={styles.labelNoMargin}>노쇼 피해</Text>
+              <Text style={styles.labelNoMargin}>{faceToFaceLabel}</Text>
               <TouchableOpacity
                 style={styles.checkboxItemNoMargin}
                 onPress={() => {
@@ -1441,7 +1520,7 @@ function ReportScreen({ navigation }) {
                   size={24}
                   color={isFaceToFace ? "#3d5afe" : "#555"}
                 />
-                <Text style={styles.checkboxLabel}>대면 노쇼피해</Text>
+                <Text style={styles.checkboxLabel}>{faceToFaceCheckboxLabel}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1452,7 +1531,7 @@ function ReportScreen({ navigation }) {
                   style={styles.input}
                   value={damagedItem}
                   onChangeText={setDamagedItem}
-                  placeholder="피해 물품을 입력하세요 (예: 현금, 상품권, 시계)"
+                  placeholder={damagedItemPlaceholder}
                   placeholderTextColor="#6c757d"
                 />
               </>
@@ -1870,7 +1949,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 10,
-  }
+  },
+
 });
 
 export default ReportScreen;

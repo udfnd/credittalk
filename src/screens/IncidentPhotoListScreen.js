@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  Image, // Image 컴포넌트 추가
+  Image,
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -33,13 +33,14 @@ function IncidentPhotoListScreen() {
   }, [user]);
 
   const fetchPhotos = useCallback(async () => {
-    setIsLoading(true);
+    if (!refreshing) setIsLoading(true);
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('incident_photos')
-        .select('id, title, created_at, image_url, category, description') // image_url 포함
+        .select('id, title, created_at, image_urls, category, description')
         .eq('is_published', true)
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -51,7 +52,7 @@ function IncidentPhotoListScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [refreshing]); // refreshing을 dependency array에 추가하여 최신 상태를 반영
 
   useEffect(() => {
     if (isFocused) {
@@ -64,41 +65,49 @@ function IncidentPhotoListScreen() {
     fetchPhotos();
   }, [fetchPhotos]);
 
-  // 관리자용 업로드 버튼 (선택적)
-  // const handleCreatePhoto = () => {
-  //   navigation.navigate('AdminIncidentPhotoCreate');
-  // };
+  const renderItem = ({ item }) => {
+    const thumbnailUrl =
+      item.image_urls && item.image_urls.length > 0
+        ? item.image_urls[0]
+        : null;
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.photoItem}
-      onPress={() =>
-        navigation.navigate('IncidentPhotoDetail', {
-          photoId: item.id,
-          photoTitle: item.title,
-        })
-      }
-    >
-      {item.image_url && (
-        <Image
-          source={{ uri: item.image_url }}
-          style={styles.thumbnail}
-          resizeMode="cover"
-        />
-      )}
-      <View style={styles.infoContainer}>
-        <Text style={styles.photoTitle}>{item.title}</Text>
-        {item.category && (
-          <Text style={styles.photoCategory}>유형: {item.category}</Text>
+    return (
+      <TouchableOpacity
+        style={styles.photoItem}
+        onPress={() =>
+          navigation.navigate('IncidentPhotoDetail', {
+            photoId: item.id,
+            photoTitle: item.title,
+          })
+        }
+      >
+        {thumbnailUrl ? (
+          <Image
+            source={{ uri: thumbnailUrl }}
+            style={styles.thumbnail}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+            <Icon name="image-off-outline" size={40} color="#bdc3c7" />
+          </View>
         )}
-        <Text style={styles.photoDate}>
-          {new Date(item.created_at).toLocaleDateString()}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.infoContainer}>
+          <Text style={styles.photoTitle} numberOfLines={1}>{item.title}</Text>
+          {item.category && (
+            <Text style={styles.photoCategory} numberOfLines={1}>
+              유형: {item.category}
+            </Text>
+          )}
+          <Text style={styles.photoDate}>
+            {new Date(item.created_at).toLocaleDateString()}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
-  if (isLoading && !refreshing && photos.length === 0) {
+  if (isLoading && !refreshing) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#3d5afe" />
@@ -125,7 +134,7 @@ function IncidentPhotoListScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContainer}
-        numColumns={2} // 그리드 레이아웃 (선택적)
+        numColumns={2} // 2열 그리드 레이아웃
         ListEmptyComponent={
           !isLoading && (
             <View style={styles.centered}>
@@ -142,12 +151,6 @@ function IncidentPhotoListScreen() {
           />
         }
       />
-      {/* 관리자용 업로드 FAB (선택적) */}
-      {/* {user && user.isAdmin && ( // isAdmin은 예시, 실제 관리자 확인 로직 필요
-        <TouchableOpacity style={styles.fab} onPress={handleCreatePhoto}>
-          <Icon name="camera-plus-outline" size={30} color="white" />
-        </TouchableOpacity>
-      )} */}
     </View>
   );
 }
@@ -160,53 +163,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  listContainer: { padding: 10 },
+  listContainer: { padding: 8 },
   photoItem: {
-    flex: 1, // numColumns 사용 시
-    margin: 5, // 아이템 간 간격
+    flex: 1,
+    margin: 8,
     backgroundColor: '#ffffff',
-    borderRadius: 8,
-    overflow: 'hidden', // Image borderRadius 적용
-    elevation: 2,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   thumbnail: {
     width: '100%',
-    height: 150, // 썸네일 이미지 높이
+    height: 160,
+  },
+  // --- (추가된 부분) ---
+  // 이미지가 없을 때 표시될 플레이스홀더 스타일
+  thumbnailPlaceholder: {
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   infoContainer: {
-    padding: 10,
+    padding: 12,
   },
   photoTitle: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 3,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 4,
   },
-  photoCategory: { fontSize: 12, color: '#555', marginBottom: 5 },
-  photoDate: { fontSize: 11, color: '#7f8c8d' },
+  photoCategory: {
+    fontSize: 12,
+    color: '#3498db',
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  photoDate: {
+    fontSize: 11,
+    color: '#95a5a6'
+  },
   errorText: {
     marginTop: 10,
     fontSize: 16,
     color: '#e74c3c',
     textAlign: 'center',
   },
-  emptyText: { marginTop: 10, fontSize: 16, color: '#7f8c8d' },
-  fab: {
-    /* 이전 FAB 스타일과 유사하게 */ position: 'absolute',
-    margin: 16,
-    right: 10,
-    bottom: 10,
-    backgroundColor: '#16a085',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
+  emptyText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#7f8c8d'
   },
   retryButton: {
     marginTop: 20,
@@ -215,7 +224,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 5,
   },
-  retryButtonText: { color: 'white', fontSize: 16 },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16
+  },
 });
 
 export default IncidentPhotoListScreen;
