@@ -42,6 +42,7 @@ function NoticeListScreen() {
         .from('notices')
         .select('id, title, created_at, author_name, image_urls') // image_urls 추가
         .eq('is_published', true)
+        .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
