@@ -181,19 +181,6 @@ function SettingsScreen() {
             <Text style={styles.menuText}>상대방 본인인증 서비스</Text>
             <Icon name="chevron-right" size={24} color="#ccc" />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={handlePlaceShareService}
-          >
-            <Icon
-              name="card-account-details-outline"
-              size={24}
-              color="#555"
-              style={styles.menuIcon}
-            />
-            <Text style={styles.menuText}>내 위치 공유 서비스</Text>
-            <Icon name="chevron-right" size={24} color="#ccc" />
-          </TouchableOpacity>
         </View>
 
         <View style={styles.menuGroup}>
