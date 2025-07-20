@@ -23,7 +23,7 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { syncBlacklist } from "./src/native_modules/CallDetection";
+// import { syncBlacklist } from "./src/native_modules/CallDetection";
 
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
@@ -403,35 +403,35 @@ function App(): React.JSX.Element {
     });
   }, []);
 
-  const setupCallDetection = async () => {
-    // 안드로이드 플랫폼에서만 실행
-    if (Platform.OS === 'android') {
-      try {
-        // 사용자에게 전화 및 연락처 관련 권한을 요청합니다.
-        const granted = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-          PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
-          PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
-        ]);
-
-        if (
-          granted[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] === PermissionsAndroid.RESULTS.GRANTED &&
-          granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] === PermissionsAndroid.RESULTS.GRANTED &&
-          granted[PermissionsAndroid.PERMISSIONS.READ_CONTACTS] === PermissionsAndroid.RESULTS.GRANTED
-        ) {
-          console.log('Call detection permissions granted.');
-          // 권한이 모두 부여되면, Supabase에서 블랙리스트를 가져와 네이티브 모듈에 동기화합니다.
-          await syncBlacklist();
-        } else {
-          console.log('One or more call detection permissions were denied.');
-        }
-      } catch (err) {
-        console.warn('Error requesting call detection permissions:', err);
-      }
-    }
-  };
-
-  setupCallDetection();
+  // const setupCallDetection = async () => {
+  //   // 안드로이드 플랫폼에서만 실행
+  //   if (Platform.OS === 'android') {
+  //     try {
+  //       // 사용자에게 전화 및 연락처 관련 권한을 요청합니다.
+  //       const granted = await PermissionsAndroid.requestMultiple([
+  //         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+  //         PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
+  //         PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
+  //       ]);
+  //
+  //       if (
+  //         granted[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] === PermissionsAndroid.RESULTS.GRANTED &&
+  //         granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] === PermissionsAndroid.RESULTS.GRANTED &&
+  //         granted[PermissionsAndroid.PERMISSIONS.READ_CONTACTS] === PermissionsAndroid.RESULTS.GRANTED
+  //       ) {
+  //         console.log('Call detection permissions granted.');
+  //         // 권한이 모두 부여되면, Supabase에서 블랙리스트를 가져와 네이티브 모듈에 동기화합니다.
+  //         await syncBlacklist();
+  //       } else {
+  //         console.log('One or more call detection permissions were denied.');
+  //       }
+  //     } catch (err) {
+  //       console.warn('Error requesting call detection permissions:', err);
+  //     }
+  //   }
+  // };
+  //
+  // setupCallDetection();
 
   return (
     <SafeAreaProvider>
