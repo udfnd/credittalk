@@ -120,6 +120,8 @@ function SignUpScreen() {
 
   const handleSendVerificationCode = async () => {
     Keyboard.dismiss();
+
+    // 1) 입력 검증: 숫자만 10~11자리인지 확인
     if (!phoneNumber || !/^\d{10,11}$/.test(phoneNumber)) {
       Alert.alert("입력 오류", "올바른 휴대폰 번호를 입력해주세요.");
       return;
@@ -127,32 +129,53 @@ function SignUpScreen() {
 
     setIsLoading(true);
     try {
-      const { error } = await supabase.functions.invoke(
+      // 2) Edge Function 호출
+      const { data, error } = await supabase.functions.invoke(
         "send-verification-otp",
-        { body: { phone: phoneNumber.trim() } },
+        { body: { phone: phoneNumber.trim() } }
       );
 
+      // 3) 서버 측 에러가 내려온 경우
       if (error) {
+        // 3-1) Supabase Function 에서 context.errorMessage(JSON) 로 보낸 경우 우선 파싱
         const contextError = error.context?.errorMessage;
         let displayError = "인증번호 발송에 실패했습니다.";
+
         if (contextError) {
           try {
-            const parsedError = JSON.parse(contextError);
-            displayError = parsedError.error || displayError;
-          } catch (e) {
+            const parsed = JSON.parse(contextError);
+            displayError = parsed.error || displayError;
+          } catch {
+            // JSON 파싱 실패 시 원본 문자열 사용
             displayError = contextError;
           }
         }
-        throw new Error(displayError);
+        // 3-2) 위에 없으면 supabase-js error.message 사용
+        else if (error.message) {
+          displayError = error.message;
+        }
+
+        // 3-3) 에러 문구 키워드에 따라 Alert 제목을 분기
+        // 이미 가입된 번호라면 '인증 불가', 그 외엔 '인증번호 발송 실패'
+        const title = displayError.includes("가입된")
+          ? "인증 불가"
+          : "인증번호 발송 실패";
+
+        Alert.alert(title, displayError);
+        return;
       }
 
+      // 4) 성공 처리: OTP 발송 완료 표시
       Alert.alert(
         "인증번호 발송",
-        "입력하신 휴대폰 번호로 인증번호를 발송했습니다.",
+        "입력하신 휴대폰 번호로 인증번호를 발송했습니다."
       );
       setIsOtpSent(true);
+
     } catch (err) {
-      Alert.alert("오류", err.message);
+      // 5) 네트워크 오류 등 예기치 못한 에러
+      console.error("handleSendVerificationCode error:", err);
+      Alert.alert("네트워크 오류", "인증번호 발송 중 문제가 발생했습니다.");
     } finally {
       setIsLoading(false);
     }
