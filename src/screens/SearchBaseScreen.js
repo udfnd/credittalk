@@ -60,60 +60,74 @@ const maskNameMiddle = (name) => {
   return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
 };
 
+// 전화번호 마스킹: 중간 1자리, 끝 1자리만 '*' 처리
 const maskPhoneNumberCustom = (phoneNumber) => {
   if (!phoneNumber || typeof phoneNumber !== "string") {
     return phoneNumber || "";
   }
-  const cleanNumber = phoneNumber.replace(/-/g, "");
-  const len = cleanNumber.length;
+  const clean = phoneNumber.replace(/-/g, "");
+  const len = clean.length;
 
   if (len === 11) {
-    const p1 = cleanNumber.substring(0, 3);
-    const p2 = cleanNumber.substring(3, 7);
-    const p3 = cleanNumber.substring(7, 11);
-    const maskedP2 = `${p2.substring(0, 1)}**${p2.substring(3)}`;
-    const maskedP3 = `*${p3.substring(1, 3)}*`;
+    const p1 = clean.substring(0, 3);
+    const p2 = clean.substring(3, 7);  // 4자리
+    const p3 = clean.substring(7, 11); // 4자리
+
+    // 중간 1자리만 마스킹 (index 1)
+    const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
+    // 끝 1자리만 마스킹 (index 1 of p3)
+    const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
+
     return `${p1}-${maskedP2}-${maskedP3}`;
   }
+
   if (len === 10) {
-    if (cleanNumber.startsWith("02")) {
-      const p1 = cleanNumber.substring(0, 2);
-      const p2 = cleanNumber.substring(2, 6);
-      const p3 = cleanNumber.substring(6, 10);
-      const maskedP2 = `${p2.substring(0, 1)}**${p2.substring(3)}`;
-      const maskedP3 = `*${p3.substring(1, 3)}*`;
+    if (clean.startsWith("02")) {
+      const p1 = clean.substring(0, 2);
+      const p2 = clean.substring(2, 6);  // 4자리
+      const p3 = clean.substring(6, 10); // 4자리
+
+      const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
+      const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
+
+      return `${p1}-${maskedP2}-${maskedP3}`;
+    } else {
+      const p1 = clean.substring(0, 3);
+      const p2 = clean.substring(3, 6);  // 3자리
+      const p3 = clean.substring(6, 10); // 4자리
+
+      // 3자리 중 중간 1자리만 마스킹
+      const maskedP2 = `${p2[0]}*${p2[2]}`;
+      const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
+
       return `${p1}-${maskedP2}-${maskedP3}`;
     }
-    const p1 = cleanNumber.substring(0, 3);
-    const p2 = cleanNumber.substring(3, 6);
-    const p3 = cleanNumber.substring(6, 10);
-    const maskedP2 = `*${p2.substring(1, 2)}*`;
-    const maskedP3 = `*${p3.substring(1, 3)}*`;
-    return `${p1}-${maskedP2}-${maskedP3}`;
   }
 
-  const midIndex = Math.floor(len / 2) - 1;
-  if (midIndex <= 0) return cleanNumber;
-  return `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(
-    midIndex + 2,
-  )}`;
+  // 기타 길이: 문자열의 정확한 가운데 한 문자, 그 다음 문자를 남기고 나머지 그대로
+  const mid = Math.floor(len / 2) - 1;
+  if (mid <= 0) return clean;
+  return (
+    clean.substring(0, mid) +
+    "*" +
+    clean.substring(mid + 1)
+  );
 };
 
+// 계좌번호 마스킹: 앞 2자리, 뒤부터 2자리만 '**' 처리 (변경 없음)
 const maskAccountNumber = (accountNumber) => {
   if (!accountNumber || typeof accountNumber !== "string") {
     return accountNumber || "";
   }
 
   const clean = accountNumber.replace(/-/g, "");
-
   if (clean.length < 6) {
     return accountNumber;
   }
 
   const PREFIX_COUNT = 2;
-  const MASK_COUNT = 4;
-
-  const endMaskedIndex= PREFIX_COUNT + MASK_COUNT;
+  const MASK_COUNT = 2;
+  const endMaskedIndex = PREFIX_COUNT + MASK_COUNT;
 
   return (
     clean.substring(0, PREFIX_COUNT) +
@@ -251,8 +265,6 @@ const SearchBaseScreen = ({ title }) => {
     }
   }, [user]);
 
-  // --- (수정된 부분 2) ---
-  // debounceSearch 함수 수정
   const debouncedSearch = useCallback(
     debounce(async (term) => {
       const trimmedTerm = term.trim();
