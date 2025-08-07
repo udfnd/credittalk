@@ -126,7 +126,7 @@ function SettingsScreen() {
           <Icon name="account-circle" size={60} color="#3d5afe" />
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>
-              {authIsLoading ? "로딩중..." : profile?.name || "사용자"}
+              {authIsLoading ? "로딩중..." : profile?.nickname || "사용자"}
             </Text>
             <Text style={styles.profileEmail}>
               {authIsLoading ? "" : user?.email}
