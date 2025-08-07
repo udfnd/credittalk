@@ -94,7 +94,7 @@ function ChatMessageScreen() {
                                 createdAt: new Date(newMessageData.created_at),
                                 user: {
                                     _id: newMessageData.sender_id,
-                                    name: senderProfile?.name || '알 수 없는 사용자',
+                                    name: senderProfile?.nickname || '알 수 없는 사용자',
                                 },
                             };
                             setMessages(previousMessages =>
