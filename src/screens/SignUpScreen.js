@@ -31,11 +31,13 @@ function SignUpScreen() {
   const [otp, setOtp] = useState("");
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingNickname, setIsCheckingNickname] = useState(false); // 닉네임 확인 전용 로딩 상태
 
   const [emailMessage, setEmailMessage] = useState("");
   const [isEmailAvailable, setIsEmailAvailable] = useState(null);
 
-  const [nicknameMessage, setNicknameMessage] = useState("");
+  const [nicknameMessage, setNicknameMessage] = useState("닉네임은 실명과 거리가 먼 것으로 작성해주세요.");
+  const [nicknameMessageColor, setNicknameMessageColor] = useState("grey"); // 기본 안내 메시지 색상
   const [isNicknameAvailable, setIsNicknameAvailable] = useState(null);
 
   const validateEmailFormat = (text) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
@@ -52,38 +54,59 @@ function SignUpScreen() {
     setNickname(text);
     if (isNicknameAvailable !== null) {
       setIsNicknameAvailable(null);
-      setNicknameMessage("");
+      setNicknameMessage("닉네임은 실명과 거리가 먼 것으로 작성해주세요.");
+      setNicknameMessageColor("grey");
     }
   };
 
+
   const handleCheckNickname = async () => {
     Keyboard.dismiss();
-    if (nickname.trim().length < 2) {
+    const trimmedNickname = nickname.trim();
+    if (trimmedNickname.length < 2) {
       Alert.alert("입력 오류", "닉네임은 2자 이상이어야 합니다.");
       return;
     }
 
-    setIsLoading(true);
+    setIsCheckingNickname(true);
     setNicknameMessage("");
+    setIsNicknameAvailable(null);
+
     try {
       const { data, error } = await supabase.functions.invoke(
         "check-nickname-availability",
-        { body: { nickname: nickname.trim() } },
+        { body: { nickname: trimmedNickname } },
       );
 
       if (error) throw error;
-      if (data.available) {
-        setIsNicknameAvailable(true);
-        setNicknameMessage("사용 가능한 닉네임입니다.");
-      } else {
-        setIsNicknameAvailable(false);
-        setNicknameMessage("이미 사용 중인 닉네임입니다.");
+
+      switch (data.status) {
+        case "available":
+          setIsNicknameAvailable(true);
+          setNicknameMessage("사용 가능한 닉네임입니다.");
+          setNicknameMessageColor("green"); // 성공 시 녹색
+          break;
+        case "taken":
+          setIsNicknameAvailable(false);
+          setNicknameMessage(data.message);
+          setNicknameMessageColor("red"); // 실패 시 빨간색
+          break;
+        case "forbidden":
+          setIsNicknameAvailable(false);
+          setNicknameMessage(data.message);
+          setNicknameMessageColor("red"); // 실패 시 빨간색
+          break;
+        default:
+          throw new Error("서버로부터 알 수 없는 응답을 받았습니다.");
       }
+
     } catch (err) {
-      setIsNicknameAvailable(null);
-      setNicknameMessage("오류: 닉네임 중복 확인에 실패했습니다.");
+      const errorMessage = err.context?.data?.error || err.message;
+      setIsNicknameAvailable(false);
+      setNicknameMessage(errorMessage);
+      setNicknameMessageColor("red"); // 실패 시 빨간색
     } finally {
-      setIsLoading(false);
+      setIsCheckingNickname(false);
     }
   };
 
@@ -121,7 +144,6 @@ function SignUpScreen() {
   const handleSendVerificationCode = async () => {
     Keyboard.dismiss();
 
-    // 1) 입력 검증: 숫자만 10~11자리인지 확인
     if (!phoneNumber || !/^\d{10,11}$/.test(phoneNumber)) {
       Alert.alert("입력 오류", "올바른 휴대폰 번호를 입력해주세요.");
       return;
@@ -129,15 +151,12 @@ function SignUpScreen() {
 
     setIsLoading(true);
     try {
-      // 2) Edge Function 호출
       const { data, error } = await supabase.functions.invoke(
         "send-verification-otp",
         { body: { phone: phoneNumber.trim() } }
       );
 
-      // 3) 서버 측 에러가 내려온 경우
       if (error) {
-        // 3-1) Supabase Function 에서 context.errorMessage(JSON) 로 보낸 경우 우선 파싱
         const contextError = error.context?.errorMessage;
         let displayError = "인증번호 발송에 실패했습니다.";
 
@@ -146,17 +165,13 @@ function SignUpScreen() {
             const parsed = JSON.parse(contextError);
             displayError = parsed.error || displayError;
           } catch {
-            // JSON 파싱 실패 시 원본 문자열 사용
             displayError = contextError;
           }
         }
-        // 3-2) 위에 없으면 supabase-js error.message 사용
         else if (error.message) {
           displayError = error.message;
         }
 
-        // 3-3) 에러 문구 키워드에 따라 Alert 제목을 분기
-        // 이미 가입된 번호라면 '인증 불가', 그 외엔 '인증번호 발송 실패'
         const title = displayError.includes("가입된")
           ? "인증 불가"
           : "인증번호 발송 실패";
@@ -165,7 +180,6 @@ function SignUpScreen() {
         return;
       }
 
-      // 4) 성공 처리: OTP 발송 완료 표시
       Alert.alert(
         "인증번호 발송",
         "입력하신 휴대폰 번호로 인증번호를 발송했습니다."
@@ -173,7 +187,6 @@ function SignUpScreen() {
       setIsOtpSent(true);
 
     } catch (err) {
-      // 5) 네트워크 오류 등 예기치 못한 에러
       console.error("handleSendVerificationCode error:", err);
       Alert.alert("네트워크 오류", "인증번호 발송 중 문제가 발생했습니다.");
     } finally {
@@ -321,7 +334,7 @@ function SignUpScreen() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.inputField}
-            placeholder="닉네임 (영문, 숫자, 특수문자 가능)"
+            placeholder="닉네임"
             placeholderTextColor="#6c757d"
             value={nickname}
             onChangeText={handleNicknameChange}
@@ -330,16 +343,20 @@ function SignUpScreen() {
           <TouchableOpacity
             style={styles.checkButton}
             onPress={handleCheckNickname}
-            disabled={isLoading}
+            disabled={isCheckingNickname}
           >
-            <Text style={styles.checkButtonText}>중복확인</Text>
+            {isCheckingNickname ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.checkButtonText}>중복확인</Text>
+            )}
           </TouchableOpacity>
         </View>
         {nicknameMessage.length > 0 && (
           <Text
             style={[
               styles.message,
-              isNicknameAvailable ? styles.successMessage : styles.errorMessage,
+              { color: nicknameMessageColor }
             ]}
           >
             {nicknameMessage}
@@ -386,7 +403,7 @@ function SignUpScreen() {
                 onPress={handleSendVerificationCode}
                 disabled={isLoading}
               >
-                {isLoading ? (
+                {isLoading && !isCheckingNickname ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.checkButtonText}>인증요청</Text>
@@ -417,7 +434,7 @@ function SignUpScreen() {
                 title="회원가입"
                 onPress={handleSubmit}
                 color="#3d5afe"
-                disabled={isLoading}
+                disabled={isLoading || isCheckingNickname}
               />
             )}
           </>

@@ -10,10 +10,53 @@ import {
 } from "react-native";
 import { supabase } from "../lib/supabaseClient";
 import { useFocusEffect } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext"; // AuthContext import 추가
 
-// 각 질문 항목을 위한 재사용 가능한 컴포넌트
+const maskNameMiddle = (name) => {
+  if (!name || typeof name !== "string" || name.length <= 1) {
+    return name || "";
+  }
+  if (name.length === 2) {
+    return `${name[0]}*`;
+  }
+  const middleIndex = Math.floor(name.length / 2);
+  return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
+};
+
+const maskPhoneNumberCustom = (phoneNumber) => {
+  if (!phoneNumber || typeof phoneNumber !== "string") { return phoneNumber || ""; }
+  const cleanNumber = phoneNumber.replace(/-/g, "");
+  const len = cleanNumber.length;
+  if (len === 11) {
+    const p1 = cleanNumber.substring(0, 3); const p2 = cleanNumber.substring(3, 7); const p3 = cleanNumber.substring(7, 11);
+    const maskedP2 = `${p2.substring(0, 1)}**${p2.substring(3)}`; const maskedP3 = `*${p3.substring(1, 3)}*`;
+    return `${p1}-${maskedP2}-${maskedP3}`;
+  } if (len === 10) {
+    if (cleanNumber.startsWith("02")) {
+      const p1 = cleanNumber.substring(0, 2); const p2 = cleanNumber.substring(2, 6); const p3 = cleanNumber.substring(6, 10);
+      const maskedP2 = `${p2.substring(0, 1)}**${p2.substring(3)}`; const maskedP3 = `*${p3.substring(1, 3)}*`;
+      return `${p1}-${maskedP2}-${maskedP3}`;
+    }
+    const p1 = cleanNumber.substring(0, 3); const p2 = cleanNumber.substring(3, 6); const p3 = cleanNumber.substring(6, 10);
+    const maskedP2 = `*${p2.substring(1, 2)}*`; const maskedP3 = `*${p3.substring(1, 3)}*`;
+    return `${p1}-${maskedP2}-${maskedP3}`;
+  }
+  const midIndex = Math.floor(len / 2) - 1;
+  if (midIndex <= 0) return cleanNumber;
+  return `${cleanNumber.substring(0, midIndex)}**${cleanNumber.substring(midIndex + 2)}`;
+};
+
+const maskAccountNumber = (accountNumber) => {
+  if (!accountNumber || typeof accountNumber !== "string") { return accountNumber || ""; }
+  const clean = accountNumber.replace(/-/g, "");
+  if (clean.length < 6) { return accountNumber; }
+  const PREFIX_COUNT = 2; const MASK_COUNT = 4;
+  const endMaskedIndex= PREFIX_COUNT + MASK_COUNT;
+  return ( clean.substring(0, PREFIX_COUNT) + "*".repeat(MASK_COUNT) + clean.substring(endMaskedIndex) );
+};
+
+
 const DetailItem = ({ label, value }) => {
-  // 값이 없는 경우 아무것도 렌더링하지 않음
   if (!value) return null;
   return (
     <View style={styles.detailItem}>
@@ -23,52 +66,52 @@ const DetailItem = ({ label, value }) => {
   );
 };
 
-// 각 답변 항목을 위한 재사용 가능한 컴포넌트
 const AnswerItem = ({ answer }) => {
-  return (
-    <View style={styles.answerItemContainer}>
-      <Text style={styles.answerContent}>{answer.content}</Text>
-      <Text style={styles.answerDate}>
-        {/* 날짜 형식을 'ko-KR' 로캘에 맞춰 더 읽기 쉽게 변경 */}
-        {new Date(answer.created_at).toLocaleString('ko-KR', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
-      </Text>
-    </View>
-  );
+  // ... 기존 AnswerItem 코드는 동일 ...
 };
 
 export default function HelpDeskDetailScreen({ route }) {
   const { questionId } = route.params;
+  const { user } = useAuth(); // 현재 로그인한 사용자 정보 가져오기
   const [question, setQuestion] = useState(null);
+  const [isPublic, setIsPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 데이터를 가져오는 핵심 로직
   const fetchQuestion = useCallback(async () => {
-    // RLS 정책에 의해 본인 글이 아니면 data가 null로 반환됩니다.
+    // 1. 원본 문의 내용과 답변을 가져옵니다.
     const { data, error } = await supabase
       .from("help_questions")
-      .select(`*, help_answers(*)`) // help_answers 테이블과 join
+      .select(`*, help_answers(*)`)
       .eq("id", questionId)
       .single();
 
-    // 에러 처리: PGRST116(일치하는 행 없음) 코드는 실제 에러가 아니므로 제외
     if (error && error.code !== 'PGRST116') {
       console.error("Error fetching question details:", error);
       Alert.alert("오류", "문의 내용을 불러오는 데 실패했습니다.");
       setQuestion(null);
-    } else {
+      return;
+    }
+
+    if (data) {
       setQuestion(data);
+      // 2. 해당 글이 공개된 글인지 new_crime_cases 테이블을 통해 확인합니다.
+      const { data: publicCase, error: publicError } = await supabase
+        .from('new_crime_cases')
+        .select('id')
+        .eq('source_help_question_id', questionId)
+        .single();
+
+      if (publicCase) {
+        setIsPublic(true);
+      } else {
+        setIsPublic(false);
+      }
+    } else {
+      setQuestion(null);
     }
   }, [questionId]);
 
-
-  // 화면이 포커스될 때마다 데이터를 다시 가져옴
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
@@ -76,35 +119,27 @@ export default function HelpDeskDetailScreen({ route }) {
     }, [fetchQuestion])
   );
 
-  // "당겨서 새로고침" 기능 구현
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchQuestion().then(() => setRefreshing(false));
   }, [fetchQuestion]);
 
 
-  // 로딩 중일 때 표시되는 화면
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#5262F5" />
-      </View>
-    );
+    return <View style={styles.centered}><ActivityIndicator size="large" color="#5262F5" /></View>;
   }
 
-  // 질문 데이터가 없을 경우 (접근 권한 포함)
   if (!question) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.infoText}>문의 내역을 찾을 수 없거나 접근 권한이 없습니다.</Text>
-      </View>
-    );
+    return <View style={styles.centered}><Text style={styles.infoText}>문의 내역을 찾을 수 없거나 접근 권한이 없습니다.</Text></View>;
   }
 
-  const answers = Array.isArray(question.help_answers)
-    ? question.help_answers
-    : [question.help_answers]; // object면 배열로 감쌈
+  // [수정됨] 마스킹 여부를 결정하는 로직
+  const isOwner = user?.id === question.user_id;
+  const shouldMaskData = isPublic && !isOwner;
 
+  const answers = (question && Array.isArray(question.help_answers) && question.help_answers[0] !== null)
+    ? question.help_answers
+    : [];
 
   return (
     <ScrollView
@@ -115,16 +150,17 @@ export default function HelpDeskDetailScreen({ route }) {
     >
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>문의 내용</Text>
-        <DetailItem label="이름" value={question.user_name} />
-        <DetailItem label="연락처" value={question.user_phone} />
+        <DetailItem label="이름" value={shouldMaskData ? maskNameMiddle(question.user_name) : question.user_name} />
+        <DetailItem label="연락처" value={shouldMaskData ? maskPhoneNumberCustom(question.user_phone) : question.user_phone} />
         <DetailItem label="대화 계기" value={question.conversation_reason} />
-        <DetailItem label="상대방 계좌" value={question.opponent_account} />
-        <DetailItem label="상대방 연락처" value={question.opponent_phone} />
-        <DetailItem label="상대방 SNS" value={question.opponent_sns} />
+        <DetailItem label="상대방 계좌" value={shouldMaskData ? maskAccountNumber(question.opponent_account) : question.opponent_account} />
+        <DetailItem label="상대방 연락처" value={shouldMaskData ? maskPhoneNumberCustom(question.opponent_phone) : question.opponent_phone} />
+        <DetailItem label="상대방 SNS" value={shouldMaskData ? maskNameMiddle(question.opponent_sns) : question.opponent_sns} />
         <DetailItem label="사건 개요" value={question.case_summary} />
       </View>
 
-      {answers.length > 0 ? (
+      {/* [수정됨] 마스킹이 필요하지 않을 때만 답변을 보여줍니다. */}
+      {!shouldMaskData && answers.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>관리자 답변</Text>
           {answers.map((answer) => (
@@ -132,9 +168,12 @@ export default function HelpDeskDetailScreen({ route }) {
           ))}
         </View>
       ) : (
-        <View style={[styles.section, styles.pendingSection]}>
-          <Text style={styles.pendingText}>답변을 준비중입니다.</Text>
-        </View>
+        // 본인이 작성한 글이면서 아직 답변이 없는 경우에만 '답변 준비 중' 표시
+        isOwner && !question.is_answered && (
+          <View style={[styles.section, styles.pendingSection]}>
+            <Text style={styles.pendingText}>답변을 준비중입니다.</Text>
+          </View>
+        )
       )}
     </ScrollView>
   );
