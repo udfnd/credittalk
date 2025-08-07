@@ -30,12 +30,12 @@ serve(async (_req) => {
       { count: totalScamCount },
     ] = await Promise.all([
       supabaseAdminClient
-        .from("help_question")
+        .from("help_questions")
         .select("*", { count: "exact", head: true })
         .gte("created_at", todayStartUTC)
         .lt("created_at", todayEndUTC),
       supabaseAdminClient
-        .from("help_question")
+        .from("help_questions")
         .select("*", { count: "exact", head: true }),
       supabaseAdminClient
         .from("scammer_reports")
