@@ -140,7 +140,7 @@ function HomeScreen() {
         <View style={styles.headerSection}>
           <Text style={styles.mainTitle}>크레딧톡</Text>
           <Text style={styles.greetingText}>
-            {profile?.name || user?.email || "방문자"}님, 안전한 금융거래를 하실
+            {profile?.nickname || user?.email || "방문자"}님, 안전한 금융거래를 하실
             수 있도록 최선을 다하겠습니다.
           </Text>
         </View>
