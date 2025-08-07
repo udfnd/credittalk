@@ -55,7 +55,6 @@ function HomeScreen() {
       setStats(data);
     } catch (error) {
       console.error("Error fetching stats:", error.message);
-      // 에러 발생 시 통계가 0으로 표시되도록 초기화
       setStats({ todayHelpCount: 0, totalHelpCount: 0, totalScamCount: 0 });
     } finally {
       setLoadingStats(false);
@@ -139,7 +138,7 @@ function HomeScreen() {
         contentContainerStyle={styles.scrollContentContainer}
       >
         <View style={styles.headerSection}>
-          <Text style={styles.mainTitle}>크레디톡</Text>
+          <Text style={styles.mainTitle}>크레딧톡</Text>
           <Text style={styles.greetingText}>
             {profile?.name || user?.email || "방문자"}님, 안전한 금융거래를 하실
             수 있도록 최선을 다하겠습니다.
@@ -211,14 +210,14 @@ function HomeScreen() {
         {renderStatsSection()}
         <View style={styles.bannerSection}>
           {renderImageBanner(
-            "크레디톡 개발 회사 소개",
+            "크레딧톡 개발 회사 소개",
             "한국금융범죄예방연구센터 소개입니다.",
             companyLogoImg,
             () => Linking.openURL("https://www.xn--jj0bj76bm2k.com/page/about")
           )}
           {renderImageBanner(
             "공지사항",
-            "크레디톡의 새로운 소식을 확인하세요.",
+            "크레딧톡 새로운 소식을 확인하세요.",
             noticeBannerImg,
             () => navigation.navigate("NoticeList"),
           )}
@@ -238,7 +237,7 @@ function HomeScreen() {
             () => navigation.navigate("NewCrimeCaseList"),
           )}
           {renderImageBanner(
-            "크레디톡 후기",
+            "크레딧톡 후기",
             "어플 오류, 개선사항 및 후기",
             reviewBannerImg,
             () => navigation.navigate("ReviewList"),

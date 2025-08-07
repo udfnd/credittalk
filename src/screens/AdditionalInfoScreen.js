@@ -43,6 +43,8 @@ function AdditionalInfoScreen() {
 
     setIsCheckingNickname(true);
     setNicknameMessage("");
+    setIsNicknameAvailable(null);
+
     try {
       const { data, error } = await supabase.functions.invoke(
         "check-nickname-availability",
@@ -51,23 +53,34 @@ function AdditionalInfoScreen() {
 
       if (error) throw error;
 
-      if (data.available) {
-        setIsNicknameAvailable(true);
-        setNicknameMessage("사용 가능한 닉네임입니다.");
-      } else {
-        setIsNicknameAvailable(false);
-        setNicknameMessage("이미 사용 중인 닉네임입니다.");
+      switch (data.status) {
+        case "available":
+          setIsNicknameAvailable(true);
+          setNicknameMessage("사용 가능한 닉네임입니다.");
+          break;
+        case "taken":
+          setIsNicknameAvailable(false);
+          setNicknameMessage(data.message);
+          break;
+        case "forbidden":
+          setIsNicknameAvailable(false);
+          setNicknameMessage(data.message);
+          break;
+        default:
+          throw new Error("서버로부터 알 수 없는 응답을 받았습니다.");
       }
+
     } catch (err) {
-      setIsNicknameAvailable(null);
-      setNicknameMessage(`오류: ${err.message}`);
+      const errorMessage = err.context?.data?.error || err.message;
+      setIsNicknameAvailable(false);
+      setNicknameMessage(errorMessage);
     } finally {
       setIsCheckingNickname(false);
     }
   };
 
+
   const handleSubmit = async () => {
-    // --- START: 닉네임 유효성 검사 추가 ---
     if (isNicknameAvailable !== true) {
       Alert.alert("확인 필요", "닉네임 중복 확인을 완료해주세요.");
       return;
@@ -85,10 +98,11 @@ function AdditionalInfoScreen() {
         name:
           user.user_metadata?.full_name || user.user_metadata?.name || "사용자",
         job_type: jobType,
-        nickname: nickname.trim(), // 닉네임 추가
+        nickname: nickname.trim(),
         naver_id:
           user.user_metadata?.provider === "naver"
             ? user.user_metadata?.provider_id
+            // @ts-ignore
             : null,
       };
 
@@ -100,7 +114,6 @@ function AdditionalInfoScreen() {
 
       if (error) {
         if (error.code === "23505") {
-          // Unique constraint violation (users_nickname_key)
           Alert.alert("오류", "이미 사용 중인 닉네임이거나 가입된 계정입니다.");
         } else {
           throw error;
@@ -115,6 +128,7 @@ function AdditionalInfoScreen() {
       }
     } catch (err) {
       console.error("Error submitting additional info:", err);
+      // @ts-ignore
       Alert.alert("오류", `추가 정보 저장에 실패했습니다: ${err.message}`);
     } finally {
       setIsSubmitting(false);
@@ -132,7 +146,7 @@ function AdditionalInfoScreen() {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.inputField}
-          placeholder="사용할 닉네임을 입력하세요 (2자 이상)"
+          placeholder="실명과 거리가 먼 것으로 작성해주세요. (2자 이상)"
           value={nickname}
           onChangeText={handleNicknameChange}
           autoCapitalize="none"
@@ -140,7 +154,7 @@ function AdditionalInfoScreen() {
         <TouchableOpacity
           style={styles.checkButton}
           onPress={handleCheckNickname}
-          disabled={isCheckingNickname}
+          disabled={isCheckingNickname || nickname.trim().length < 2}
         >
           {isCheckingNickname ? (
             <ActivityIndicator color="#fff" />
@@ -153,7 +167,7 @@ function AdditionalInfoScreen() {
         <Text
           style={[
             styles.message,
-            isNicknameAvailable ? styles.successMessage : styles.errorMessage,
+            isNicknameAvailable === true ? styles.successMessage : styles.errorMessage,
           ]}
         >
           {nicknameMessage}

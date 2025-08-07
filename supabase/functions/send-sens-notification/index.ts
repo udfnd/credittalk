@@ -64,7 +64,7 @@ serve(async (req) => {
       contentType: 'COMM',
       countryCode: '82',
       from: fromNumber,
-      content: `[크레디톡] 새로운 헬프데스크 문의가 등록되었습니다: "${helpQuestion.title}"`,
+      content: `[크레딧톡] 새로운 헬프데스크 문의가 등록되었습니다: "${helpQuestion.title}"`,
       messages: [
         {
           // *** [수정됨] ***

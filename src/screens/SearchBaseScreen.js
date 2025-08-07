@@ -16,6 +16,7 @@ import { format, parseISO } from "date-fns";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { logPageView } from "../lib/pageViewLogger";
 import { useAuth } from "../context/AuthContext";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export const SEARCH_TYPES = {
   UNIFIED: "unified",
@@ -147,17 +148,21 @@ const HighlightedText = ({ text, highlight }) => {
   );
 };
 
-// 통계 표시 컴포넌트
+// --- (수정된 부분 1) ---
+// 통계 표시 컴포넌트 수정
 const SearchStatistics = ({ stats }) => {
   if (!stats) return null;
 
   const {
-    reportCount,
+    totalCount,
+    weeklyCount,
+    monthlyCount,
+    threeMonthlyCount,
     relatedAccounts,
     relatedPhones,
     relatedNicknames,
     searchedTerm,
-    categoryStats, // 카테고리 통계 데이터 추출
+    categoryStats,
   } = stats;
 
   const isProbablyPhone =
@@ -168,7 +173,7 @@ const SearchStatistics = ({ stats }) => {
   return (
     <View style={styles.statsContainer}>
       <Icon
-        name="information"
+        name="information-outline"
         size={22}
         color="#3d5afe"
         style={styles.statsIcon}
@@ -177,10 +182,21 @@ const SearchStatistics = ({ stats }) => {
         <Text style={styles.statsMainText}>
           '{searchedTerm}'(으)로 총{" "}
           <Text style={{ fontWeight: "bold", color: "#D32F2F" }}>
-            {reportCount}건
+            {totalCount}건
           </Text>
           의 피해가 접수되었습니다.
         </Text>
+
+        {/* 기간별 통계 추가 */}
+          <Text style={styles.statsSubText}>
+            ∙ 최근 피해사례가 {weeklyCount}건 있습니다.
+          </Text>
+          <Text style={styles.statsSubText}>
+            ∙ 1개월 내 피해사례가 {monthlyCount}건 있습니다.
+          </Text>
+          <Text style={styles.statsSubText}>
+            ∙ 3개월 내 피해사례가 {threeMonthlyCount}건 있습니다.
+          </Text>
         {isProbablyPhone && relatedAccounts.length > 0 && (
           <Text style={styles.statsSubText}>
             ∙ 연관 계좌: {relatedAccounts.join(", ")}
@@ -209,6 +225,7 @@ const SearchStatistics = ({ stats }) => {
   );
 };
 
+
 const RESULTS_PER_PAGE = 5;
 
 const SearchBaseScreen = ({ title }) => {
@@ -234,6 +251,8 @@ const SearchBaseScreen = ({ title }) => {
     }
   }, [user]);
 
+  // --- (수정된 부분 2) ---
+  // debounceSearch 함수 수정
   const debouncedSearch = useCallback(
     debounce(async (term) => {
       const trimmedTerm = term.trim();
@@ -253,62 +272,42 @@ const SearchBaseScreen = ({ title }) => {
       setSearchStats(null);
 
       try {
-        const { data, error: rpcError } = await supabase.rpc("search_reports", {
+        const { data: rpcResponse, error: rpcError } = await supabase.rpc("search_reports", {
           search_term: trimmedTerm,
         });
 
         if (rpcError) throw rpcError;
-        setAllResults(data || []);
 
-        if (data && data.length > 0) {
+        // RPC 응답이 배열 형태이므로 첫 번째 요소를 사용합니다.
+        const resultData = rpcResponse?.[0];
+        const reports = resultData?.reports || [];
+        setAllResults(reports);
+
+        if (reports.length > 0 && resultData) {
           const stats = {
-            reportCount: data.length,
             relatedAccounts: new Set(),
             relatedPhones: new Set(),
             relatedNicknames: new Set(),
-            searchedTerm: trimmedTerm,
           };
 
-          let isExactMatchFound = false;
-          const cleanedSearchTerm = trimmedTerm.replace(/-/g, "");
-          const isNumeric = /^\d+$/.test(cleanedSearchTerm);
-          const isPhoneSearch = isNumeric && cleanedSearchTerm.length >= 10 && cleanedSearchTerm.startsWith("0");
+          const isExactMatchFound = true; // RPC에서 이미 필터링 되었으므로 항상 true로 간주
+          const isPhoneSearch = /^\d+$/.test(trimmedTerm.replace(/-/g, "")) && trimmedTerm.length >= 10;
           const categoryCounts = {};
 
-          data.forEach((report) => {
-            let matchInThisReport = false;
+          reports.forEach((report) => {
+            if (report.nickname) stats.relatedNicknames.add(report.nickname);
 
-            if (isNumeric) {
-              if (report.phone_numbers?.some((p) => p?.replace(/-/g, "") === cleanedSearchTerm)) {
-                isExactMatchFound = true;
-                matchInThisReport = true;
-              }
-              if (report.damage_accounts?.some((acc) => acc.accountNumber?.replace(/-/g, "") === cleanedSearchTerm)) {
-                isExactMatchFound = true;
-                matchInThisReport = true;
-              }
+            if (isPhoneSearch) {
+              report.damage_accounts?.forEach((acc) => {
+                if (acc.accountNumber) stats.relatedAccounts.add(`${acc.bankName} ${maskAccountNumber(acc.accountNumber)}`);
+              });
             } else {
-              isExactMatchFound = true;
-              matchInThisReport = true;
+              report.phone_numbers?.forEach((p) => {
+                if (p) stats.relatedPhones.add(maskPhoneNumberCustom(p));
+              });
             }
-
-            if (matchInThisReport) {
-              if (report.nickname) stats.relatedNicknames.add(report.nickname);
-
-              if (isPhoneSearch) {
-                report.damage_accounts?.forEach((acc) => {
-                  if (acc.accountNumber) stats.relatedAccounts.add(`${acc.bankName} ${maskAccountNumber(acc.accountNumber)}`);
-                });
-              } else {
-                report.phone_numbers?.forEach((p) => {
-                  if (p) stats.relatedPhones.add(maskPhoneNumberCustom(p));
-                });
-              }
-
-              // 카테고리 통계 집계
-              const category = report.category || "기타";
-              categoryCounts[category] = (categoryCounts[category] || 0) + 1;
-            }
+            const category = report.category || "기타";
+            categoryCounts[category] = (categoryCounts[category] || 0) + 1;
           });
 
           if (isExactMatchFound) {
@@ -317,11 +316,14 @@ const SearchBaseScreen = ({ title }) => {
               .map(([category, count]) => ({ category, count }));
 
             setSearchStats({
-              reportCount: stats.reportCount,
+              totalCount: resultData.total_count,
+              weeklyCount: resultData.weekly_count,
+              monthlyCount: resultData.monthly_count,
+              threeMonthlyCount: resultData.three_monthly_count,
               relatedAccounts: Array.from(stats.relatedAccounts),
               relatedPhones: Array.from(stats.relatedPhones),
               relatedNicknames: Array.from(stats.relatedNicknames),
-              searchedTerm: stats.searchedTerm,
+              searchedTerm: trimmedTerm,
               categoryStats: sortedCategoryStats,
             });
           } else {
@@ -338,6 +340,7 @@ const SearchBaseScreen = ({ title }) => {
     }, 500),
     [],
   );
+
 
   useEffect(() => {
     if (initialSearchTerm) {
@@ -391,8 +394,8 @@ const SearchBaseScreen = ({ title }) => {
           {item.damage_accounts?.map((account, index) => (
             <View key={`account-${index}`} style={styles.infoRow}>
               <Text style={styles.infoLabel}>계좌정보:</Text>
-              {account.isOtherMethod ? (
-                <Text style={[styles.resultText, styles.cashText]}>현금 전달</Text>
+              {account.is_other_method ? ( // isOtherMethod -> is_other_method
+                <Text style={[styles.resultText, styles.cashText]}>기타(현금) 전달</Text>
               ) : (
                 <Text style={styles.resultText} ellipsizeMode="tail">
                   <Text style={{ fontWeight: "bold" }}>
@@ -489,7 +492,7 @@ const SearchBaseScreen = ({ title }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <FlatList
         ListHeaderComponent={
           <>
@@ -541,7 +544,7 @@ const SearchBaseScreen = ({ title }) => {
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -634,6 +637,13 @@ const styles = StyleSheet.create({
     color: "#555",
     lineHeight: 21,
     marginTop: 5,
+  },
+  statsSubTextHighlight: {
+    fontSize: 14,
+    color: "#D32F2F", // 강조 색상
+    lineHeight: 21,
+    marginTop: 8,
+    fontWeight: 'bold', // 굵게
   },
   noResultsContainer: {
     flex: 1,

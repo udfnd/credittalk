@@ -342,7 +342,7 @@ function AppNavigator() {
           <RootStack.Screen
             name="ReviewList"
             component={ReviewListScreen}
-            options={{ title: "크레디톡 후기" }}
+            options={{ title: "크레딧톡 후기" }}
           />
           <RootStack.Screen
             name="ReviewDetail"
@@ -395,7 +395,7 @@ function AppNavigator() {
 function App(): React.JSX.Element {
   useEffect(() => {
     NaverLogin.initialize({
-      appName: "크레디톡",
+      appName: "크레딧톡",
       consumerKey: "QWU6hRfI6lQMlQ5QIZN1",
       consumerSecret: "VtyqGV8HHb",
       serviceUrlSchemeIOS: "credittalk",

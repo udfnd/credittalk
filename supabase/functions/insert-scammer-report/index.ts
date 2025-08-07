@@ -24,6 +24,7 @@ interface ReportData {
   company_type: string;
   description?: string | null;
   nickname?: string | null;
+  perpetrator_account?: string | null; // 이 필드가 추가되었습니다.
   perpetrator_id?: string | null;
   gender: string;
   victim_circumstances?: string | null;
@@ -104,7 +105,7 @@ async function encryptAndInsert(
     .from("scammer_reports")
     .insert({
       reporter_id: reporterId,
-      damage_accounts: encryptedDamageAccounts, // 수정된 데이터 삽입
+      damage_accounts: encryptedDamageAccounts,
       phone_numbers: encryptedPhoneNumbers,
       impersonated_phone_number: encryptedImpersonatedPhoneNumber,
       site_name: reportData.site_name || null,
@@ -113,6 +114,7 @@ async function encryptAndInsert(
       company_type: reportData.company_type,
       description: reportData.description || null,
       nickname: reportData.nickname || null,
+      perpetrator_account: reportData.perpetrator_account || null, // 이 필드가 추가되었습니다.
       perpetrator_id: reportData.perpetrator_id || null,
       ip_address: clientIp || null,
       gender: reportData.gender,
