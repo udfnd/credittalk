@@ -166,7 +166,7 @@ function ReviewCreateScreen() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>크레디톡 후기 작성</Text>
+        <Text style={styles.title}>크레딧톡 후기 작성</Text>
 
         <Text style={styles.label}>별점 평가</Text>
         <StarRating rating={rating} setRating={setRating} />

@@ -140,6 +140,8 @@ function ReportScreen({ navigation }) {
   ]);
 
   const [nickname, setNickname] = useState("");
+  // --- (수정된 부분 1) ---
+  const [perpetratorAccount, setPerpetratorAccount] = useState(""); // 가해자 계정 상태 추가
   const [perpetratorId, setPerpetratorId] = useState("");
   const [isIdUnknown, setIsIdUnknown] = useState(false);
   const [category, setCategory] = useState("");
@@ -198,7 +200,7 @@ function ReportScreen({ navigation }) {
   const isNoShowCategory = category === "노쇼" || category === "노쇼 대리구매 사기";
 
   const faceToFaceLabel = isNoShowCategory ? "노쇼 피해" : "대면 피해";
-  const faceToFaceCheckboxLabel = isNoShowCategory ? "대면 노쇼피해" : "대면으로 피해를 입음";
+  const faceToFaceCheckboxLabel = isNoShowCategory ? "대면 노쇼피해" : "기타로 피해 입음";
   const damagedItemPlaceholder = isNoShowCategory
     ? "피해 물품을 입력하세요 (예: 소고기, 회, 대게)"
     : "피해 물품을 입력하세요 (예: 현금, 상품권, 시계)";
@@ -242,6 +244,7 @@ function ReportScreen({ navigation }) {
   const clearInputs = () => {
     setDamageAccounts([{ ...initialDamageAccount, id: Date.now() }]);
     setNickname("");
+    setPerpetratorAccount(""); // --- (수정된 부분 2) ---
     setPerpetratorId("");
     setIsIdUnknown(false);
     setCategory("");
@@ -326,13 +329,11 @@ function ReportScreen({ navigation }) {
     currentAccount.isOtherMethod = !currentAccount.isOtherMethod;
 
     if (currentAccount.isOtherMethod) {
-      // '기타'가 선택되면 계좌 정보 필드를 비웁니다.
       currentAccount.bankName = "";
       currentAccount.accountNumber = "";
       currentAccount.accountHolderName = "";
       currentAccount.showBankOtherInput = false;
     } else {
-      // '기타'가 해제되면 상세 설명 필드를 비웁니다.
       currentAccount.otherMethodDetails = "";
     }
     setDamageAccounts(newAccounts);
@@ -513,18 +514,14 @@ function ReportScreen({ navigation }) {
       const uploadFile = async (asset, folder) => {
         if (!asset) return null;
 
-        // 1. 실제 파일 경로 가져오기
         const path = await getFilePath(asset.uri);
-        // 2. 파일을 base64로 읽기
         const base64Data = await RNBlobUtil.fs.readFile(path, "base64");
-        // 3. base64를 ArrayBuffer로 변환
         const arrayBuffer = Buffer.from(base64Data, "base64");
 
         const fileExt = asset.fileName.split(".").pop();
         const fileName = `${folder}-${user.id}-${Date.now()}-${Math.random()}.${fileExt}`;
         const filePath = `public/${fileName}`;
 
-        // 4. ArrayBuffer를 Supabase에 업로드
         const { error } = await supabase.storage
           .from("report-evidence")
           .upload(filePath, arrayBuffer, {
@@ -629,6 +626,7 @@ function ReportScreen({ navigation }) {
       const reportData = {
         damage_accounts: processedDamageAccounts,
         nickname: nickname.trim() || null,
+        perpetrator_account: perpetratorAccount.trim() || null, // --- (수정된 부분 3) ---
         perpetrator_id: isIdUnknown ? null : perpetratorId.trim() || null,
         phone_numbers:
           fullPhoneNumbers && fullPhoneNumbers.length > 0
@@ -961,7 +959,7 @@ function ReportScreen({ navigation }) {
         case individualCategories[5]: // 암호화폐
           return (
             <>
-              <Text style={styles.label}>피해 물품</Text>
+              <Text style={styles.label}>피해 암호화폐 선택</Text>
               <View style={styles.inputWithButtonContainer}>
                 <TextInput
                   style={[styles.input, styles.inputWithButton, showDamagedItemOtherInput && {backgroundColor: '#fff'}]}
@@ -986,6 +984,12 @@ function ReportScreen({ navigation }) {
     }
     return null;
   };
+
+  const damageAccountLabel = category === individualCategories[5] // "암호화폐" 카테고리
+    ? "전자지갑주소 (선택)"
+    : attemptedFraud === false
+      ? "피해당할 뻔 했던 계좌번호 (선택)"
+      : "피해금 송금 정보 (선택)";
 
   return (
     <KeyboardAvoidingView
@@ -1275,6 +1279,16 @@ function ReportScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        <Text style={styles.label}>가해자가 썼던 SNS 계정</Text>
+        <TextInput
+          style={styles.input}
+          value={perpetratorAccount}
+          onChangeText={setPerpetratorAccount}
+          placeholder="예: 라인, 텔레그램, 카톡, 인스타"
+          placeholderTextColor="#6c757d"
+          autoCapitalize="none"
+        />
+
         <Text style={styles.label}>가해자가 썼던 SNS 닉네임이나 가명</Text>
         <TextInput
           style={styles.input}
@@ -1540,9 +1554,7 @@ function ReportScreen({ navigation }) {
         )}
         <View style={styles.labelContainer}>
           <Text style={styles.label}>
-            {attemptedFraud === false
-              ? "피해당할 뻔 했던 계좌번호 (선택)"
-              : "피해금 송금 정보 (선택)"}
+            {damageAccountLabel}
           </Text>
         </View>
 
@@ -1647,7 +1659,7 @@ function ReportScreen({ navigation }) {
                 }
                 placeholder={
                   category === "암호화폐"
-                    ? "전자지갑주소"
+                    ? "예: 1fyZkyVujHYqSR6FDBZyaQwzp7fnMWra"
                     : "계좌번호 (- 부호 없이 숫자만 적어주세요)"
                 }
                 placeholderTextColor="#6c757d"
