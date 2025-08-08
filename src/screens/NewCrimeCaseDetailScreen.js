@@ -36,7 +36,7 @@ function NewCrimeCaseDetailScreen({ route }) {
     try {
       const { data, error: fetchError } = await supabase
         .from("new_crime_cases")
-        .select("id, created_at, method, image_urls")
+        .select("id, created_at, title, method, image_urls")
         .eq("id", caseId)
         .eq("is_published", true)
         .single();
@@ -94,7 +94,7 @@ function NewCrimeCaseDetailScreen({ route }) {
     >
       <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
         <View style={styles.header}>
-        <Text style={styles.label}>범죄 수법</Text>
+        <Text style={styles.label}>{caseDetail.title}</Text>
         <Text style={styles.date}>
           게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
         </Text>

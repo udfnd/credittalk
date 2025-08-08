@@ -1,4 +1,3 @@
-// src/screens/NewCrimeCaseCreateScreen.js
 import React, { useState } from "react";
 import {
   View,
@@ -18,7 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { launchImageLibrary } from "react-native-image-picker";
 import RNBlobUtil from "react-native-blob-util";
-import { Buffer } from "buffer"; // Buffer import
+import { Buffer } from "buffer";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -26,6 +25,7 @@ export default function NewCrimeCaseCreateScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
 
+  const [title, setTitle] = useState("");
   const [method, setMethod] = useState("");
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,41 +53,25 @@ export default function NewCrimeCaseCreateScreen() {
     setPhotos((prev) => prev.filter((p) => p.uri !== uri));
   };
 
-  /**
-   * 로컬 URI를 네이티브 파일 경로로 변환 (필수)
-   */
   const getFilePath = async (uri) => {
     if (Platform.OS === "android" && uri.startsWith("content://")) {
-      // content URI를 실제 파일 경로로 변환
       const stat = await RNBlobUtil.fs.stat(uri);
       return stat.path;
     }
-    // iOS의 경우 file:// 접두사 제거
     if (uri.startsWith("file://")) {
       return uri.replace("file://", "");
     }
     return uri;
   };
 
-  /**
-   * Supabase Storage에 사진 업로드 및 URL 반환 (수정된 함수)
-   */
   const uploadToSupabase = async (photo) => {
-    // 1. asset URI로부터 실제 파일 경로 획득
     const path = await getFilePath(photo.uri);
-
-    // 2. RNBlobUtil을 사용해 파일을 Base64 문자열로 읽기
     const base64Data = await RNBlobUtil.fs.readFile(path, "base64");
-
-    // 3. Base64를 ArrayBuffer로 디코딩
     const arrayBuffer = Buffer.from(base64Data, "base64");
-
-    // 4. 파일명 및 Storage 경로 설정
     const ext = photo.fileName?.split(".").pop() || "jpg";
     const fileName = `${user.id}_${Date.now()}.${ext}`;
     const storagePath = `new-crime-cases/${fileName}`;
 
-    // 5. ArrayBuffer를 Supabase에 업로드
     const { error: uploadError } = await supabase.storage
       .from("post-images")
       .upload(storagePath, arrayBuffer, {
@@ -99,7 +83,6 @@ export default function NewCrimeCaseCreateScreen() {
       throw new Error(`사진 업로드 실패: ${uploadError.message}`);
     }
 
-    // 6. 업로드된 파일의 공개 URL 가져오기
     const { data: urlData } = supabase.storage
       .from("post-images")
       .getPublicUrl(storagePath);
@@ -113,8 +96,12 @@ export default function NewCrimeCaseCreateScreen() {
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
+    if (!title.trim()) {
+      Alert.alert("입력 오류", "제목을 입력해주세요.");
+      return;
+    }
     if (!method.trim()) {
-      Alert.alert("입력 오류", "범죄 수법을 입력해주세요.");
+      Alert.alert("입력 오류", "범죄 수법 및 내용을 입력해주세요.");
       return;
     }
     if (!user) {
@@ -128,7 +115,9 @@ export default function NewCrimeCaseCreateScreen() {
         photos.map((p) => uploadToSupabase(p)),
       );
 
+      // [수정] insert 쿼리에 title 필드 추가
       const { error } = await supabase.from("new_crime_cases").insert({
+        title: title.trim(), // title 추가
         method: method.trim(),
         user_id: user.id,
         image_urls: imageUrls.length ? imageUrls : null,
@@ -150,6 +139,19 @@ export default function NewCrimeCaseCreateScreen() {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.pageTitle}>신종 범죄 수법 등록</Text>
+
+      {/* [추가] 제목 입력 필드 */}
+      <Text style={styles.label}>제목</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="사건의 특징을 요약하는 제목을 입력하세요."
+        value={title}
+        onChangeText={setTitle}
+        maxLength={50} // 제목 길이 제한
+      />
+
+      {/* [수정] 레이블 텍스트 변경 */}
+      <Text style={styles.label}>범죄 수법 및 내용</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         placeholder="알고 계신 신종 범죄 수법이나 피해 사례를 자유롭게 작성해주세요."
@@ -195,6 +197,7 @@ export default function NewCrimeCaseCreateScreen() {
   );
 }
 
+// [수정] 전체적인 스타일 개선
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -213,7 +216,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#495057",
     marginBottom: 10,
-    marginTop: 15,
+    marginTop: 20, // 각 섹션 간의 간격 조정
   },
   input: {
     borderWidth: 1,
