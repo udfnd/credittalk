@@ -177,7 +177,7 @@ function HomeScreen() {
         </TouchableOpacity>
 
 
-        {user && user.email === 'credittalkadmin@gmail.com' && (
+        {user && user.email.includes("credittalkadmin") && (
           <TouchableOpacity
             style={styles.adminButton}
             onPress={handleAdminPageNavigation}
