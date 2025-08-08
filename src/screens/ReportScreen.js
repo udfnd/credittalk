@@ -129,7 +129,6 @@ function ReportScreen({ navigation }) {
   const { user } = useAuth();
 
   useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
     if (user) {
       logPageView(user.id, 'ReportScreen');
     }
@@ -140,8 +139,7 @@ function ReportScreen({ navigation }) {
   ]);
 
   const [nickname, setNickname] = useState("");
-  // --- (수정된 부분 1) ---
-  const [perpetratorAccount, setPerpetratorAccount] = useState(""); // 가해자 계정 상태 추가
+  const [perpetratorAccount, setPerpetratorAccount] = useState("");
   const [perpetratorId, setPerpetratorId] = useState("");
   const [isIdUnknown, setIsIdUnknown] = useState(false);
   const [category, setCategory] = useState("");
@@ -196,9 +194,8 @@ function ReportScreen({ navigation }) {
   const [noDamageAmount, setNoDamageAmount] = useState(false);
   const [isCryptoModalVisible, setIsCryptoModalVisible] = useState(false);
   const [showDamagedItemOtherInput, setShowDamagedItemOtherInput] = useState(false);
-
+  const [cryptoTransferAmount, setCryptoTransferAmount] = useState("");
   const isNoShowCategory = category === "노쇼" || category === "노쇼 대리구매 사기";
-
   const faceToFaceLabel = isNoShowCategory ? "노쇼 피해" : "대면 피해";
   const faceToFaceCheckboxLabel = isNoShowCategory ? "대면 노쇼피해" : "기타로 피해 입음";
   const damagedItemPlaceholder = isNoShowCategory
@@ -244,7 +241,7 @@ function ReportScreen({ navigation }) {
   const clearInputs = () => {
     setDamageAccounts([{ ...initialDamageAccount, id: Date.now() }]);
     setNickname("");
-    setPerpetratorAccount(""); // --- (수정된 부분 2) ---
+    setPerpetratorAccount("");
     setPerpetratorId("");
     setIsIdUnknown(false);
     setCategory("");
@@ -280,6 +277,7 @@ function ReportScreen({ navigation }) {
     setDetailedCrimeTypeOther("");
     setShowDetailedCrimeTypeOtherInput(false);
     setDamageAmount("");
+    setCryptoTransferAmount("");
     setIsFaceToFace(false);
     setNoDamageAmount(false);
     setIsCryptoModalVisible(false);
@@ -626,7 +624,7 @@ function ReportScreen({ navigation }) {
       const reportData = {
         damage_accounts: processedDamageAccounts,
         nickname: nickname.trim() || null,
-        perpetrator_account: perpetratorAccount.trim() || null, // --- (수정된 부분 3) ---
+        perpetrator_account: perpetratorAccount.trim() || null,
         perpetrator_id: isIdUnknown ? null : perpetratorId.trim() || null,
         phone_numbers:
           fullPhoneNumbers && fullPhoneNumbers.length > 0
@@ -651,6 +649,7 @@ function ReportScreen({ navigation }) {
           illegalCollectionEvidenceUrls.filter(Boolean),
         traded_item_image_urls: tradedItemImageUrls.filter(Boolean),
         detailed_crime_type: finalDetailedCrimeType || null,
+        crypto_transfer_amount: cryptoTransferAmount ? parseFloat(cryptoTransferAmount.replace(/,/g, '')) : null,
         damage_amount: noDamageAmount
           ? null
           : damageAmount
@@ -1014,11 +1013,9 @@ function ReportScreen({ navigation }) {
           onSelect={(name) => {
             setIsSiteModalVisible(false);
             if (name === "기타") {
-              // "기타" 선택 시 커스텀 입력 모드로 전환
               setSiteName("");
               setShowSiteOtherInput(true);
             } else {
-              // 일반 선택 시 값 설정
               setSiteName(name);
               setShowSiteOtherInput(false);
             }
@@ -1028,7 +1025,7 @@ function ReportScreen({ navigation }) {
         <ImageSelectionModal
           visible={isCryptoModalVisible}
           onClose={() => setIsCryptoModalVisible(false)}
-          items={cryptoCurrencies.map(c => ({...c, key: c.name}))} // `key` 속성 추가
+          items={cryptoCurrencies.map(c => ({...c, key: c.name}))}
           onSelect={(name) => {
             setIsCryptoModalVisible(false);
             if (name === "기타") {
@@ -1674,6 +1671,20 @@ function ReportScreen({ navigation }) {
           <Icon name="plus" size={20} color="#3d5afe" />
           <Text style={styles.addPhoneButtonText}>피해금 송금 정보 추가</Text>
         </TouchableOpacity>
+        {category === individualCategories[5] && (
+          <>
+            <Text style={styles.label}>암호화폐 전송량</Text>
+            <TextInput
+              style={styles.input}
+              value={cryptoTransferAmount}
+              onChangeText={setCryptoTransferAmount}
+              placeholder="전송량을 숫자로 입력하세요. (예: 0.0000001)"
+              placeholderTextColor="#6c757d"
+              keyboardType="numeric"
+            />
+          </>
+        )}
+
         <Text style={styles.label}>피해 금액</Text>
         <TextInput
           style={[styles.input, noDamageAmount && styles.disabledInput]}
