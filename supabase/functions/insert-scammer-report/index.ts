@@ -5,7 +5,6 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
-// ✨ 인터페이스 수정: isCashTransaction -> is_other_method, other_method_details 추가
 interface DamageAccount {
   accountHolderName?: string | null;
   accountNumber?: string | null;
@@ -24,7 +23,7 @@ interface ReportData {
   company_type: string;
   description?: string | null;
   nickname?: string | null;
-  perpetrator_account?: string | null; // 이 필드가 추가되었습니다.
+  perpetrator_account?: string | null;
   perpetrator_id?: string | null;
   gender: string;
   victim_circumstances?: string | null;
@@ -38,6 +37,7 @@ interface ReportData {
   illegal_collection_evidence_urls?: string[] | null;
   traded_item_image_urls?: string[] | null;
   detailed_crime_type?: string | null;
+  crypto_transfer_amount?: number | null; // ✨ 새로운 필드 추가
   damage_amount?: number | null;
   no_damage_amount?: boolean;
   is_face_to_face?: boolean;
@@ -70,12 +70,10 @@ async function encryptAndInsert(
     ? await Promise.all(reportData.phone_numbers.map((pn) => encrypt(pn)))
     : null;
 
-  // ✨ 피해금 송금 정보 처리 로직 수정
   const encryptedDamageAccounts =
     reportData.damage_accounts && reportData.damage_accounts.length > 0
       ? await Promise.all(
         reportData.damage_accounts.map(async (acc) => {
-          // '기타' 방식일 경우
           if (acc.is_other_method) {
             return {
               is_other_method: true,
@@ -85,7 +83,6 @@ async function encryptAndInsert(
               accountNumber: null,
             };
           }
-          // 계좌번호 방식일 경우
           return {
             is_other_method: false,
             other_method_details: null,
@@ -114,7 +111,7 @@ async function encryptAndInsert(
       company_type: reportData.company_type,
       description: reportData.description || null,
       nickname: reportData.nickname || null,
-      perpetrator_account: reportData.perpetrator_account || null, // 이 필드가 추가되었습니다.
+      perpetrator_account: reportData.perpetrator_account || null,
       perpetrator_id: reportData.perpetrator_id || null,
       ip_address: clientIp || null,
       gender: reportData.gender,
@@ -130,6 +127,7 @@ async function encryptAndInsert(
         reportData.illegal_collection_evidence_urls || null,
       traded_item_image_urls: reportData.traded_item_image_urls || null,
       detailed_crime_type: reportData.detailed_crime_type || null,
+      crypto_transfer_amount: reportData.crypto_transfer_amount,
       damage_amount: reportData.damage_amount,
       is_face_to_face: reportData.is_face_to_face,
       no_damage_amount: reportData.no_damage_amount,
