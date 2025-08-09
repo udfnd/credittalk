@@ -16,7 +16,7 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { logPageView } from "../lib/pageViewLogger";
 
 export default function HelpDeskListScreen({ navigation }) {
-  const { user } = useAuth();
+  const { user } = useAuth(); // 현재 로그인한 사용자 정보
   const [questions, setQuestions] = useState([]);
   const [publicIdSet, setPublicIdSet] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -28,7 +28,6 @@ export default function HelpDeskListScreen({ navigation }) {
     }
   }, [user]);
 
-  // [최종 수정] 가장 안정적이고 효율적인 2-Step 방식으로 데이터 조회 로직을 변경합니다.
   const fetchQuestionsAndPublicStatus = async () => {
     if (!user) {
       setQuestions([]);
@@ -36,7 +35,6 @@ export default function HelpDeskListScreen({ navigation }) {
       return;
     }
 
-    // 1. 모든 질문 목록을 가져옵니다.
     const { data: questionsData, error: questionsError } = await supabase
       .from("help_questions")
       .select("*")
@@ -56,10 +54,8 @@ export default function HelpDeskListScreen({ navigation }) {
       return;
     }
 
-    // 2. 가져온 질문들의 ID만 추출합니다.
     const questionIds = questionsData.map(q => q.id);
 
-    // 3. [핵심] new_crime_cases 테이블에 단 한 번만 쿼리하여 공개된 질문 ID 목록을 가져옵니다.
     const { data: publicCases, error: publicError } = await supabase
       .from('new_crime_cases')
       .select('source_help_question_id')
@@ -68,7 +64,6 @@ export default function HelpDeskListScreen({ navigation }) {
     if (publicError) {
       console.error("Error fetching public status:", publicError);
     } else {
-      // 4. O(1) 시간 복잡도로 빠른 조회를 위해 Set 자료구조에 저장합니다.
       const publicSet = new Set(publicCases.map(p => p.source_help_question_id));
       setPublicIdSet(publicSet);
     }
@@ -90,31 +85,42 @@ export default function HelpDeskListScreen({ navigation }) {
   }, [user]);
 
   const renderItem = ({ item }) => {
-    // Set에 ID가 있는지 확인하여 공개 여부를 결정합니다.
     const isPublic = publicIdSet.has(item.id);
+    // [핵심 수정] 현재 사용자가 작성한 질문인지 확인하는 변수 추가
+    const currentUserId = user?.id || user?.uid;
+    const isMine = user && item.user_id === currentUserId;
+    // [핵심 수정] 공개되었거나, 내가 쓴 글이면 클릭 가능
+    const isClickable = isPublic || isMine;
+
+    // 상태에 따른 스타일과 텍스트를 결정하는 함수
+    const getStatusInfo = () => {
+      if (isPublic) {
+        return { text: "공개된 질문", style: styles.publicTag, icon: 'lock-open-variant-outline', color: '#228be6' };
+      }
+      if (isMine) {
+        return { text: "내가 쓴 비공개 질문", style: styles.myPrivateTag, icon: 'lock-outline', color: '#845ef7' };
+      }
+      return { text: "비공개 질문", style: styles.privateTag, icon: 'lock-outline', color: '#868e96' };
+    };
+
+    const statusInfo = getStatusInfo();
 
     return (
       <TouchableOpacity
         style={[
           styles.itemContainer,
-          // 비공개일 때 클릭이 안 되는 것처럼 보이게 스타일 추가
-          !isPublic && styles.disabledItem
+          // [수정] 클릭 불가능한 항목에만 비활성화 스타일 적용
+          !isClickable && styles.disabledItem
         ]}
-        // 비공개 질문은 클릭을 완전히 비활성화합니다.
-        disabled={!isPublic}
-        onPress={() => {
-          // 클릭 시, 공개된 질문만 상세 페이지로 이동합니다.
-          if (isPublic) {
-            navigation.navigate("HelpDeskDetail", { questionId: item.id });
-          }
-          // 비공개 질문은 disabled 속성으로 인해 이 함수가 실행되지 않습니다.
-        }}
+        // [수정] isClickable 변수에 따라 비활성화 여부 결정
+        disabled={!isClickable}
+        onPress={() => navigation.navigate("HelpDeskDetail", { questionId: item.id })}
       >
         <View style={styles.itemHeader}>
           <Icon
-            name={isPublic ? 'lock-open-variant-outline' : 'lock-outline'}
+            name={statusInfo.icon}
             size={16}
-            color={isPublic ? "#228be6" : "#868e96"}
+            color={statusInfo.color}
             style={styles.iconStyle}
           />
           <Text style={styles.itemTitle} numberOfLines={1}>
@@ -125,8 +131,8 @@ export default function HelpDeskListScreen({ navigation }) {
           </Text>
         </View>
         <View style={styles.statusContainer}>
-          <Text style={[styles.statusTag, isPublic ? styles.publicTag : styles.privateTag]}>
-            {isPublic ? "공개된 질문" : "비공개 질문"}
+          <Text style={[styles.statusTag, statusInfo.style]}>
+            {statusInfo.text}
           </Text>
           <Text style={item.is_answered ? styles.statusAnswered : styles.statusPending}>
             {item.is_answered ? "답변 완료" : "답변 대기중"}
@@ -181,7 +187,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 18, fontWeight: "600", color: "#495057", marginTop: 15 },
   itemContainer: { backgroundColor: "white", paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: "#e9ecef" },
   disabledItem: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f1f3f5',
     opacity: 0.6
   },
   itemHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
@@ -192,6 +198,7 @@ const styles = StyleSheet.create({
   statusTag: { fontSize: 12, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, overflow: 'hidden' },
   publicTag: { backgroundColor: '#dbe4ff', color: '#3d5afe' },
   privateTag: { backgroundColor: '#e9ecef', color: '#868e96' },
+  myPrivateTag: { backgroundColor: '#e5dbff', color: '#7048e8' }, // [추가] 내가 쓴 비공개 질문 스타일
   statusAnswered: { fontSize: 14, color: "#3d5afe", fontWeight: '600' },
   statusPending: { fontSize: 14, color: "#f03e3e", fontWeight: '600' },
   fab: { position: "absolute", right: 20, bottom: 20, backgroundColor: "#3d5afe", width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
