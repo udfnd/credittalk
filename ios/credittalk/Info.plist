@@ -22,6 +22,8 @@
 	<string>credittalk</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
+	    <string>https</string>
+        <string>http</string>
 		<string>kakaokompassauth</string>
 		<string>storykompassauth</string>
 		<string>kakaolink</string>
