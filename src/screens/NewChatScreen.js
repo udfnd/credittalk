@@ -31,11 +31,11 @@ function NewChatScreen() {
         setIsLoading(true);
         let query = supabase
             .from('users') // public.users 테이블
-            .select('id, name, auth_user_id')
+            .select('id, nickname, auth_user_id')
             .neq('auth_user_id', user.id);
 
         if (currentSearchTerm.trim()) {
-            query = query.ilike('name', `%${currentSearchTerm.trim()}%`);
+            query = query.ilike('nickname', `%${currentSearchTerm.trim()}%`);
         }
 
         const { data, error } = await query;
@@ -74,7 +74,7 @@ function NewChatScreen() {
         }
 
         setIsCreatingChat(true); // 채팅방 생성 로딩 시작
-        console.log(`[NewChatScreen] Attempting to create/go to chat with: ${otherUser.name} (ID: ${otherUser.auth_user_id})`);
+        console.log(`[NewChatScreen] Attempting to create/go to chat with: ${otherUser.nickname} (ID: ${otherUser.auth_user_id})`);
         console.log(`[NewChatScreen] Current user ID: ${user.id}`);
 
         try {
@@ -98,7 +98,7 @@ function NewChatScreen() {
             if (functionData && functionData.roomId) {
                 navigation.navigate('ChatMessageScreen', {
                     roomId: functionData.roomId,
-                    roomName: otherUser.name || '채팅', // 상대방 이름으로 채팅방 이름 설정
+                    roomName: otherUser.nickname || '채팅', // 상대방 이름으로 채팅방 이름 설정
                 });
             } else if (functionData && functionData.error) {
                 // 함수 내부에서 에러를 JSON으로 반환한 경우
@@ -123,7 +123,7 @@ function NewChatScreen() {
             disabled={isCreatingChat} // 채팅방 생성 중에는 버튼 비활성화
         >
             <Icon name="account-circle-outline" size={24} color="#444" style={styles.userIcon} />
-            <Text style={styles.userName}>{item.name || '이름 없음'}</Text>
+            <Text style={styles.userName}>{item.nickname || '이름 없음'}</Text>
             <Icon name="chevron-right" size={22} color="#ccc" />
         </TouchableOpacity>
     );
