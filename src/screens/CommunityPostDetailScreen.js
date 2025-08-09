@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   Alert,
   Image,
-  Dimensions,
+  Dimensions, Linking
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
@@ -43,7 +43,7 @@ function CommunityPostDetailScreen({ route }) {
       const { data, error: fetchError } = await supabase
         .from("community_posts_with_author_profile")
         .select(
-          "id, title, content, created_at, author_auth_id, author_name, views, image_urls",
+          "id, title, content, created_at, author_auth_id, author_name, views, image_urls, link_url",
         )
         .eq("id", postId)
         .single();
@@ -75,6 +75,28 @@ function CommunityPostDetailScreen({ route }) {
     fetchPostDetail();
   }, [fetchPostDetail]);
 
+  const sanitizeUrl = (raw) => {
+    if (!raw) return "";
+    return String(raw)
+      .trim() // 앞뒤 공백 제거
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
+      .replace(/\s+/g, ""); // 중간 공백 제거
+  };
+
+  const handleLinkPress = async (rawUrl) => {
+    const url = sanitizeUrl(rawUrl);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
+    }
+  };
+
   const handleDeletePost = async () => {
     if (post?.author_auth_id !== user?.id) {
       Alert.alert("권한 없음", "자신의 글만 삭제할 수 있습니다.");
@@ -88,12 +110,8 @@ function CommunityPostDetailScreen({ route }) {
         onPress: async () => {
           setIsLoading(true);
           try {
-            // --- (수정된 부분) ---
-            // 1. Storage에서 실제 경로를 기반으로 이미지들을 삭제합니다.
             if (post.image_urls && post.image_urls.length > 0) {
               const filePaths = post.image_urls.map(url => {
-                // Public URL에서 버킷 이름 뒷부분의 경로(폴더 포함)를 정확히 추출합니다.
-                // 예: 'community-posts/image-001.png'
                 const path = url.split('/post-images/')[1];
                 return path;
               });
@@ -103,7 +121,6 @@ function CommunityPostDetailScreen({ route }) {
                 .remove(filePaths);
 
               if (storageError) {
-                // Storage에서 파일 삭제에 실패하더라도 DB 삭제는 시도하도록 throw하지 않습니다.
                 console.warn('Storage 이미지 삭제 실패:', storageError.message);
               }
             }
@@ -223,13 +240,19 @@ function CommunityPostDetailScreen({ route }) {
             게시일: {new Date(post.created_at).toLocaleString()}
           </Text>
         </View>
-
         {renderImages()}
-
         <View style={styles.contentContainer}>
           <Text style={styles.content}>{post.content || "내용이 없습니다."}</Text>
         </View>
-
+        {post.link_url && (
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => handleLinkPress(post.link_url)}
+          >
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
+        )}
         <CommentsSection postId={postId} boardType="community_posts" />
       </ScrollView>
     </SafeAreaView>
@@ -344,6 +367,26 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: "white",
     fontSize: 16
+  },
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3d5afe',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  linkButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 
