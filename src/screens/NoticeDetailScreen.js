@@ -59,12 +59,25 @@ const NoticeDetailScreen = () => {
     fetchNoticeDetails();
   }, [noticeId]);
 
-  const handleLinkPress = async (url) => {
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      await Linking.openURL(url);
-    } else {
-      Alert.alert('오류', `이 링크를 열 수 없습니다: ${url}`);
+  const sanitizeUrl = (raw) => {
+    if (!raw) return "";
+    return String(raw)
+      .trim() // 앞뒤 공백 제거
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
+      .replace(/\s+/g, ""); // 중간 공백 제거
+  };
+
+  const handleLinkPress = async (rawUrl) => {
+    const url = sanitizeUrl(rawUrl);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
     }
   };
 
@@ -99,8 +112,6 @@ const NoticeDetailScreen = () => {
           </Text>
           <View style={styles.separator} />
           <Text style={styles.content}>{notice.content}</Text>
-
-          {/* --- 4. 이미지 갤러리 렌더링 (원래 기능 복구) --- */}
           {notice.image_urls && notice.image_urls.length > 0 && (
             <View style={styles.imageGallery}>
               {notice.image_urls.map((url, index) => (
@@ -187,7 +198,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
   },
-  // --- 링크 버튼 스타일 추가 ---
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',

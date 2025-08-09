@@ -8,8 +8,8 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Image,
-  Dimensions,
-} from 'react-native';
+  Dimensions, Linking, Alert
+} from "react-native";
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
@@ -28,13 +28,35 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     }
   }, [newsTitle, navigation]);
 
+  const sanitizeUrl = (raw) => {
+    if (!raw) return "";
+    return String(raw)
+      .trim() // 앞뒤 공백 제거
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
+      .replace(/\s+/g, ""); // 중간 공백 제거
+  };
+
+  const handleLinkPress = async (rawUrl) => {
+    const url = sanitizeUrl(rawUrl);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
+    }
+  };
+
   const fetchNewsDetail = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select('id, title, content, created_at, author_name, image_urls, is_pinned')
+        .select('id, title, content, created_at, author_name, image_urls, is_pinned, link_url')
         .eq('id', newsId)
         .eq('is_published', true)
         .single();
@@ -58,8 +80,6 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   }, [fetchNewsDetail]);
 
   const renderImages = () => {
-    // --- (수정된 부분 2) ---
-    // image_urls 배열이 유효한지 확인하고, 여러 이미지를 렌더링하는 로직
     if (!news?.image_urls || news.image_urls.length === 0) {
       return null;
     }
@@ -127,8 +147,6 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
         <View style={styles.headerContainer}>
-          {/* --- (추가된 부분) --- */}
-          {/* is_pinned가 true일 경우 핀 아이콘과 텍스트를 표시합니다. */}
           {news.is_pinned && (
             <View style={styles.pinnedContainer}>
               <Icon name="pin" size={16} color="#d35400" />
@@ -145,14 +163,19 @@ function ArrestNewsDetailScreen({ route, navigation }) {
             </Text>
           </View>
         </View>
-
-        {/* --- (수정된 부분 3) --- */}
-        {/* 이미지를 렌더링하는 함수를 호출합니다. */}
         {renderImages()}
-
         <View style={styles.contentContainer}>
           <Text style={styles.content}>{news.content || '내용이 없습니다.'}</Text>
         </View>
+        {news.link_url && (
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => handleLinkPress(news.link_url)}
+          >
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
+        )}
         <CommentsSection postId={newsId} boardType="arrest_news" />
       </ScrollView>
     </SafeAreaView>
@@ -160,7 +183,6 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  // --- (수정 및 추가된 스타일) ---
   container: { flex: 1, backgroundColor: '#f9f9f9' },
   centered: {
     flex: 1,
@@ -241,6 +263,27 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   retryButtonText: { color: 'white', fontSize: 16 },
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3d5afe',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  linkButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+
 });
 
 export default ArrestNewsDetailScreen;

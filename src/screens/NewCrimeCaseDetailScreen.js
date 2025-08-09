@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Image,
-  Dimensions,
+  Dimensions, Linking, Alert
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
@@ -36,7 +36,7 @@ function NewCrimeCaseDetailScreen({ route }) {
     try {
       const { data, error: fetchError } = await supabase
         .from("new_crime_cases")
-        .select("id, created_at, title, method, image_urls")
+        .select("id, created_at, title, method, image_urls, link_url")
         .eq("id", caseId)
         .eq("is_published", true)
         .single();
@@ -66,6 +66,28 @@ function NewCrimeCaseDetailScreen({ route }) {
       </View>
     );
   }
+
+  const sanitizeUrl = (raw) => {
+    if (!raw) return "";
+    return String(raw)
+      .trim() // 앞뒤 공백 제거
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
+      .replace(/\s+/g, ""); // 중간 공백 제거
+  };
+
+  const handleLinkPress = async (rawUrl) => {
+    const url = sanitizeUrl(rawUrl);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
+    }
+  };
 
   if (error) {
     return (
@@ -102,7 +124,6 @@ function NewCrimeCaseDetailScreen({ route }) {
       <View style={styles.contentContainer}>
         <Text style={styles.content}>{caseDetail.method}</Text>
       </View>
-
       {Array.isArray(caseDetail.image_urls) &&
         caseDetail.image_urls.length > 0 && (
           <View style={styles.imageSection}>
@@ -116,6 +137,15 @@ function NewCrimeCaseDetailScreen({ route }) {
               />
             ))}
           </View>
+        )}
+        {caseDetail.link_url && (
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => handleLinkPress(caseDetail.link_url)}
+          >
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
         )}
         <CommentsSection postId={caseId} boardType="new_crime_cases" />
       </ScrollView>
@@ -191,6 +221,26 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   retryButtonText: { color: "white", fontSize: 16 },
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3d5afe',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  linkButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
 });
 
 export default NewCrimeCaseDetailScreen;
