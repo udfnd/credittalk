@@ -8,8 +8,8 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
-  TouchableOpacity,
-} from 'react-native';
+  TouchableOpacity, Linking, Alert
+} from "react-native";
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
@@ -30,13 +30,35 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     }
   }, [photoTitle, navigation]);
 
+  const sanitizeUrl = (raw) => {
+    if (!raw) return "";
+    return String(raw)
+      .trim() // 앞뒤 공백 제거
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
+      .replace(/\s+/g, ""); // 중간 공백 제거
+  };
+
+  const handleLinkPress = async (rawUrl) => {
+    const url = sanitizeUrl(rawUrl);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (e) {
+      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
+    }
+  };
+
   const fetchPhotoDetail = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('incident_photos')
-        .select('id, title, created_at, image_urls, category, description')
+        .select('id, title, created_at, image_urls, category, description, link_url')
         .eq('id', photoId)
         .eq('is_published', true)
         .single();
@@ -59,7 +81,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     fetchPhotoDetail();
   }, [fetchPhotoDetail]);
 
-  // 스크롤 시 현재 이미지 인덱스를 계산하는 함수
   const handleScroll = (event) => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / width);
@@ -67,8 +88,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   };
 
   const renderImages = () => {
-    // --- (수정된 부분 2) ---
-    // image_urls 배열을 기반으로 이미지를 렌더링하는 로직
     if (!photo?.image_urls || photo.image_urls.length === 0) {
       return null;
     }
@@ -91,7 +110,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
             />
           ))}
         </ScrollView>
-        {/* 여러 이미지일 경우 인디케이터(점) 표시 */}
         {photo.image_urls.length > 1 && (
           <View style={styles.indicatorContainer}>
             {photo.image_urls.map((_, index) => (
@@ -108,7 +126,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
       </View>
     );
   };
-
 
   if (isLoading) {
     return (
@@ -144,11 +161,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{photo.title}</Text>
         </View>
-
-        {/* --- (수정된 부분 3) --- */}
-        {/* 이미지 렌더링 함수 호출 */}
         {renderImages()}
-
         <View style={styles.detailsContainer}>
           <View style={styles.metaContainer}>
             {photo.category && (
@@ -166,6 +179,15 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
               {photo.description || '설명이 없습니다.'}
             </Text>
           </View>
+          {photo.link_url && (
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => handleLinkPress(photo.link_url)}
+            >
+              <Icon name="link-variant" size={20} color="#fff" />
+              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <CommentsSection postId={photoId} boardType="incident_photos" />
       </ScrollView>
@@ -174,7 +196,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  // --- (전체적으로 개선된 스타일) ---
   container: { flex: 1, backgroundColor: '#f9f9f9' },
   centered: {
     flex: 1,
@@ -281,6 +302,26 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: 'white',
     fontSize: 16
+  },
+  linkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3d5afe',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  linkButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 
