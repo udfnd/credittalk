@@ -10,94 +10,59 @@ import {
 } from "react-native";
 import { supabase } from "../lib/supabaseClient";
 import { useFocusEffect } from "@react-navigation/native";
-import { useAuth } from "../context/AuthContext"; // AuthContext import 추가
+import { useAuth } from "../context/AuthContext";
 
+// 마스킹 함수들은 변경 없이 그대로 유지
 const maskNameMiddle = (name) => {
-  if (!name || typeof name !== "string" || name.length <= 1) {
-    return name || "";
-  }
-  if (name.length === 2) {
-    return `${name[0]}*`;
-  }
+  if (!name || typeof name !== "string" || name.length <= 1) return name || "";
+  if (name.length === 2) return `${name[0]}*`;
   const middleIndex = Math.floor(name.length / 2);
   return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
 };
 
 const maskPhoneNumberCustom = (phoneNumber) => {
-  if (!phoneNumber || typeof phoneNumber !== "string") {
-    return phoneNumber || "";
-  }
+  if (!phoneNumber || typeof phoneNumber !== "string") return phoneNumber || "";
   const clean = phoneNumber.replace(/-/g, "");
   const len = clean.length;
-
   if (len === 11) {
     const p1 = clean.substring(0, 3);
-    const p2 = clean.substring(3, 7);  // 4자리
-    const p3 = clean.substring(7, 11); // 4자리
-
-    // 중간 1자리만 마스킹 (index 1)
+    const p2 = clean.substring(3, 7);
+    const p3 = clean.substring(7, 11);
     const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
-    // 끝 1자리만 마스킹 (index 1 of p3)
     const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
-
     return `${p1}-${maskedP2}-${maskedP3}`;
   }
-
   if (len === 10) {
     if (clean.startsWith("02")) {
       const p1 = clean.substring(0, 2);
-      const p2 = clean.substring(2, 6);  // 4자리
-      const p3 = clean.substring(6, 10); // 4자리
-
+      const p2 = clean.substring(2, 6);
+      const p3 = clean.substring(6, 10);
       const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
       const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
-
       return `${p1}-${maskedP2}-${maskedP3}`;
     } else {
       const p1 = clean.substring(0, 3);
-      const p2 = clean.substring(3, 6);  // 3자리
-      const p3 = clean.substring(6, 10); // 4자리
-
-      // 3자리 중 중간 1자리만 마스킹
+      const p2 = clean.substring(3, 6);
+      const p3 = clean.substring(6, 10);
       const maskedP2 = `${p2[0]}*${p2[2]}`;
       const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
-
       return `${p1}-${maskedP2}-${maskedP3}`;
     }
   }
-
-  // 기타 길이: 문자열의 정확한 가운데 한 문자, 그 다음 문자를 남기고 나머지 그대로
   const mid = Math.floor(len / 2) - 1;
   if (mid <= 0) return clean;
-  return (
-    clean.substring(0, mid) +
-    "*" +
-    clean.substring(mid + 1)
-  );
+  return clean.substring(0, mid) + "*" + clean.substring(mid + 1);
 };
 
-// 계좌번호 마스킹: 앞 2자리, 뒤부터 2자리만 '**' 처리 (변경 없음)
 const maskAccountNumber = (accountNumber) => {
-  if (!accountNumber || typeof accountNumber !== "string") {
-    return accountNumber || "";
-  }
-
+  if (!accountNumber || typeof accountNumber !== "string") return accountNumber || "";
   const clean = accountNumber.replace(/-/g, "");
-  if (clean.length < 6) {
-    return accountNumber;
-  }
-
+  if (clean.length < 6) return accountNumber;
   const PREFIX_COUNT = 2;
   const MASK_COUNT = 2;
   const endMaskedIndex = PREFIX_COUNT + MASK_COUNT;
-
-  return (
-    clean.substring(0, PREFIX_COUNT) +
-    "*".repeat(MASK_COUNT) +
-    clean.substring(endMaskedIndex)
-  );
+  return clean.substring(0, PREFIX_COUNT) + "*".repeat(MASK_COUNT) + clean.substring(endMaskedIndex);
 };
-
 
 const DetailItem = ({ label, value }) => {
   if (!value) return null;
@@ -110,19 +75,25 @@ const DetailItem = ({ label, value }) => {
 };
 
 const AnswerItem = ({ answer }) => {
-  // ... 기존 AnswerItem 코드는 동일 ...
+  return (
+    <View style={styles.answerItemContainer}>
+      <Text style={styles.answerContent}>{answer.content}</Text>
+      <Text style={styles.answerDate}>
+        {new Date(answer.created_at).toLocaleString('ko-KR')}
+      </Text>
+    </View>
+  );
 };
 
 export default function HelpDeskDetailScreen({ route }) {
   const { questionId } = route.params;
-  const { user } = useAuth(); // 현재 로그인한 사용자 정보 가져오기
+  const { user } = useAuth();
   const [question, setQuestion] = useState(null);
   const [isPublic, setIsPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchQuestion = useCallback(async () => {
-    // 1. 원본 문의 내용과 답변을 가져옵니다.
     const { data, error } = await supabase
       .from("help_questions")
       .select(`*, help_answers(*)`)
@@ -138,18 +109,12 @@ export default function HelpDeskDetailScreen({ route }) {
 
     if (data) {
       setQuestion(data);
-      // 2. 해당 글이 공개된 글인지 new_crime_cases 테이블을 통해 확인합니다.
-      const { data: publicCase, error: publicError } = await supabase
+      const { data: publicCase } = await supabase
         .from('new_crime_cases')
-        .select('id')
-        .eq('source_help_question_id', questionId)
-        .single();
+        .select('id', { count: 'exact', head: true }) // 데이터 없이 존재 여부만 확인하여 더 효율적
+        .eq('source_help_question_id', questionId);
 
-      if (publicCase) {
-        setIsPublic(true);
-      } else {
-        setIsPublic(false);
-      }
+      setIsPublic(publicCase && publicCase.count > 0);
     } else {
       setQuestion(null);
     }
@@ -176,13 +141,23 @@ export default function HelpDeskDetailScreen({ route }) {
     return <View style={styles.centered}><Text style={styles.infoText}>문의 내역을 찾을 수 없거나 접근 권한이 없습니다.</Text></View>;
   }
 
-  // [수정됨] 마스킹 여부를 결정하는 로직
-  const isOwner = user?.id === question.user_id;
+  const currentUserId = user?.id || user?.uid;
+  const isOwner = currentUserId === question.user_id;
   const shouldMaskData = isPublic && !isOwner;
 
-  const answers = (question && Array.isArray(question.help_answers) && question.help_answers[0] !== null)
-    ? question.help_answers
-    : [];
+  // [핵심 최종 수정]
+  // help_answers가 배열이든, 단일 객체이든, null이든 상관없이 항상 배열로 만듭니다.
+  let answers = [];
+  if (question?.help_answers) {
+    if (Array.isArray(question.help_answers)) {
+      answers = question.help_answers.filter(Boolean); // null 값 제거
+    } else if (typeof question.help_answers === 'object' && question.help_answers !== null) {
+      answers = [question.help_answers]; // 객체를 배열로 감쌉니다.
+    }
+  }
+
+  const hasAnswer = answers.length > 0;
+  const canViewAnswer = (isOwner || isPublic) && hasAnswer;
 
   return (
     <ScrollView
@@ -202,8 +177,7 @@ export default function HelpDeskDetailScreen({ route }) {
         <DetailItem label="사건 개요" value={question.case_summary} />
       </View>
 
-      {/* [수정됨] 마스킹이 필요하지 않을 때만 답변을 보여줍니다. */}
-      {!shouldMaskData && answers.length > 0 ? (
+      {canViewAnswer ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>관리자 답변</Text>
           {answers.map((answer) => (
@@ -211,8 +185,7 @@ export default function HelpDeskDetailScreen({ route }) {
           ))}
         </View>
       ) : (
-        // 본인이 작성한 글이면서 아직 답변이 없는 경우에만 '답변 준비 중' 표시
-        isOwner && !question.is_answered && (
+        isOwner && !hasAnswer && (
           <View style={[styles.section, styles.pendingSection]}>
             <Text style={styles.pendingText}>답변을 준비중입니다.</Text>
           </View>
@@ -244,8 +217,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 12,
     marginBottom: 16,
-    elevation: 2, // for Android shadow
-    shadowColor: "#000", // for iOS shadow
+    elevation: 2,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -270,12 +243,10 @@ const styles = StyleSheet.create({
     color: "#212529",
     lineHeight: 24,
   },
-  // --- 답변 관련 스타일 ---
   answerItemContainer: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#f1f3f5',
     borderRadius: 8,
     padding: 16,
-    // 여러 답변이 있을 경우를 대비해 하단 마진 추가
     marginBottom: 10,
   },
   answerContent: {
