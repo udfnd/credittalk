@@ -9,17 +9,23 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Image,
-  Dimensions, Linking, Alert
+  Dimensions,
+  Linking,
+  Alert,
+  Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigation } from "@react-navigation/native";
+import { useHeaderHeight } from "@react-navigation/elements";
 import CommentsSection from "../components/CommentsSection";
 
 const { width } = Dimensions.get("window");
 
 function NewCrimeCaseDetailScreen({ route }) {
   const navigation = useNavigation();
+  const headerHeight = useHeaderHeight(); // iOS 키보드 회피 offset
   const { caseId } = route.params;
 
   const [caseDetail, setCaseDetail] = useState(null);
@@ -59,20 +65,9 @@ function NewCrimeCaseDetailScreen({ route }) {
     fetchCaseDetail();
   }, [fetchCaseDetail]);
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3d5afe" />
-      </View>
-    );
-  }
-
   const sanitizeUrl = (raw) => {
     if (!raw) return "";
-    return String(raw)
-      .trim() // 앞뒤 공백 제거
-      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
-      .replace(/\s+/g, ""); // 중간 공백 제거
+    return String(raw).trim().replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "").replace(/\s+/g, "");
   };
 
   const handleLinkPress = async (rawUrl) => {
@@ -88,6 +83,14 @@ function NewCrimeCaseDetailScreen({ route }) {
       Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
     }
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#3d5afe" />
+      </View>
+    );
+  }
 
   if (error) {
     return (
@@ -110,50 +113,61 @@ function NewCrimeCaseDetailScreen({ route }) {
   }
 
   return (
-    <SafeAreaView
-      style={styles.container}
-      contentContainerStyle={styles.scrollContent}
-    >
-      <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
-        <View style={styles.header}>
-        <Text style={styles.label}>{caseDetail.title}</Text>
-        <Text style={styles.date}>
-          게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
-        </Text>
-      </View>
-      <View style={styles.contentContainer}>
-        <Text style={styles.content}>{caseDetail.method}</Text>
-      </View>
-      {Array.isArray(caseDetail.image_urls) &&
-        caseDetail.image_urls.length > 0 && (
-          <View style={styles.imageSection}>
-            <Text style={styles.label}>첨부 사진</Text>
-            {caseDetail.image_urls.map((url, index) => (
-              <Image
-                key={index}
-                source={{ uri: url }}
-                style={styles.image}
-                resizeMode="contain"
-              />
-            ))}
+    <SafeAreaView style={styles.container}>
+      {/* 화면 전체 키보드 회피: 입력창이 키보드에 가리지 않음 + 배경 흰색으로 갭 메우기 */}
+      <KeyboardAvoidingView
+        style={styles.kbWrapper}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
+      >
+        {/* 본문만 세로 ScrollView로 렌더링 */}
+        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.label}>{caseDetail.title}</Text>
+            <Text style={styles.date}>
+              게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
+            </Text>
           </View>
-        )}
-        {caseDetail.link_url && (
-          <TouchableOpacity
-            style={styles.linkButton}
-            onPress={() => handleLinkPress(caseDetail.link_url)}
-          >
-            <Icon name="link-variant" size={20} color="#fff" />
-            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
-          </TouchableOpacity>
-        )}
+
+          <View style={styles.contentContainer}>
+            <Text style={styles.content}>{caseDetail.method}</Text>
+          </View>
+
+          {Array.isArray(caseDetail.image_urls) && caseDetail.image_urls.length > 0 && (
+            <View style={styles.imageSection}>
+              <Text style={styles.label}>첨부 사진</Text>
+              {caseDetail.image_urls.map((url, index) => (
+                <Image
+                  key={index}
+                  source={{ uri: url }}
+                  style={styles.image}
+                  resizeMode="contain"
+                />
+              ))}
+            </View>
+          )}
+
+          {caseDetail.link_url && (
+            <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(caseDetail.link_url)}>
+              <Icon name="link-variant" size={20} color="#fff" />
+              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+
+        {/* 댓글 섹션: ScrollView 바깥(형제) → FlatList 중첩 방지 */}
         <CommentsSection postId={caseId} boardType="new_crime_cases" />
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  // 레이아웃/배경
+  container: { flex: 1, backgroundColor: "#fff" },
+  kbWrapper: { flex: 1, backgroundColor: "#fff" }, // 키보드/입력창 사이 갭을 흰색으로 메움
+
+  // 로딩/에러
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -161,41 +175,30 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#f8f9fa",
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
+  errorText: { marginTop: 10, fontSize: 16, color: "#e74c3c", textAlign: "center" },
+  emptyText: { fontSize: 16, color: "#7f8c8d" },
+  retryButton: {
+    marginTop: 20, backgroundColor: "#3d5afe", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
   },
-  scrollContent: {
-    padding: 20,
-  },
+  retryButtonText: { color: "white", fontSize: 16 },
+
+  // 본문
   header: {
     marginBottom: 15,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#ecf0f1",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    backgroundColor: "#fff",
   },
-  label: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    marginBottom: 8,
-  },
-  date: {
-    fontSize: 13,
-    color: "#7f8c8d",
-    textAlign: "right",
-  },
-  contentContainer: {
-    marginBottom: 25,
-  },
-  content: {
-    fontSize: 16,
-    lineHeight: 26,
-    color: "#34495e",
-  },
-  imageSection: {
-    marginTop: 10,
-  },
+  label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
+  date: { fontSize: 13, color: "#7f8c8d", textAlign: "right" },
+
+  contentContainer: { marginBottom: 25, paddingHorizontal: 20, backgroundColor: "#fff" },
+  content: { fontSize: 16, lineHeight: 26, color: "#34495e" },
+
+  imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
   image: {
     width: "100%",
     height: width * 0.8,
@@ -203,24 +206,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: "#e9ecef",
   },
-  errorText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#e74c3c",
-    textAlign: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#7f8c8d",
-  },
-  retryButton: {
-    marginTop: 20,
-    backgroundColor: "#3d5afe",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-  },
-  retryButtonText: { color: "white", fontSize: 16 },
+
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,13 +220,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
+    marginHorizontal: 20,
   },
-  linkButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
+  linkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
 });
 
 export default NewCrimeCaseDetailScreen;
