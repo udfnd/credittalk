@@ -9,20 +9,21 @@
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		19504E381536996957C4FF57 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		4F8537FF3F7AB593EDC35F27 /* Pods_CreditTalk.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F6409D12C25E8584CD2607F /* Pods_CreditTalk.framework */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
-		7B8B718BFAC74CB41A217D3A /* Pods_credittalk.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0D52E902680B05A1E2ECD27 /* Pods_credittalk.framework */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* CreditTalk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "CreditTalk.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = "CreditTalk/Images.xcassets"; sourceTree = "<group>"; };
-		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = "CreditTalk/Info.plist"; sourceTree = "<group>"; };
+		13B07F961A680F5B00A75B9A /* CreditTalk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CreditTalk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = CreditTalk/Images.xcassets; sourceTree = "<group>"; };
+		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = CreditTalk/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = CreditTalk/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1F6409D12C25E8584CD2607F /* Pods_CreditTalk.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_CreditTalk.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		2DA19FA68EB2AADC06421DF6 /* Pods-CreditTalk.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CreditTalk.debug.xcconfig"; path = "Target Support Files/Pods-CreditTalk/Pods-CreditTalk.debug.xcconfig"; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = CreditTalk/AppDelegate.swift; sourceTree = "<group>"; };
-		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = "CreditTalk/LaunchScreen.storyboard"; sourceTree = "<group>"; };
-		BBE94EEFCBDEF69F31037A70 /* Pods-CreditTalk.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CreditTalk.release.xcconfig"; path = "Target Support Files/Pods-CreditTalk/Pods-CreditTalk.release.xcconfig"; sourceTree = "<group>"; };
-		ECA9C6457E408C4BE7B4965A /* Pods-CreditTalk.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CreditTalk.debug.xcconfig"; path = "Target Support Files/Pods-CreditTalk/Pods-CreditTalk.debug.xcconfig"; sourceTree = "<group>"; };
+		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = CreditTalk/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		BA1D514A270E6DA146B952F0 /* Pods-CreditTalk.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CreditTalk.release.xcconfig"; path = "Target Support Files/Pods-CreditTalk/Pods-CreditTalk.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EF6708EE2DB5E00900C672C0 /* AntDesign.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = AntDesign.ttf; sourceTree = "<group>"; };
 		EF6708EF2DB5E00900C672C0 /* Entypo.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Entypo.ttf; sourceTree = "<group>"; };
@@ -43,7 +44,6 @@
 		EF6708FE2DB5E00900C672C0 /* Octicons.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Octicons.ttf; sourceTree = "<group>"; };
 		EF6708FF2DB5E00900C672C0 /* SimpleLineIcons.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = SimpleLineIcons.ttf; sourceTree = "<group>"; };
 		EF6709002DB5E00900C672C0 /* Zocial.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Zocial.ttf; sourceTree = "<group>"; };
-		F0D52E902680B05A1E2ECD27 /* Pods_credittalk.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_credittalk.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,7 +51,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7B8B718BFAC74CB41A217D3A /* Pods_credittalk.framework in Frameworks */,
+				4F8537FF3F7AB593EDC35F27 /* Pods_CreditTalk.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,14 +68,14 @@
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				EF6709012DB5E00900C672C0 /* Fonts */,
 			);
-			name = "CreditTalk";
+			name = CreditTalk;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				F0D52E902680B05A1E2ECD27 /* Pods_credittalk.framework */,
+				1F6409D12C25E8584CD2607F /* Pods_CreditTalk.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -112,8 +112,8 @@
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				ECA9C6457E408C4BE7B4965A /* Pods-CreditTalk.debug.xcconfig */,
-				BBE94EEFCBDEF69F31037A70 /* Pods-CreditTalk.release.xcconfig */,
+				2DA19FA68EB2AADC06421DF6 /* Pods-CreditTalk.debug.xcconfig */,
+				BA1D514A270E6DA146B952F0 /* Pods-CreditTalk.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -152,20 +152,20 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "CreditTalk" */;
 			buildPhases = (
-				269A8AA23D6ABD87AC41E696 /* [CP] Check Pods Manifest.lock */,
+				11F319D167A6489E22EEA266 /* [CP] Check Pods Manifest.lock */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				159DBC6684C07FB989FF5C51 /* [CP] Embed Pods Frameworks */,
-				E113118853C42814BFE04B53 /* [CP] Copy Pods Resources */,
+				60E069514255BC316AC1A96F /* [CP] Embed Pods Frameworks */,
+				6673BA7121DCD4C5CF7D47AE /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = "CreditTalk";
-			productName = "CreditTalk";
+			name = CreditTalk;
+			productName = CreditTalk;
 			productReference = 13B07F961A680F5B00A75B9A /* CreditTalk.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -182,7 +182,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "CreditTalk" */;
+			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "credittalk" */;
 			compatibilityVersion = "Xcode 12.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -230,24 +230,7 @@
 			shellPath = /bin/sh;
 			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"$WITH_ENVIRONMENT $REACT_NATIVE_XCODE\"\n";
 		};
-		159DBC6684C07FB989FF5C51 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-CreditTalk/Pods-CreditTalk-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-CreditTalk/Pods-CreditTalk-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-CreditTalk/Pods-CreditTalk-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		269A8AA23D6ABD87AC41E696 /* [CP] Check Pods Manifest.lock */ = {
+		11F319D167A6489E22EEA266 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -269,7 +252,24 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		E113118853C42814BFE04B53 /* [CP] Copy Pods Resources */ = {
+		60E069514255BC316AC1A96F /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-CreditTalk/Pods-CreditTalk-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-CreditTalk/Pods-CreditTalk-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-CreditTalk/Pods-CreditTalk-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		6673BA7121DCD4C5CF7D47AE /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -302,15 +302,15 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = ECA9C6457E408C4BE7B4965A /* Pods-CreditTalk.debug.xcconfig */;
+			baseConfigurationReference = 2DA19FA68EB2AADC06421DF6 /* Pods-CreditTalk.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8FYS622259;
 				ENABLE_BITCODE = NO;
-				INFOPLIST_FILE = "CreditTalk/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "CreditTalk";
+				INFOPLIST_FILE = CreditTalk/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CreditTalk;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -322,8 +322,8 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.credittalka";
-				PRODUCT_NAME = "CreditTalk";
+				PRODUCT_BUNDLE_IDENTIFIER = com.credittalka;
+				PRODUCT_NAME = CreditTalk;
 				SWIFT_OBJC_BRIDGING_HEADER = "CreditTalk-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -333,14 +333,14 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = BBE94EEFCBDEF69F31037A70 /* Pods-CreditTalk.release.xcconfig */;
+			baseConfigurationReference = BA1D514A270E6DA146B952F0 /* Pods-CreditTalk.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8FYS622259;
-				INFOPLIST_FILE = "CreditTalk/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "CreditTalk";
+				INFOPLIST_FILE = CreditTalk/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CreditTalk;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -352,8 +352,8 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.credittalka";
-				PRODUCT_NAME = "CreditTalk";
+				PRODUCT_BUNDLE_IDENTIFIER = com.credittalka;
+				PRODUCT_NAME = CreditTalk;
 				SWIFT_OBJC_BRIDGING_HEADER = "CreditTalk-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -440,7 +440,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
@@ -520,7 +523,10 @@
 					"-DFOLLY_CFG_NO_COROUTINES=1",
 					"-DFOLLY_HAVE_CLOCK_GETTIME=1",
 				);
-				OTHER_LDFLAGS = "$(inherited)  ";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					" ",
+				);
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = false;
@@ -540,7 +546,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "CreditTalk" */ = {
+		83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "credittalk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
