@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Alert,
   SafeAreaView,
@@ -11,12 +10,14 @@ import {
   Dimensions,
   TouchableOpacity,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 import CommentsSection from '../components/CommentsSection';
 
@@ -30,6 +31,7 @@ const NoticeDetailScreen = () => {
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // 공지 상세 불러오기
   useEffect(() => {
     const fetchNoticeDetails = async () => {
       if (!noticeId) {
@@ -37,7 +39,6 @@ const NoticeDetailScreen = () => {
         setLoading(false);
         return;
       }
-
       try {
         setLoading(true);
         const { data, error } = await supabase
@@ -45,7 +46,6 @@ const NoticeDetailScreen = () => {
           .select('*, link_url, image_urls')
           .eq('id', noticeId)
           .single();
-
         if (error) throw error;
         setNotice(data);
       } catch (error) {
@@ -55,16 +55,22 @@ const NoticeDetailScreen = () => {
         setLoading(false);
       }
     };
-
     fetchNoticeDetails();
   }, [noticeId]);
 
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
+
   const sanitizeUrl = (raw) => {
-    if (!raw) return "";
+    if (!raw) return '';
     return String(raw)
-      .trim() // 앞뒤 공백 제거
-      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "") // 제어문자 제거
-      .replace(/\s+/g, ""); // 중간 공백 제거
+      .trim()
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .replace(/\s+/g, '');
   };
 
   const handleLinkPress = async (rawUrl) => {
@@ -77,7 +83,7 @@ const NoticeDetailScreen = () => {
         await Linking.openURL(url);
       }
     } catch (e) {
-      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
+      Alert.alert('오류', `이 링크를 열 수 없습니다: ${e.message}`);
     }
   };
 
@@ -106,12 +112,11 @@ const NoticeDetailScreen = () => {
         <View style={styles.postContainer}>
           <Text style={styles.title}>{notice.title}</Text>
           <Text style={styles.date}>
-            {format(new Date(notice.created_at), 'yyyy년 MM월 dd일 HH:mm', {
-              locale: ko,
-            })}
+            {format(new Date(notice.created_at), 'yyyy년 MM월 dd일 HH:mm', { locale: ko })}
           </Text>
           <View style={styles.separator} />
           <Text style={styles.content}>{notice.content}</Text>
+
           {notice.image_urls && notice.image_urls.length > 0 && (
             <View style={styles.imageGallery}>
               {notice.image_urls.map((url, index) => (
@@ -134,70 +139,31 @@ const NoticeDetailScreen = () => {
             </TouchableOpacity>
           )}
         </View>
-        <CommentsSection postId={noticeId} boardType="notices" />
       </ScrollView>
+      <CommentsSection postId={noticeId} boardType="notices" />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-  },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  scrollContainer: { paddingBottom: 8 },
   loaderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff',
   },
-  errorText: {
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
-    color: '#555',
-  },
+  errorText: { textAlign: 'center', marginTop: 50, fontSize: 16, color: '#555' },
   postContainer: {
     backgroundColor: '#fff',
     padding: contentPadding,
     borderBottomWidth: 8,
     borderBottomColor: '#F8F9FA',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: '#212529',
-  },
-  date: {
-    fontSize: 14,
-    color: '#868E96',
-    marginBottom: 20,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#E9ECEF',
-    marginBottom: 25,
-  },
-  content: {
-    fontSize: 16,
-    lineHeight: 28,
-    color: '#495057',
-    marginBottom: 20,
-  },
-  imageGallery: {
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  image: {
-    width: imageWidth,
-    height: imageWidth * 0.75,
-    borderRadius: 8,
-    marginBottom: 15,
-  },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 12, color: '#212529' },
+  date: { fontSize: 14, color: '#868E96', marginBottom: 20 },
+  separator: { height: 1, backgroundColor: '#E9ECEF', marginBottom: 25 },
+  content: { fontSize: 16, lineHeight: 28, color: '#495057', marginBottom: 20 },
+  imageGallery: { marginTop: 10, marginBottom: 20 },
+  image: { width: imageWidth, height: imageWidth * 0.75, borderRadius: 8, marginBottom: 15 },
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -212,12 +178,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  linkButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
+  linkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
 });
 
 export default NoticeDetailScreen;
