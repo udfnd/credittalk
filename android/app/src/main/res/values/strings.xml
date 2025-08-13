@@ -3,5 +3,5 @@
     <string name="client_secret">x0Cc7_4tSU</string>
     <string name="kakao_app_key">a5721065cc212efd0cecafc66e4fe14a</string>
     <string name="client_name">크레디톡</string>
-    <string name="app_name">CreditTalk</string>
+    <string name="app_name">credittalk</string>
 </resources>
