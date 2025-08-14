@@ -1,4 +1,3 @@
-// src/screens/NewCrimeCaseDetailScreen.js
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
@@ -25,7 +24,7 @@ const { width } = Dimensions.get("window");
 
 function NewCrimeCaseDetailScreen({ route }) {
   const navigation = useNavigation();
-  const headerHeight = useHeaderHeight(); // iOS 키보드 회피 offset
+  const headerHeight = useHeaderHeight();
   const { caseId } = route.params;
 
   const [caseDetail, setCaseDetail] = useState(null);
@@ -33,16 +32,35 @@ function NewCrimeCaseDetailScreen({ route }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: "사례 상세 정보" });
-  }, [navigation]);
+    const incrementView = async () => {
+      if (!caseId) return;
+
+      try {
+        const { error: rpcError } = await supabase.rpc('increment_new_crime_case_view', {
+          case_id_input: caseId
+        });
+
+        if (rpcError) {
+          console.error("Failed to increment view count:", rpcError);
+        }
+      } catch (err) {
+        console.error("An unexpected error occurred while incrementing view count:", err);
+      }
+    };
+
+    incrementView();
+  }, [caseId]);
+
 
   const fetchCaseDetail = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
+      // ## [CORE MODIFICATION] ##
+      // Added `views` to the select query to fetch the view count.
       const { data, error: fetchError } = await supabase
         .from("new_crime_cases")
-        .select("id, created_at, title, method, image_urls, link_url")
+        .select("id, created_at, title, method, image_urls, link_url, views") // `views` column added
         .eq("id", caseId)
         .eq("is_published", true)
         .single();
@@ -54,12 +72,13 @@ function NewCrimeCaseDetailScreen({ route }) {
         throw fetchError;
       }
       setCaseDetail(data);
+      navigation.setOptions({ title: data.title || "사례 상세 정보" });
     } catch (err) {
       setError(err.message || "사례 상세 정보를 불러오는데 실패했습니다.");
     } finally {
       setIsLoading(false);
     }
-  }, [caseId]);
+  }, [caseId, navigation]);
 
   useEffect(() => {
     fetchCaseDetail();
@@ -73,12 +92,7 @@ function NewCrimeCaseDetailScreen({ route }) {
   const handleLinkPress = async (rawUrl) => {
     const url = sanitizeUrl(rawUrl);
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        await Linking.openURL(url);
-      }
+      await Linking.openURL(url);
     } catch (e) {
       Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
     }
@@ -114,19 +128,23 @@ function NewCrimeCaseDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 화면 전체 키보드 회피: 입력창이 키보드에 가리지 않음 + 배경 흰색으로 갭 메우기 */}
       <KeyboardAvoidingView
         style={styles.kbWrapper}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        {/* 본문만 세로 ScrollView로 렌더링 */}
         <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Text style={styles.label}>{caseDetail.title}</Text>
-            <Text style={styles.date}>
-              게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
-            </Text>
+            <Text style={styles.title}>{caseDetail.title}</Text>
+            <View style={styles.metaContainer}>
+              <Text style={styles.date}>
+                게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
+              </Text>
+              {/* ## [CORE MODIFICATION] ## Display the fetched view count */}
+              <Text style={styles.date}>
+                조회수: {caseDetail.views || 0}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.contentContainer}>
@@ -155,7 +173,6 @@ function NewCrimeCaseDetailScreen({ route }) {
           )}
         </ScrollView>
 
-        {/* 댓글 섹션: ScrollView 바깥(형제) → FlatList 중첩 방지 */}
         <CommentsSection postId={caseId} boardType="new_crime_cases" />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -163,11 +180,8 @@ function NewCrimeCaseDetailScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
-  // 레이아웃/배경
   container: { flex: 1, backgroundColor: "#fff" },
-  kbWrapper: { flex: 1, backgroundColor: "#fff" }, // 키보드/입력창 사이 갭을 흰색으로 메움
-
-  // 로딩/에러
+  kbWrapper: { flex: 1, backgroundColor: "#fff" },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -181,23 +195,26 @@ const styles = StyleSheet.create({
     marginTop: 20, backgroundColor: "#3d5afe", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
   },
   retryButtonText: { color: "white", fontSize: 16 },
-
-  // 본문
   header: {
     marginBottom: 15,
-    paddingBottom: 10,
+    paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#ecf0f1",
     paddingHorizontal: 20,
     paddingTop: 20,
     backgroundColor: "#fff",
   },
+  title: { fontSize: 22, fontWeight: "bold", color: "#2c3e50", marginBottom: 12 },
+  metaContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
-  date: { fontSize: 13, color: "#7f8c8d", textAlign: "right" },
-
+  date: { fontSize: 13, color: "#7f8c8d" },
   contentContainer: { marginBottom: 25, paddingHorizontal: 20, backgroundColor: "#fff" },
   content: { fontSize: 16, lineHeight: 26, color: "#34495e" },
-
   imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
   image: {
     width: "100%",
@@ -206,7 +223,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: "#e9ecef",
   },
-
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
