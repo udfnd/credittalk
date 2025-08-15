@@ -1,4 +1,3 @@
-// src/screens/CommunityListScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -9,7 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-  Image, // Image 컴포넌트 추가
+  Image,
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -23,7 +22,6 @@ function CommunityListScreen() {
   const { user } = useAuth();
 
   useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
     if (user) {
       logPageView(user.id, 'CommunityListScreen');
     }
@@ -35,15 +33,14 @@ function CommunityListScreen() {
   const [error, setError] = useState(null);
 
   const fetchPosts = useCallback(async () => {
-    // 새로고침이 아닐 때만 로딩 인디케이터 표시
     if (!refreshing) {
       setIsLoading(true);
     }
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
-        .from('community_posts_with_author_profile') // 생성한 뷰 사용
-        .select('id, title, created_at, author_auth_id, views, author_name')
+        .from('community_posts_with_author_profile')
+        .select('id, title, created_at, author_auth_id, views, author_name, image_urls') // image_urls added
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -57,7 +54,7 @@ function CommunityListScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing]); // refreshing 상태가 변경될 때마다 fetchPosts를 다시 생성
+  }, [refreshing]);
 
   useEffect(() => {
     if (isFocused) {
@@ -80,34 +77,44 @@ function CommunityListScreen() {
     navigation.navigate('CommunityPostCreate');
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.postItem}
-      onPress={() =>
-        navigation.navigate('CommunityPostDetail', {
-          postId: item.id,
-          postTitle: item.title,
-        })
-      }
-    >
-      <View style={styles.postContent}>
-        {/* 썸네일 이미지 표시 */}
-        {item.image_urls && item.image_urls.length > 0 && (
-          <Image source={{ uri: item.image_urls[0] }} style={styles.thumbnail} />
-        )}
-        <View style={styles.textContainer}>
-          <Text style={styles.postTitle} numberOfLines={2}>{item.title}</Text>
-          <View style={styles.postMeta}>
-            <Text style={styles.postAuthor}>{item.author_name || '익명'}</Text>
-            <Text style={styles.postDate}>
-              {new Date(item.created_at).toLocaleDateString()}
-            </Text>
-            <Text style={styles.postViews}>조회수: {item.views || 0}</Text>
+  // [CORE MODIFICATION] renderItem layout changed to match NoticeListScreen
+  const renderItem = ({ item }) => {
+    const thumbnailUrl = item.image_urls && item.image_urls.length > 0
+      ? item.image_urls[0]
+      : null;
+
+    return (
+      <TouchableOpacity
+        style={styles.noticeItem}
+        onPress={() =>
+          navigation.navigate('CommunityPostDetail', {
+            postId: item.id,
+            postTitle: item.title,
+          })
+        }
+      >
+        <View style={styles.noticeContent}>
+          {thumbnailUrl ? (
+            <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+              <Icon name="comment-text-outline" size={30} color="#bdc3c7" />
+            </View>
+          )}
+          <View style={styles.textContainer}>
+            <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+            <View style={styles.noticeMeta}>
+              <Text style={styles.noticeAuthor} numberOfLines={1}>{item.author_name || '익명'}</Text>
+              <Text style={styles.noticeDate}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
+              <Text style={styles.noticeViews}>조회 {item.views || 0}</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   if (isLoading && !refreshing && posts.length === 0) {
     return (
@@ -163,6 +170,7 @@ function CommunityListScreen() {
   );
 }
 
+// [CORE MODIFICATION] Styles updated to match NoticeListScreen
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -178,7 +186,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 15,
   },
-  postItem: {
+  noticeItem: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
     marginBottom: 10,
@@ -187,7 +195,7 @@ const styles = StyleSheet.create({
     elevation: 1,
     padding: 15,
   },
-  postContent: {
+  noticeContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -197,30 +205,37 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 15,
   },
+  thumbnailPlaceholder: {
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   textContainer: {
     flex: 1,
   },
-  postTitle: {
+  noticeTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#2c3e50',
     marginBottom: 8,
   },
-  postMeta: {
+  noticeMeta: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
   },
-  postAuthor: {
-    fontSize: 12,
-    color: '#3498db',
-  },
-  postDate: {
+  noticeAuthor: {
     fontSize: 12,
     color: '#7f8c8d',
+    flexShrink: 1, // Allow author name to shrink if needed
+    marginRight: 8,
   },
-  postViews: {
+  noticeDate: {
+    fontSize: 12,
+    color: '#95a5a6',
+    marginRight: 8,
+  },
+  noticeViews: {
     fontSize: 12,
     color: '#95a5a6',
   },
