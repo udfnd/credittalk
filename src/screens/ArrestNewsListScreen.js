@@ -25,7 +25,6 @@ function ArrestNewsListScreen() {
   const { user } = useAuth();
 
   useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
     if (user) {
       logPageView(user.id, 'ArrestNewsListScreen');
     }
@@ -61,12 +60,12 @@ function ArrestNewsListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchNews();
-  }, [fetchNews]);
+    // refreshing 상태가 true로 변경되면, useEffect [refreshing] 의존성으로 인해 fetchNews가 자동 호출됩니다.
+  }, []);
 
+
+  // [핵심 수정] renderItem 로직을 NoticeListScreen과 동일하게 변경
   const renderItem = ({ item }) => {
-    // --- (수정된 부분 2) ---
-    // image_urls 배열이 존재하고, 비어있지 않은 경우 첫 번째 이미지를 썸네일로 사용합니다.
     const thumbnailUrl =
       item.image_urls && item.image_urls.length > 0
         ? item.image_urls[0]
@@ -74,7 +73,7 @@ function ArrestNewsListScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.newsItem}
+        style={styles.noticeItem}
         onPress={() =>
           navigation.navigate('ArrestNewsDetail', {
             newsId: item.id,
@@ -82,24 +81,29 @@ function ArrestNewsListScreen() {
           })
         }
       >
-        {/* thumbnailUrl 변수를 사용하여 이미지를 렌더링합니다. */}
-        {thumbnailUrl && (
-          <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
-        )}
-        <View style={styles.infoContainer}>
-          <View style={styles.titleContainer}>
-            {item.is_pinned && (
-              <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
-            )}
-            <Text style={styles.newsTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-          </View>
-          <View style={styles.metaContainer}>
-            <Text style={styles.newsAuthor}>{item.author_name || '관리자'}</Text>
-            <Text style={styles.newsDate}>
-              {new Date(item.created_at).toLocaleDateString()}
-            </Text>
+        <View style={styles.noticeContent}>
+          {thumbnailUrl ? (
+            <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+              <Icon name="newspaper-variant-outline" size={30} color="#bdc3c7" />
+            </View>
+          )}
+          <View style={styles.textContainer}>
+            <View style={styles.titleContainer}>
+              {item.is_pinned && (
+                <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
+              )}
+              <Text style={styles.noticeTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+            </View>
+            <View style={styles.noticeMeta}>
+              <Text style={styles.noticeAuthor}>{item.author_name || '관리자'}</Text>
+              <Text style={styles.noticeDate}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
+            </View>
           </View>
         </View>
       </TouchableOpacity>
@@ -119,7 +123,7 @@ function ArrestNewsListScreen() {
       <View style={styles.centered}>
         <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={fetchNews} style={styles.retryButton}>
+        <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>다시 시도</Text>
         </TouchableOpacity>
       </View>
@@ -151,6 +155,7 @@ function ArrestNewsListScreen() {
   );
 }
 
+// [핵심 수정] 스타일 전체를 NoticeListScreen과 거의 동일하게 변경
 const styles = StyleSheet.create({
   centered: {
     flex: 1,
@@ -160,32 +165,34 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 15,
   },
-  newsItem: {
+  noticeItem: {
     backgroundColor: '#ffffff',
     borderRadius: 8,
-    marginBottom: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    elevation: 1,
+    padding: 15,
+  },
+  noticeContent: {
     flexDirection: 'row',
-    overflow: 'hidden',
-    // --- (수정된 부분 3) ---
-    // 썸네일이 없는 경우에도 일관된 높이를 유지하도록 minHeight 추가
-    minHeight: 100,
+    alignItems: 'center',
   },
   thumbnail: {
-    width: 100,
-    height: '100%',
-    backgroundColor: '#e9e9e9', // 이미지가 없을 때 배경색
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 15,
   },
-  infoContainer: {
+  thumbnailPlaceholder: {
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textContainer: {
     flex: 1,
-    padding: 12,
-    justifyContent: 'space-between',
   },
   titleContainer: {
     flexDirection: 'row',
@@ -196,25 +203,25 @@ const styles = StyleSheet.create({
     marginRight: 6,
     marginTop: 2,
   },
-  newsTitle: {
+  noticeTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flex: 1,
+    flex: 1, // 제목이 길 경우 pin 아이콘을 밀어내지 않도록
   },
-  metaContainer: {
+  noticeMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 'auto',
+    marginTop: 4,
   },
-  newsAuthor: {
-    fontSize: 13,
-    color: '#7f8c8d'
-  },
-  newsDate: {
+  noticeAuthor: {
     fontSize: 12,
-    color: '#95a5a6'
+    color: '#7f8c8d',
+  },
+  noticeDate: {
+    fontSize: 12,
+    color: '#95a5a6',
   },
   errorText: {
     marginTop: 10,
@@ -225,7 +232,7 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#7f8c8d'
+    color: '#7f8c8d',
   },
   retryButton: {
     marginTop: 20,
@@ -236,7 +243,7 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: 'white',
-    fontSize: 16
+    fontSize: 16,
   },
 });
 

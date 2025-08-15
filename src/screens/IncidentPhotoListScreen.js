@@ -26,7 +26,6 @@ function IncidentPhotoListScreen() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
     if (user) {
       logPageView(user.id, 'IncidentPhotoListScreen');
     }
@@ -52,7 +51,7 @@ function IncidentPhotoListScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing]); // refreshing을 dependency array에 추가하여 최신 상태를 반영
+  }, [refreshing]);
 
   useEffect(() => {
     if (isFocused) {
@@ -62,9 +61,11 @@ function IncidentPhotoListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchPhotos();
-  }, [fetchPhotos]);
+    // refreshing 상태가 true로 설정된 후 fetchPhotos가 다시 호출됩니다.
+    // fetchPhotos의 dependency array에 refreshing이 있으므로 자동으로 재호출됩니다.
+  }, []);
 
+  // [핵심 수정] renderItem 로직을 NoticeListScreen과 동일하게 변경
   const renderItem = ({ item }) => {
     const thumbnailUrl =
       item.image_urls && item.image_urls.length > 0
@@ -73,7 +74,7 @@ function IncidentPhotoListScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.photoItem}
+        style={styles.noticeItem}
         onPress={() =>
           navigation.navigate('IncidentPhotoDetail', {
             photoId: item.id,
@@ -81,27 +82,27 @@ function IncidentPhotoListScreen() {
           })
         }
       >
-        {thumbnailUrl ? (
-          <Image
-            source={{ uri: thumbnailUrl }}
-            style={styles.thumbnail}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-            <Icon name="image-off-outline" size={40} color="#bdc3c7" />
-          </View>
-        )}
-        <View style={styles.infoContainer}>
-          <Text style={styles.photoTitle} numberOfLines={1}>{item.title}</Text>
-          {item.category && (
-            <Text style={styles.photoCategory} numberOfLines={1}>
-              유형: {item.category}
-            </Text>
+        <View style={styles.noticeContent}>
+          {/* 썸네일 이미지 또는 플레이스홀더 표시 */}
+          {thumbnailUrl ? (
+            <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+              <Icon name="image-off-outline" size={30} color="#bdc3c7" />
+            </View>
           )}
-          <Text style={styles.photoDate}>
-            {new Date(item.created_at).toLocaleDateString()}
-          </Text>
+          <View style={styles.textContainer}>
+            <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+            <View style={styles.noticeMeta}>
+              {/* author_name 대신 category를 표시 */}
+              {item.category && (
+                <Text style={styles.noticeAuthor}>유형: {item.category}</Text>
+              )}
+              <Text style={styles.noticeDate}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -120,7 +121,7 @@ function IncidentPhotoListScreen() {
       <View style={styles.centered}>
         <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={fetchPhotos} style={styles.retryButton}>
+        <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>다시 시도</Text>
         </TouchableOpacity>
       </View>
@@ -133,8 +134,8 @@ function IncidentPhotoListScreen() {
         data={photos}
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
+        // [핵심 수정] numColumns 제거, 스타일 이름 변경
         contentContainerStyle={styles.listContainer}
-        numColumns={2} // 2열 그리드 레이아웃
         ListEmptyComponent={
           !isLoading && (
             <View style={styles.centered}>
@@ -155,6 +156,7 @@ function IncidentPhotoListScreen() {
   );
 }
 
+// [핵심 수정] 스타일 전체를 NoticeListScreen과 동일하게 변경
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
   centered: {
@@ -163,48 +165,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  listContainer: { padding: 8 },
-  photoItem: {
-    flex: 1,
-    margin: 8,
+  listContainer: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+  },
+  noticeItem: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    elevation: 1,
+    padding: 15,
+  },
+  noticeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   thumbnail: {
-    width: '100%',
-    height: 160,
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 15,
   },
-  // --- (추가된 부분) ---
-  // 이미지가 없을 때 표시될 플레이스홀더 스타일
   thumbnailPlaceholder: {
     backgroundColor: '#e9ecef',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  infoContainer: {
-    padding: 12,
+  textContainer: {
+    flex: 1,
   },
-  photoTitle: {
-    fontSize: 15,
+  noticeTitle: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  photoCategory: {
+  noticeMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  noticeAuthor: {
     fontSize: 12,
-    color: '#3498db',
-    marginBottom: 6,
-    fontWeight: '500',
+    color: '#7f8c8d',
+    flex: 1, // 카테고리 이름이 길 경우를 대비
   },
-  photoDate: {
-    fontSize: 11,
-    color: '#95a5a6'
+  noticeDate: {
+    fontSize: 12,
+    color: '#95a5a6',
   },
   errorText: {
     marginTop: 10,
@@ -215,7 +226,7 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 10,
     fontSize: 16,
-    color: '#7f8c8d'
+    color: '#7f8c8d',
   },
   retryButton: {
     marginTop: 20,
@@ -226,7 +237,7 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: 'white',
-    fontSize: 16
+    fontSize: 16,
   },
 });
 

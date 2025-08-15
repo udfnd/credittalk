@@ -72,6 +72,18 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 
 
 
+CREATE TYPE "public"."search_result_with_stats" AS (
+	"reports" "jsonb",
+	"total_count" integer,
+	"weekly_count" integer,
+	"monthly_count" integer,
+	"three_monthly_count" integer
+);
+
+
+ALTER TYPE "public"."search_result_with_stats" OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") RETURNS "text"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$DECLARE
@@ -279,6 +291,8 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "damage_accounts" "jsonb",
     "is_face_to_face" boolean,
     "perpetrator_id" "text",
+    "perpetrator_account" "text",
+    "crypto_transfer_amount" numeric,
     CONSTRAINT "scammer_reports_company_type_check" CHECK (("company_type" = ANY (ARRAY['사업자'::"text", '개인'::"text"]))),
     CONSTRAINT "scammer_reports_gender_check" CHECK (("gender" = ANY (ARRAY['남성'::"text", '여성'::"text", '모름'::"text"])))
 );
@@ -539,6 +553,21 @@ $$;
 ALTER FUNCTION "public"."get_phone_number_stats"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) RETURNS TABLE("question_id" "uuid")
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  RETURN QUERY
+    SELECT DISTINCT source_help_question_id
+    FROM public.new_crime_cases
+    WHERE source_help_question_id = ANY(p_question_ids);
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_user_job_type"() RETURNS "text"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -588,6 +617,39 @@ $$;
 
 
 ALTER FUNCTION "public"."handle_user_login"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  UPDATE public.new_crime_cases
+  -- 'views' 컬럼의 값을 기존 값에서 1 더한 값으로 설정합니다.
+  -- 만약 views가 null이면, 0으로 취급하고 1을 더합니다.
+  SET views = COALESCE(views, 0) + 1
+  -- 함수로 전달받은 ID와 일치하는 사례를 찾습니다.
+  WHERE id = case_id_input;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."increment_post_view"("post_id_input" bigint) RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  UPDATE public.community_posts
+  -- 👇👇👇 [핵심] 이 'view_count'를 당신의 실제 조회수 컬럼 이름으로 바꾸세요! 👇👇👇
+  SET views = COALESCE(views, 0) + 1
+  -- 👆👆👆 [핵심] 예를 들어, 컬럼 이름이 'views'라면 SET views = COALESCE(views, 0) + 1 로 수정 👆👆👆
+  WHERE id = post_id_input;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."increment_post_view"("post_id_input" bigint) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."is_admin"("user_uuid" "uuid") RETURNS boolean
@@ -720,6 +782,59 @@ $$;
 ALTER FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integer, "p_end_visible" integer, "p_mask_char" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."search_reports"("search_term" "text") RETURNS SETOF "public"."search_result_with_stats"
+    LANGUAGE "plpgsql"
+    AS $$
+DECLARE
+    search_pattern TEXT;
+    all_reports JSONB;
+BEGIN
+    search_pattern := '%' || search_term || '%';
+    
+    SELECT COALESCE(jsonb_agg(r), '[]'::jsonb) INTO all_reports
+    FROM (
+        SELECT *
+        FROM public.decrypted_scammer_reports dr
+        WHERE
+            dr.impersonated_phone_number ILIKE search_pattern OR
+            dr.nickname ILIKE search_pattern OR
+            dr.description ILIKE search_pattern OR
+            dr.perpetrator_account ILIKE search_pattern OR
+            dr.perpetrator_id ILIKE search_pattern OR
+            EXISTS (SELECT 1 FROM jsonb_array_elements_text(dr.phone_numbers) AS phone WHERE phone ILIKE search_pattern) OR
+            EXISTS (SELECT 1 FROM jsonb_array_elements(dr.damage_accounts) AS o WHERE o->>'accountHolderName' ILIKE search_pattern OR o->>'accountNumber' ILIKE search_pattern OR o->>'bankName' ILIKE search_pattern)
+    ) r;
+
+    -- [핵심 수정 부분] COUNT(*)의 결과를 ::int로 형 변환하여 타입 불일치 문제를 해결합니다.
+    RETURN QUERY
+    SELECT
+        all_reports AS reports,
+        COALESCE(jsonb_array_length(all_reports), 0) AS total_count,
+        (SELECT COUNT(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz) WHERE x.created_at >= now() - interval '1 week') AS weekly_count,
+        (SELECT COUNT(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz) WHERE x.created_at >= now() - interval '1 month') AS monthly_count,
+        (SELECT COUNT(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz) WHERE x.created_at >= now() - interval '3 months') AS three_monthly_count;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."search_reports"("search_term" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_room_last_message_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  UPDATE public.chat_rooms
+  SET last_message_at = NEW.created_at
+  WHERE id = NEW.room_id;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_room_last_message_at"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE VIEW "public"."decrypted_scammer_reports" AS
  SELECT "r"."id",
     "r"."created_at",
@@ -729,6 +844,8 @@ CREATE OR REPLACE VIEW "public"."decrypted_scammer_reports" AS
     "r"."company_type",
     "r"."scam_report_source",
     "r"."nickname",
+    "r"."perpetrator_account",
+    "r"."perpetrator_id",
     "r"."victim_circumstances",
     "r"."traded_item_category",
     "r"."perpetrator_identified",
@@ -754,8 +871,8 @@ CREATE OR REPLACE VIEW "public"."decrypted_scammer_reports" AS
            FROM "unnest"("r"."phone_numbers") "pn"("pn")) AS "phone_numbers",
     ( SELECT "jsonb_agg"(
                 CASE
-                    WHEN (("elem"."value" ->> 'isCashTransaction'::"text"))::boolean THEN "elem"."value"
-                    ELSE "jsonb_build_object"('bankName', ("elem"."value" ->> 'bankName'::"text"), 'isCashTransaction', ("elem"."value" -> 'isCashTransaction'::"text"), 'accountHolderName', "public"."decrypt_secret"((("elem"."value" ->> 'accountHolderName'::"text"))::"bytea"), 'accountNumber', "public"."decrypt_secret"((("elem"."value" ->> 'accountNumber'::"text"))::"bytea"))
+                    WHEN (("elem"."value" ->> 'is_other_method'::"text"))::boolean THEN "elem"."value"
+                    ELSE "jsonb_build_object"('bankName', ("elem"."value" ->> 'bankName'::"text"), 'is_other_method', ("elem"."value" -> 'is_other_method'::"text"), 'other_method_details', ("elem"."value" ->> 'other_method_details'::"text"), 'accountHolderName', "public"."decrypt_secret"((("elem"."value" ->> 'accountHolderName'::"text"))::"bytea"), 'accountNumber', "public"."decrypt_secret"((("elem"."value" ->> 'accountNumber'::"text"))::"bytea"))
                 END) AS "jsonb_agg"
            FROM "jsonb_array_elements"("r"."damage_accounts") "elem"("value")) AS "damage_accounts"
    FROM "public"."scammer_reports" "r";
@@ -764,87 +881,41 @@ CREATE OR REPLACE VIEW "public"."decrypted_scammer_reports" AS
 ALTER TABLE "public"."decrypted_scammer_reports" OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."search_reports"("search_term" "text") RETURNS SETOF "public"."decrypted_scammer_reports"
-    LANGUAGE "plpgsql"
-    AS $$
-DECLARE
-    search_pattern TEXT;
-BEGIN
-    search_pattern := '%' || search_term || '%';
-    RETURN QUERY
-    SELECT *
-    FROM public.decrypted_scammer_reports dr
-    WHERE
-        dr.impersonated_phone_number ILIKE search_pattern OR
-        dr.nickname ILIKE search_pattern OR
-        dr.description ILIKE search_pattern OR
-        EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(dr.phone_numbers) AS phone
-            WHERE phone ILIKE search_pattern
-        ) OR
-        EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(dr.damage_accounts) AS account_info
-            WHERE account_info ILIKE search_pattern
-        );
-END;
-$$;
-
-
-ALTER FUNCTION "public"."search_reports"("search_term" "text") OWNER TO "postgres";
-
-
-CREATE OR REPLACE FUNCTION "public"."update_room_last_message_at"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    AS $$
-BEGIN
-  UPDATE public.chat_rooms
-  SET last_message_at = NEW.created_at
-  WHERE id = NEW.room_id;
-  RETURN NEW;
-END;
-$$;
-
-
-ALTER FUNCTION "public"."update_room_last_message_at"() OWNER TO "postgres";
-
-
 CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
- SELECT "r"."id",
-    "r"."created_at",
-    "r"."category",
-    "r"."description",
-    "r"."ip_address",
-    "r"."company_type",
-    "r"."scam_report_source",
-    "r"."nickname",
-    "r"."victim_circumstances",
-    "r"."traded_item_category",
-    "r"."perpetrator_identified",
-    "r"."analysis_result",
-    "r"."analysis_message",
-    "r"."analyzed_at",
-    "r"."analyzer_id",
-    "r"."gender",
-    "r"."reporter_id",
-    "r"."attempted_fraud",
-    "r"."damage_path",
-    "r"."damaged_item",
-    "r"."impersonated_person",
-    "r"."nickname_evidence_url",
-    "r"."illegal_collection_evidence_urls",
-    "r"."site_name",
-    "r"."traded_item_image_urls",
-    "r"."impersonated_phone_number",
-    "r"."detailed_crime_type",
-    "r"."damage_amount",
-    "r"."no_damage_amount",
-    "r"."phone_numbers",
-    "r"."damage_accounts",
-    "u"."email" AS "reporter_email"
-   FROM ("public"."decrypted_scammer_reports" "r"
-     LEFT JOIN "auth"."users" "u" ON (("r"."reporter_id" = "u"."id")));
+ SELECT "decrypted_scammer_reports"."id",
+    "decrypted_scammer_reports"."created_at",
+    "decrypted_scammer_reports"."category",
+    "decrypted_scammer_reports"."description",
+    "decrypted_scammer_reports"."ip_address",
+    "decrypted_scammer_reports"."company_type",
+    "decrypted_scammer_reports"."scam_report_source",
+    "decrypted_scammer_reports"."nickname",
+    "decrypted_scammer_reports"."perpetrator_account",
+    "decrypted_scammer_reports"."perpetrator_id",
+    "decrypted_scammer_reports"."victim_circumstances",
+    "decrypted_scammer_reports"."traded_item_category",
+    "decrypted_scammer_reports"."perpetrator_identified",
+    "decrypted_scammer_reports"."analysis_result",
+    "decrypted_scammer_reports"."analysis_message",
+    "decrypted_scammer_reports"."analyzed_at",
+    "decrypted_scammer_reports"."analyzer_id",
+    "decrypted_scammer_reports"."gender",
+    "decrypted_scammer_reports"."reporter_id",
+    "decrypted_scammer_reports"."attempted_fraud",
+    "decrypted_scammer_reports"."damage_path",
+    "decrypted_scammer_reports"."damaged_item",
+    "decrypted_scammer_reports"."impersonated_person",
+    "decrypted_scammer_reports"."nickname_evidence_url",
+    "decrypted_scammer_reports"."illegal_collection_evidence_urls",
+    "decrypted_scammer_reports"."site_name",
+    "decrypted_scammer_reports"."traded_item_image_urls",
+    "decrypted_scammer_reports"."impersonated_phone_number",
+    "decrypted_scammer_reports"."detailed_crime_type",
+    "decrypted_scammer_reports"."damage_amount",
+    "decrypted_scammer_reports"."no_damage_amount",
+    "decrypted_scammer_reports"."phone_numbers",
+    "decrypted_scammer_reports"."damage_accounts"
+   FROM "public"."decrypted_scammer_reports";
 
 
 ALTER TABLE "public"."admin_scammer_reports_view" OWNER TO "postgres";
@@ -861,7 +932,8 @@ CREATE TABLE IF NOT EXISTS "public"."arrest_news" (
     "link_url" "text",
     "is_pinned" boolean DEFAULT false,
     "pinned_at" timestamp with time zone,
-    "image_urls" "text"[]
+    "image_urls" "text"[],
+    "category" "text"
 );
 
 
@@ -1105,7 +1177,8 @@ CREATE TABLE IF NOT EXISTS "public"."community_posts" (
     "views" bigint DEFAULT 0,
     "image_urls" "text"[],
     "is_pinned" boolean DEFAULT false,
-    "pinned_at" timestamp with time zone
+    "pinned_at" timestamp with time zone,
+    "link_url" "text"
 );
 
 
@@ -1134,6 +1207,7 @@ CREATE OR REPLACE VIEW "public"."community_posts_with_author_profile" AS
     "p"."is_pinned",
     "p"."pinned_at",
     "p"."image_urls",
+    "p"."link_url",
     "u"."name" AS "author_name",
     "p"."user_id" AS "author_auth_id"
    FROM ("public"."community_posts" "p"
@@ -1303,33 +1377,40 @@ ALTER TABLE "public"."incident_photos_with_author_profile" OWNER TO "postgres";
 
 
 CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
- SELECT "r"."id",
-    "public"."mask_damage_accounts"("r"."damage_accounts") AS "damage_accounts",
-    ( SELECT "jsonb_agg"("public"."mask_phone_number"("pn"."value")) AS "jsonb_agg"
-           FROM "jsonb_array_elements_text"("r"."phone_numbers") "pn"("value")) AS "phone_numbers",
-    "public"."mask_phone_number"("r"."impersonated_phone_number") AS "impersonated_phone_number",
-    "r"."site_name",
-    "r"."category",
-    "r"."scam_report_source",
-    "r"."company_type",
-    "r"."description",
-    "r"."nickname",
-    "r"."created_at",
-    "r"."gender",
-    "r"."victim_circumstances",
-    "r"."traded_item_category",
-    "r"."perpetrator_identified",
-    "r"."attempted_fraud",
-    "r"."damage_path",
-    "r"."damaged_item",
-    "r"."impersonated_person",
-    "r"."nickname_evidence_url",
-    "r"."illegal_collection_evidence_urls",
-    "r"."traded_item_image_urls",
-    "r"."detailed_crime_type",
-    "r"."damage_amount",
-    "r"."no_damage_amount"
-   FROM "public"."decrypted_scammer_reports" "r";
+ SELECT "decrypted_scammer_reports"."id",
+    "decrypted_scammer_reports"."created_at",
+    "decrypted_scammer_reports"."category",
+    "decrypted_scammer_reports"."description",
+    "decrypted_scammer_reports"."ip_address",
+    "decrypted_scammer_reports"."company_type",
+    "decrypted_scammer_reports"."scam_report_source",
+    "decrypted_scammer_reports"."nickname",
+    "decrypted_scammer_reports"."perpetrator_account",
+    "decrypted_scammer_reports"."perpetrator_id",
+    "decrypted_scammer_reports"."victim_circumstances",
+    "decrypted_scammer_reports"."traded_item_category",
+    "decrypted_scammer_reports"."perpetrator_identified",
+    "decrypted_scammer_reports"."analysis_result",
+    "decrypted_scammer_reports"."analysis_message",
+    "decrypted_scammer_reports"."analyzed_at",
+    "decrypted_scammer_reports"."analyzer_id",
+    "decrypted_scammer_reports"."gender",
+    "decrypted_scammer_reports"."reporter_id",
+    "decrypted_scammer_reports"."attempted_fraud",
+    "decrypted_scammer_reports"."damage_path",
+    "decrypted_scammer_reports"."damaged_item",
+    "decrypted_scammer_reports"."impersonated_person",
+    "decrypted_scammer_reports"."nickname_evidence_url",
+    "decrypted_scammer_reports"."illegal_collection_evidence_urls",
+    "decrypted_scammer_reports"."site_name",
+    "decrypted_scammer_reports"."traded_item_image_urls",
+    "decrypted_scammer_reports"."impersonated_phone_number",
+    "decrypted_scammer_reports"."detailed_crime_type",
+    "decrypted_scammer_reports"."damage_amount",
+    "decrypted_scammer_reports"."no_damage_amount",
+    "decrypted_scammer_reports"."phone_numbers",
+    "decrypted_scammer_reports"."damage_accounts"
+   FROM "public"."decrypted_scammer_reports";
 
 
 ALTER TABLE "public"."masked_scammer_reports" OWNER TO "postgres";
@@ -1345,7 +1426,10 @@ CREATE TABLE IF NOT EXISTS "public"."new_crime_cases" (
     "image_urls" "text"[],
     "source_help_question_id" integer,
     "is_pinned" boolean DEFAULT false,
-    "pinned_at" timestamp with time zone
+    "pinned_at" timestamp with time zone,
+    "title" "text" NOT NULL,
+    "link_url" "text",
+    "category" "text"
 );
 
 
@@ -1390,7 +1474,8 @@ CREATE TABLE IF NOT EXISTS "public"."notices" (
     "link_url" "text",
     "image_urls" "text"[],
     "is_pinned" boolean DEFAULT false,
-    "pinned_at" timestamp with time zone
+    "pinned_at" timestamp with time zone,
+    "category" "text"
 );
 
 
@@ -1487,6 +1572,7 @@ CREATE TABLE IF NOT EXISTS "public"."reviews" (
     "is_pinned" boolean DEFAULT false,
     "pinned_at" timestamp with time zone,
     "image_urls" "text"[],
+    "category" "text",
     CONSTRAINT "reviews_rating_check" CHECK ((("rating" >= 1) AND ("rating" <= 5)))
 );
 
@@ -1890,12 +1976,6 @@ CREATE POLICY "Allow insert for authenticated users on scammer_reports" ON "publ
 
 
 
-CREATE POLICY "Allow public read access to own and published questions" ON "public"."help_questions" FOR SELECT USING ((("auth"."uid"() = "user_id") OR (EXISTS ( SELECT 1
-   FROM "public"."new_crime_cases"
-  WHERE ("new_crime_cases"."source_help_question_id" = "help_questions"."id")))));
-
-
-
 CREATE POLICY "Allow read based on job type for scammer_reports" ON "public"."scammer_reports" FOR SELECT USING ((("auth"."role"() = 'authenticated'::"text") AND ((("public"."get_user_job_type"() = '사업자'::"text") AND ("category" = ANY (ARRAY['불법사금융'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text"]))) OR ((("public"."get_user_job_type"() = '일반'::"text") OR ("public"."get_user_job_type"() IS NULL)) AND (NOT ("category" = ANY (ARRAY['불법사금융'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text"])))))));
 
 
@@ -1929,6 +2009,10 @@ CREATE POLICY "Authenticated users can list other users for chat" ON "public"."u
 
 
 CREATE POLICY "Deny ALL access" ON "public"."phone_verifications" USING (false) WITH CHECK (false);
+
+
+
+CREATE POLICY "Enable read access for all authenticated users" ON "public"."help_questions" FOR SELECT TO "authenticated" USING (true);
 
 
 
@@ -2382,6 +2466,12 @@ GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "service_role";
@@ -2397,6 +2487,18 @@ GRANT ALL ON FUNCTION "public"."handle_updated_at"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "anon";
 GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."increment_post_view"("post_id_input" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."increment_post_view"("post_id_input" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."increment_post_view"("post_id_input" bigint) TO "service_role";
 
 
 
@@ -2436,12 +2538,6 @@ GRANT ALL ON FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible
 
 
 
-GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "anon";
-GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "authenticated";
-GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "service_role";
-
-
-
 GRANT ALL ON FUNCTION "public"."search_reports"("search_term" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."search_reports"("search_term" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."search_reports"("search_term" "text") TO "service_role";
@@ -2475,6 +2571,12 @@ GRANT ALL ON FUNCTION "public"."update_room_last_message_at"() TO "service_role"
 
 
 
+
+
+
+GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "anon";
+GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "authenticated";
+GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "service_role";
 
 
 
