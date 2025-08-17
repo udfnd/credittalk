@@ -3,17 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 serve(async (_req) => {
-  // OPTIONS 요청은 CORS 처리를 위해 바로 응답합니다.
   if (_req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 관리자 클라이언트를 생성하여 RLS를 우회하고 직접 데이터를 조회합니다.
     const supabaseAdminClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } },
+      { auth: { persistSession: false } }
     );
 
     // KST (UTC+9) 기준 '오늘'의 시작과 끝을 계산합니다.
@@ -23,29 +21,29 @@ serve(async (_req) => {
     const todayStartUTC = new Date(kstToday.setUTCHours(0, 0, 0, 0) - kstOffset).toISOString();
     const todayEndUTC = new Date(kstToday.setUTCHours(23, 59, 59, 999) - kstOffset).toISOString();
 
-    // 3가지 통계를 병렬로 조회하여 성능을 최적화합니다.
+    // 5개의 통계를 병렬로 조회하여 성능을 최적화합니다.
     const [
-      { count: todayHelpCount },
-      { count: totalHelpCount },
+      { count: todayHelpCountRaw },
+      { count: totalHelpCountRaw },
       { count: totalScamCount },
+      { count: todayPreventionCount },
+      { count: totalPreventionCount }
     ] = await Promise.all([
-      supabaseAdminClient
-        .from("help_questions")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", todayStartUTC)
-        .lt("created_at", todayEndUTC),
-      supabaseAdminClient
-        .from("help_questions")
-        .select("*", { count: "exact", head: true }),
-      supabaseAdminClient
-        .from("scammer_reports")
-        .select("*", { count: "exact", head: true }),
+      supabaseAdminClient.from("help_questions").select("*", { count: "exact", head: true }).gte("created_at", todayStartUTC).lt("created_at", todayEndUTC),
+      supabaseAdminClient.from("help_questions").select("*", { count: "exact", head: true }),
+      supabaseAdminClient.from("scammer_reports").select("*", { count: "exact", head: true }),
+      supabaseAdminClient.from("search_logs").select("*", { count: "exact", head: true }).gte("created_at", todayStartUTC).lt("created_at", todayEndUTC),
+      supabaseAdminClient.from("search_logs").select("*", { count: "exact", head: true })
     ]);
 
-    // 조회된 데이터를 JSON 형태로 반환합니다.
+    // --- 핵심 수정: 헬프센터 문의 수와 검색 수를 합산 ---
+    const finalTodayHelpCount = (todayHelpCountRaw ?? 0) + (todayPreventionCount ?? 0);
+    const finalTotalHelpCount = (totalHelpCountRaw ?? 0) + (totalPreventionCount ?? 0);
+
+    // 합산된 최종 통계 데이터를 반환합니다.
     const stats = {
-      todayHelpCount: todayHelpCount ?? 0,
-      totalHelpCount: totalHelpCount ?? 0,
+      todayHelpCount: finalTodayHelpCount,
+      totalHelpCount: finalTotalHelpCount,
       totalScamCount: totalScamCount ?? 0,
     };
 
