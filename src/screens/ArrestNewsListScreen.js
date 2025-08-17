@@ -8,12 +8,13 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  SafeAreaView, // SafeAreaView 추가
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
-import { logPageView } from "../lib/pageViewLogger";
-import { useAuth } from "../context/AuthContext";
+import { logPageView } from '../lib/pageViewLogger';
+import { useAuth } from '../context/AuthContext';
 
 function ArrestNewsListScreen() {
   const navigation = useNavigation();
@@ -60,16 +61,11 @@ function ArrestNewsListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // refreshing 상태가 true로 변경되면, useEffect [refreshing] 의존성으로 인해 fetchNews가 자동 호출됩니다.
   }, []);
 
-
-  // [핵심 수정] renderItem 로직을 NoticeListScreen과 동일하게 변경
   const renderItem = ({ item }) => {
     const thumbnailUrl =
-      item.image_urls && item.image_urls.length > 0
-        ? item.image_urls[0]
-        : null;
+      item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : null;
 
     return (
       <TouchableOpacity
@@ -79,8 +75,7 @@ function ArrestNewsListScreen() {
             newsId: item.id,
             newsTitle: item.title,
           })
-        }
-      >
+        }>
         <View style={styles.noticeContent}>
           {thumbnailUrl ? (
             <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
@@ -110,53 +105,71 @@ function ArrestNewsListScreen() {
     );
   };
 
-  if (isLoading && !refreshing) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3d5afe" />
-      </View>
-    );
-  }
+  const ListContent = () => {
+    if (isLoading && !refreshing) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#3d5afe" />
+        </View>
+      );
+    }
 
-  if (error) {
+    if (error) {
+      return (
+        <View style={styles.centered}>
+          <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.centered}>
-        <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
-          <Text style={styles.retryButtonText}>다시 시도</Text>
-        </TouchableOpacity>
-      </View>
+      <FlatList
+        data={news}
+        renderItem={renderItem}
+        keyExtractor={item => item.id.toString()}
+        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={
+          !isLoading && (
+            <View style={styles.centered}>
+              <Icon name="newspaper-variant-outline" size={50} color="#bdc3c7" />
+              <Text style={styles.emptyText}>등록된 검거소식이 없습니다.</Text>
+            </View>
+          )
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#3d5afe']}
+          />
+        }
+      />
     );
-  }
+  };
 
   return (
-    <FlatList
-      data={news}
-      renderItem={renderItem}
-      keyExtractor={(item) => item.id.toString()}
-      contentContainerStyle={styles.listContainer}
-      ListEmptyComponent={
-        !isLoading && (
-          <View style={styles.centered}>
-            <Icon name="newspaper-variant-outline" size={50} color="#bdc3c7" />
-            <Text style={styles.emptyText}>등록된 검거소식이 없습니다.</Text>
-          </View>
-        )
-      }
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={['#3d5afe']}
-        />
-      }
-    />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <ListContent />
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('ArrestNewsCreate')}>
+          <Icon name="plus" size={30} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
-// [핵심 수정] 스타일 전체를 NoticeListScreen과 거의 동일하게 변경
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f0f2f5',
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -207,7 +220,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flex: 1, // 제목이 길 경우 pin 아이콘을 밀어내지 않도록
+    flex: 1,
   },
   noticeMeta: {
     flexDirection: 'row',
@@ -244,6 +257,23 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: 'white',
     fontSize: 16,
+  },
+  // FAB 스타일 추가
+  fab: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#3d5afe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    right: 20,
+    bottom: 40,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
 });
 

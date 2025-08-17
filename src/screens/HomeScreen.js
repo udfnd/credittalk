@@ -20,11 +20,12 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
 import { useAuth } from "../context/AuthContext";
 import { logPageView } from "../lib/pageViewLogger";
-import { supabase } from "../lib/supabaseClient"; // Supabase 클라이언트 임포트
+import { supabase } from "../lib/supabaseClient";
 
 const { width } = Dimensions.get("window");
 const BANNER_HEIGHT = 150;
 
+// 이미지 경로는 그대로 유지합니다.
 const noticeBannerImg = require("../assets/images/notice_banner.jpg");
 const arrestBannerImg = require("../assets/images/arrest_banner.jpg");
 const crimeListBannerImg = require("../assets/images/crime_list_banner.jpg");
@@ -37,9 +38,10 @@ const companyLogoImg = require("../assets/images/company_logo.png");
 function HomeScreen() {
   const navigation = useNavigation();
   const { user, profile } = useAuth();
-  const isFocused = useIsFocused(); // 화면 포커스 상태 확인
+  const isFocused = useIsFocused();
   const [searchTerm, setSearchTerm] = useState("");
 
+  // --- 1. stats 상태 객체 구조를 함수 반환값에 맞게 변경 ---
   const [stats, setStats] = useState({
     todayHelpCount: 0,
     totalHelpCount: 0,
@@ -55,6 +57,7 @@ function HomeScreen() {
       setStats(data);
     } catch (error) {
       console.error("Error fetching stats:", error.message);
+      // 초기 상태 구조와 일치시킵니다.
       setStats({ todayHelpCount: 0, totalHelpCount: 0, totalScamCount: 0 });
     } finally {
       setLoadingStats(false);
@@ -70,27 +73,34 @@ function HomeScreen() {
     }
   }, [user, isFocused, fetchStats]);
 
-  const handleSearch = () => {
+  // handleSearch 함수는 이전과 동일하게 유지됩니다.
+  const handleSearch = async () => {
     Keyboard.dismiss();
-    if (!searchTerm.trim()) {
+    const trimmedSearchTerm = searchTerm.trim();
+    if (!trimmedSearchTerm) {
       Alert.alert("검색어 입력", "연락처 또는 계좌번호를 입력해주세요.");
       return;
     }
+
+    try {
+      supabase.functions.invoke('log-search', {
+        body: { searchTerm: trimmedSearchTerm },
+      }).then(({ error }) => {
+        if (error) console.warn('Search logging failed:', error.message);
+      });
+    } catch (err) {
+      console.warn('Search logging invoke failed:', err.message);
+    }
+
     navigation.navigate("UnifiedSearch", {
-      searchTerm: searchTerm.trim(),
-      title: `'${searchTerm.trim()}' 검색 결과`,
+      searchTerm: trimmedSearchTerm,
+      title: `'${trimmedSearchTerm}' 검색 결과`,
     });
   };
 
   const handleAdminPageNavigation = () => {
     const adminUrl = 'https://credittalk-admin.vercel.app/';
-    Linking.canOpenURL(adminUrl).then(supported => {
-      if (supported) {
-        Linking.openURL(adminUrl);
-      } else {
-        console.log(`Don't know how to open this URL: ${adminUrl}`);
-      }
-    });
+    Linking.openURL(adminUrl).catch(() => Alert.alert("오류", "관리자 페이지를 열 수 없습니다."));
   };
 
   const renderImageBanner = (title, subtitle, backgroundImage, onPress) => (
@@ -113,24 +123,25 @@ function HomeScreen() {
     </TouchableOpacity>
   );
 
-  // ✨ 통계 섹션을 렌더링하는 컴포넌트 추가
+  // --- 2. 통계 섹션이 합산된 값을 표시하도록 수정 ---
   const renderStatsSection = () => (
     <View style={styles.statsSection}>
       <View style={styles.statItem}>
         <Text style={styles.statLabel}>오늘의 사기 예방</Text>
-        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.todayHelpCount.toLocaleString()}</Text>}
+        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.todayHelpCount?.toLocaleString() ?? 0}</Text>}
       </View>
       <View style={styles.statItem}>
         <Text style={styles.statLabel}>누적 사기 예방</Text>
-        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.totalHelpCount.toLocaleString()}</Text>}
+        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.totalHelpCount?.toLocaleString() ?? 0}</Text>}
       </View>
       <View style={styles.statItem}>
         <Text style={styles.statLabel}>전체 피해 사례</Text>
-        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.totalScamCount.toLocaleString()}</Text>}
+        {loadingStats ? <ActivityIndicator color="#3d5afe" /> : <Text style={styles.statValue}>{stats.totalScamCount?.toLocaleString() ?? 0}</Text>}
       </View>
     </View>
   );
 
+  // JSX 렌더링 부분은 변경할 필요가 없습니다.
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
@@ -209,61 +220,14 @@ function HomeScreen() {
         </View>
         {renderStatsSection()}
         <View style={styles.bannerSection}>
-          {renderImageBanner(
-            "크레딧톡 개발 회사 소개",
-            "한국금융범죄예방연구센터 소개입니다.",
-            companyLogoImg,
-            () => Linking.openURL("https://www.xn--jj0bj76bm2k.com/page/about")
-          )}
-          {renderImageBanner(
-            "공지사항",
-            "크레딧톡 새로운 소식을 확인하세요.",
-            noticeBannerImg,
-            () => navigation.navigate("NoticeList"),
-          )}
-          {renderImageBanner(
-            "검거소식",
-            "주요 금융범죄 검거 사례를 알려드립니다.",
-            arrestBannerImg,
-            () =>
-              navigation.navigate("ArrestNewsList", {
-                screen: "ArrestNewsList",
-              }),
-          )}
-          {renderImageBanner(
-            "신종범죄 피해사례 목록",
-            "최신 사기 수법과 피해 사례를 확인하세요.",
-            crimeListBannerImg,
-            () => navigation.navigate("NewCrimeCaseList"),
-          )}
-          {renderImageBanner(
-            "크레딧톡 후기",
-            "어플 오류, 개선사항 및 후기",
-            reviewBannerImg,
-            () => navigation.navigate("ReviewList"),
-          )}
-          {renderImageBanner(
-            "사건 사진자료",
-            "카톡대화, 텔레그램, 문자 등 사진공유",
-            incidentPhotosBannerImg,
-            () => navigation.navigate("IncidentPhotoList"),
-          )}
-          {renderImageBanner(
-            "자유 게시판",
-            "여러분들의 생각공유 공간",
-            freeBoardBannerImg,
-            () =>
-              navigation.navigate("MainApp", {
-                screen: "CommunityTab",
-                params: { screen: "CommunityList" },
-              }),
-          )}
-          {renderImageBanner(
-            "헬프 상담게시판",
-            "궁금한 사항들을 작성해주세요.",
-            helpCenterBannerImg,
-            () => navigation.navigate("HelpCenterTab", { screen: "HelpDeskList" }),
-          )}
+          {renderImageBanner( "크레딧톡 개발 회사 소개", "한국금융범죄예방연구센터 소개입니다.", companyLogoImg, () => Linking.openURL("https://www.xn--jj0bj76bm2k.com/page/about") )}
+          {renderImageBanner( "공지사항", "크레딧톡 새로운 소식을 확인하세요.", noticeBannerImg, () => navigation.navigate("NoticeList"), )}
+          {renderImageBanner( "검거소식", "주요 금융범죄 검거 사례를 알려드립니다.", arrestBannerImg, () => navigation.navigate("ArrestNewsList", { screen: "ArrestNewsList", }), )}
+          {renderImageBanner( "신종범죄 피해사례 목록", "최신 사기 수법과 피해 사례를 확인하세요.", crimeListBannerImg, () => navigation.navigate("NewCrimeCaseList"), )}
+          {renderImageBanner( "크레딧톡 후기", "어플 오류, 개선사항 및 후기", reviewBannerImg, () => navigation.navigate("ReviewList"), )}
+          {renderImageBanner( "사건 사진자료", "카톡대화, 텔레그램, 문자 등 사진공유", incidentPhotosBannerImg, () => navigation.navigate("IncidentPhotoList"), )}
+          {renderImageBanner( "자유 게시판", "여러분들의 생각공유 공간", freeBoardBannerImg, () => navigation.navigate("MainApp", { screen: "CommunityTab", params: { screen: "CommunityList" }, }), )}
+          {renderImageBanner( "헬프 상담게시판", "궁금한 사항들을 작성해주세요.", helpCenterBannerImg, () => navigation.navigate("HelpCenterTab", { screen: "HelpDeskList" }), )}
         </View>
       </ScrollView>
 
@@ -283,7 +247,7 @@ function HomeScreen() {
   );
 }
 
-// ✨ 새로운 스타일 추가
+// 스타일 시트는 변경할 필요가 없습니다.
 const styles = StyleSheet.create({
   scrollView: { flex: 1, backgroundColor: "#f0f2f5" },
   scrollContentContainer: { paddingBottom: 100 },
@@ -313,7 +277,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
-    backgroundColor: "white", // for iOS shadow
+    backgroundColor: "white",
   },
   analysisBanner: {
     flex: 1,
@@ -358,7 +322,6 @@ const styles = StyleSheet.create({
     bottom: -10,
     color: "rgba(255, 255, 255, 0.15)",
   },
-  // ✨ 통계 섹션 스타일
   statsSection: {
     flexDirection: 'row',
     justifyContent: 'space-around',

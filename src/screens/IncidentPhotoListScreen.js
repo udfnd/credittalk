@@ -8,12 +8,13 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  SafeAreaView, // SafeAreaView 추가
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
-import { useAuth } from "../context/AuthContext";
-import { logPageView } from "../lib/pageViewLogger";
+import { useAuth } from '../context/AuthContext';
+import { logPageView } from '../lib/pageViewLogger';
 
 function IncidentPhotoListScreen() {
   const navigation = useNavigation();
@@ -37,7 +38,7 @@ function IncidentPhotoListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('incident_photos')
-        .select('id, title, created_at, image_urls, category, description')
+        .select('id, title, created_at, image_urls, category, description, is_pinned')
         .eq('is_published', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -61,16 +62,11 @@ function IncidentPhotoListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // refreshing 상태가 true로 설정된 후 fetchPhotos가 다시 호출됩니다.
-    // fetchPhotos의 dependency array에 refreshing이 있으므로 자동으로 재호출됩니다.
   }, []);
 
-  // [핵심 수정] renderItem 로직을 NoticeListScreen과 동일하게 변경
   const renderItem = ({ item }) => {
     const thumbnailUrl =
-      item.image_urls && item.image_urls.length > 0
-        ? item.image_urls[0]
-        : null;
+      item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : null;
 
     return (
       <TouchableOpacity
@@ -80,10 +76,8 @@ function IncidentPhotoListScreen() {
             photoId: item.id,
             photoTitle: item.title,
           })
-        }
-      >
+        }>
         <View style={styles.noticeContent}>
-          {/* 썸네일 이미지 또는 플레이스홀더 표시 */}
           {thumbnailUrl ? (
             <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
           ) : (
@@ -92,9 +86,13 @@ function IncidentPhotoListScreen() {
             </View>
           )}
           <View style={styles.textContainer}>
-            <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+            <View style={styles.titleContainer}>
+              {item.is_pinned && (
+                <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
+              )}
+              <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+            </View>
             <View style={styles.noticeMeta}>
-              {/* author_name 대신 category를 표시 */}
               {item.category && (
                 <Text style={styles.noticeAuthor}>유형: {item.category}</Text>
               )}
@@ -108,33 +106,32 @@ function IncidentPhotoListScreen() {
     );
   };
 
-  if (isLoading && !refreshing) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3d5afe" />
-      </View>
-    );
-  }
+  const ListContent = () => {
+    if (isLoading && !refreshing) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#3d5afe" />
+        </View>
+      );
+    }
 
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
-          <Text style={styles.retryButtonText}>다시 시도</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+    if (error) {
+      return (
+        <View style={styles.centered}>
+          <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
 
-  return (
-    <View style={styles.container}>
+    return (
       <FlatList
         data={photos}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
-        // [핵심 수정] numColumns 제거, 스타일 이름 변경
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           !isLoading && (
@@ -152,11 +149,23 @@ function IncidentPhotoListScreen() {
           />
         }
       />
-    </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <ListContent />
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('IncidentPhotoCreate')}>
+          <Icon name="plus" size={30} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
-// [핵심 수정] 스타일 전체를 NoticeListScreen과 동일하게 변경
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
   centered: {
@@ -196,11 +205,20 @@ const styles = StyleSheet.create({
   textContainer: {
     flex: 1,
   },
+  titleContainer: { // titleContainer 추가
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  pinIcon: { // pinIcon 추가
+    marginRight: 6,
+    marginTop: 2,
+  },
   noticeTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
-    marginBottom: 8,
+    flex: 1,
   },
   noticeMeta: {
     flexDirection: 'row',
@@ -211,7 +229,7 @@ const styles = StyleSheet.create({
   noticeAuthor: {
     fontSize: 12,
     color: '#7f8c8d',
-    flex: 1, // 카테고리 이름이 길 경우를 대비
+    flex: 1,
   },
   noticeDate: {
     fontSize: 12,
@@ -238,6 +256,23 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: 'white',
     fontSize: 16,
+  },
+  // FAB 스타일 추가
+  fab: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#3d5afe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    right: 20,
+    bottom: 40,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
 });
 
