@@ -124,9 +124,8 @@ const CommentsSection = ({ postId, boardType }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [replyingToId, setReplyingToId] = useState(null);
-
-  // 입력바 실제 높이 측정 → 리스트 하단 여백으로 사용
   const [composerHeight, setComposerHeight] = useState(56);
+
   const onComposerLayout = (e) => {
     const h = e?.nativeEvent?.layout?.height ?? 56;
     setComposerHeight(h);
@@ -212,7 +211,14 @@ const CommentsSection = ({ postId, boardType }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>댓글 ({comments.length})</Text>
+      {/* --- 핵심 수정 부분 --- */}
+      <View style={styles.sectionTitleContainer}>
+        <Text style={styles.warningText}>
+          아래로 스크롤하여 본문 전체 내용을 확인하세요
+        </Text>
+        <Text style={styles.sectionTitle}>댓글 ({comments.length})</Text>
+      </View>
+      {/* --- 여기까지 --- */}
 
       {loading ? (
         <ActivityIndicator style={{ marginVertical: 20 }} color="#3d5afe" />
@@ -231,7 +237,6 @@ const CommentsSection = ({ postId, boardType }) => {
           )}
           ListEmptyComponent={<Text style={styles.noCommentsText}>가장 먼저 댓글을 남겨보세요.</Text>}
           keyboardShouldPersistTaps="handled"
-          // 입력창 높이 + 안전영역만큼 바닥 여백 확보 (댓글이 입력창에 가려지지 않게)
           contentContainerStyle={{ paddingBottom: composerHeight + insets.bottom + 16 }}
         />
       )}
@@ -271,9 +276,18 @@ const CommentsSection = ({ postId, boardType }) => {
 const styles = StyleSheet.create({
   // 섹션 컨테이너
   container: { padding: 15, marginTop: 10, backgroundColor: '#fff', borderTopWidth: 8, borderTopColor: '#f8f9fa' },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' },
+  sectionTitleContainer: {
+    flexDirection: 'column', // 세로 정렬
+    alignItems: 'flex-start', // 좌측 정렬
+    marginBottom: 15,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  warningText: {
+    fontSize: 12,
+    color: '#e74c3c',
+    marginBottom: 8,
+  },
 
-  // 댓글 리스트
   commentWrapper: {},
   commentContainer: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
@@ -294,9 +308,7 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
-  footerAvoidWrapper: {
-    // 이 wrapper가 키보드 높이만큼 자동으로 패딩을 추가해줍니다.
-  },
+  footerAvoidWrapper: {},
   footerInputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -312,7 +324,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 15,
     fontSize: 15,
-    color: '#333', // 입력 글자 색
+    color: '#333',
     backgroundColor: '#f8f9fa',
     borderRadius: 25,
     textAlignVertical: 'top',
