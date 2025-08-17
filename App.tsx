@@ -35,6 +35,7 @@ import SignInScreen from "./src/screens/SignInScreen";
 import NoticeListScreen from "./src/screens/NoticeListScreen";
 import NoticeDetailScreen from "./src/screens/NoticeDetailScreen";
 import ArrestNewsListScreen from "./src/screens/ArrestNewsListScreen";
+import ArrestNewsCreateScreen from './src/screens/ArrestNewsCreateScreen';
 import ArrestNewsDetailScreen from "./src/screens/ArrestNewsDetailScreen";
 import ChatListScreen from "./src/screens/ChatListScreen";
 import ChatMessageScreen from "./src/screens/ChatMessageScreen";
@@ -46,6 +47,7 @@ import ReviewListScreen from "./src/screens/ReviewListScreen";
 import ReviewDetailScreen from "./src/screens/ReviewDetailScreen";
 import ReviewCreateScreen from "./src/screens/ReviewCreateScreen";
 import IncidentPhotoListScreen from "./src/screens/IncidentPhotoListScreen";
+import IncidentPhotoCreateScreen from './src/screens/IncidentPhotoCreateScreen';
 import IncidentPhotoDetailScreen from "./src/screens/IncidentPhotoDetailScreen";
 import MyReportsScreen from "./src/screens/MyReportsScreen";
 import NewCrimeCaseListScreen from "./src/screens/NewCrimeCaseListScreen";
@@ -87,6 +89,7 @@ export type RootStackParamList = {
   NoticeList: undefined;
   NoticeDetail: { noticeId: number; noticeTitle: string };
   ArrestNewsList: undefined;
+  ArrestNewsCreate: undefined;
   ArrestNewsDetail: { newsId: number; newsTitle: string };
   ChatList: undefined;
   ChatMessageScreen: { roomId: string; roomName: string };
@@ -97,6 +100,7 @@ export type RootStackParamList = {
   ReviewDetail: { reviewId: number; reviewTitle: string };
   ReviewCreate: undefined;
   IncidentPhotoList: undefined;
+  IncidentPhotoCreate: undefined;
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
   NewCrimeCaseList: undefined;
   NewCrimeCaseDetail: { caseId: number };
@@ -335,6 +339,11 @@ function AppNavigator() {
             options={{ title: "검거소식" }}
           />
           <RootStack.Screen
+            name="ArrestNewsCreate"
+            component={ArrestNewsCreateScreen}
+            options={{ title: "검거소식 작성" }}
+          />
+          <RootStack.Screen
             name="ArrestNewsDetail"
             component={ArrestNewsDetailScreen}
             options={({ route }) => ({ title: route.params.newsTitle })}
@@ -357,6 +366,11 @@ function AppNavigator() {
             name="IncidentPhotoList"
             component={IncidentPhotoListScreen}
             options={{ title: "사건 사진자료" }}
+          />
+          <RootStack.Screen
+            name="IncidentPhotoCreate"
+            component={IncidentPhotoCreateScreen}
+            options={{ title: "사진자료 작성" }}
           />
           <RootStack.Screen
             name="IncidentPhotoDetail"
