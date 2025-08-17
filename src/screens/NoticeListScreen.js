@@ -32,7 +32,6 @@ function NoticeListScreen() {
   }, [user]);
 
   const fetchNotices = useCallback(async () => {
-    // 새로고침이 아닐 때만 로딩 인디케이터 표시
     if (!refreshing) {
       setIsLoading(true);
     }

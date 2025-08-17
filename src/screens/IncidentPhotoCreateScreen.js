@@ -124,6 +124,7 @@ export default function IncidentPhotoCreateScreen() {
       <TextInput
         style={styles.input}
         placeholder="제목 *"
+        placeholderTextColor="#6c757d"
         value={title}
         onChangeText={setTitle}
         maxLength={100}
@@ -131,6 +132,7 @@ export default function IncidentPhotoCreateScreen() {
       <TextInput
         style={[styles.input, styles.textArea]}
         placeholder="설명"
+        placeholderTextColor="#6c757d"
         value={description}
         onChangeText={setDescription}
         multiline
@@ -138,12 +140,14 @@ export default function IncidentPhotoCreateScreen() {
       <TextInput
         style={styles.input}
         placeholder="카테고리"
+        placeholderTextColor="#6c757d"
         value={category}
         onChangeText={setCategory}
       />
       <TextInput
         style={styles.input}
         placeholder="관련 링크 URL"
+        placeholderTextColor="#6c757d"
         value={linkUrl}
         onChangeText={setLinkUrl}
         keyboardType="url"

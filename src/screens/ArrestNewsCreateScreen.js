@@ -124,10 +124,10 @@ export default function ArrestNewsCreateScreen() {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.pageTitle}>새 검거소식 작성</Text>
-
       <TextInput
         style={styles.input}
         placeholder="제목 *"
+        placeholderTextColor="#6c757d"
         value={title}
         onChangeText={setTitle}
         maxLength={100}
@@ -135,6 +135,7 @@ export default function ArrestNewsCreateScreen() {
       <TextInput
         style={[styles.input, styles.textArea]}
         placeholder="내용"
+        placeholderTextColor="#6c757d"
         value={content}
         onChangeText={setContent}
         multiline
@@ -142,12 +143,14 @@ export default function ArrestNewsCreateScreen() {
       <TextInput
         style={styles.input}
         placeholder="카테고리"
+        placeholderTextColor="#6c757d"
         value={category}
         onChangeText={setCategory}
       />
       <TextInput
         style={styles.input}
         placeholder="관련 링크 URL"
+        placeholderTextColor="#6c757d"
         value={linkUrl}
         onChangeText={setLinkUrl}
         keyboardType="url"
