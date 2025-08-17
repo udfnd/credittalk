@@ -314,6 +314,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 10,
     paddingVertical: 8,
+    paddingBottom: 40,
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
     backgroundColor: '#fff',
