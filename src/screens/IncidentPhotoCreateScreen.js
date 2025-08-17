@@ -144,16 +144,6 @@ export default function IncidentPhotoCreateScreen() {
         value={category}
         onChangeText={setCategory}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="관련 링크 URL"
-        placeholderTextColor="#6c757d"
-        value={linkUrl}
-        onChangeText={setLinkUrl}
-        keyboardType="url"
-        autoCapitalize="none"
-      />
-
       <Text style={styles.label}>사진 첨부 (최대 3장) *</Text>
       <View style={styles.photoContainer}>
         {photos.map(p => (
