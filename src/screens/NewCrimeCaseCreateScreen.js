@@ -27,6 +27,7 @@ export default function NewCrimeCaseCreateScreen() {
 
   const [title, setTitle] = useState("");
   const [method, setMethod] = useState("");
+  const [category, setCategory] = useState(""); // <-- 1. 카테고리 state 추가
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -115,10 +116,10 @@ export default function NewCrimeCaseCreateScreen() {
         photos.map((p) => uploadToSupabase(p)),
       );
 
-      // [수정] insert 쿼리에 title 필드 추가
       const { error } = await supabase.from("new_crime_cases").insert({
-        title: title.trim(), // title 추가
+        title: title.trim(),
         method: method.trim(),
+        category: category.trim() || null, // category 추가
         user_id: user.id,
         image_urls: imageUrls.length ? imageUrls : null,
       });
@@ -139,29 +140,35 @@ export default function NewCrimeCaseCreateScreen() {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.pageTitle}>신종 범죄 수법 등록</Text>
-
-      {/* [추가] 제목 입력 필드 */}
       <Text style={styles.label}>제목</Text>
       <TextInput
         style={styles.input}
         placeholder="사건의 특징을 요약하는 제목을 입력하세요."
+        placeholderTextColor="#6c757d"
         value={title}
         onChangeText={setTitle}
-        maxLength={50} // 제목 길이 제한
+        maxLength={50}
       />
-
-      {/* [수정] 레이블 텍스트 변경 */}
+      <Text style={styles.label}>카테고리</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="예) 보이스피싱, 중고거래 사기, 스미싱"
+        placeholderTextColor="#6c757d"
+        value={category}
+        onChangeText={setCategory}
+        maxLength={20}
+      />
       <Text style={styles.label}>범죄 수법 및 내용</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         placeholder="알고 계신 신종 범죄 수법이나 피해 사례를 자유롭게 작성해주세요."
+        placeholderTextColor="#6c757d"
         value={method}
         onChangeText={setMethod}
         multiline
         numberOfLines={10}
         textAlignVertical="top"
       />
-
       <Text style={styles.label}>사진 첨부 (최대 3장)</Text>
       <View style={styles.photoContainer}>
         {photos.map((photo) => (
@@ -185,7 +192,6 @@ export default function NewCrimeCaseCreateScreen() {
           </TouchableOpacity>
         )}
       </View>
-
       <View style={styles.buttonContainer}>
         {isLoading ? (
           <ActivityIndicator size="large" color="#3d5afe" />
@@ -197,7 +203,6 @@ export default function NewCrimeCaseCreateScreen() {
   );
 }
 
-// [수정] 전체적인 스타일 개선
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -216,7 +221,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#495057",
     marginBottom: 10,
-    marginTop: 20, // 각 섹션 간의 간격 조정
+    marginTop: 20,
   },
   input: {
     borderWidth: 1,
