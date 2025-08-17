@@ -201,5 +201,5 @@ const styles = StyleSheet.create({
   myPrivateTag: { backgroundColor: '#e5dbff', color: '#7048e8' }, // [추가] 내가 쓴 비공개 질문 스타일
   statusAnswered: { fontSize: 14, color: "#3d5afe", fontWeight: '600' },
   statusPending: { fontSize: 14, color: "#f03e3e", fontWeight: '600' },
-  fab: { position: "absolute", right: 20, bottom: 20, backgroundColor: "#3d5afe", width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  fab: { position: "absolute", right: 20, bottom: 60, backgroundColor: "#3d5afe", width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
 });

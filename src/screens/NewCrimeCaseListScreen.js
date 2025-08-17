@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Image, // Image 컴포넌트 추가
+  SafeAreaView, // SafeAreaView 추가
 } from "react-native";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -27,19 +29,20 @@ function NewCrimeCaseListScreen() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
     if (user) {
       logPageView(user.id, 'NewCrimeCaseListScreen');
     }
   }, [user]);
 
   const fetchCases = useCallback(async () => {
-    setIsLoading(true);
+    if (!refreshing) setIsLoading(true);
     setError(null);
+
     try {
+      // NoticeListScreen과 유사한 컬럼들을 가져오도록 쿼리 수정
       const { data, error: fetchError } = await supabase
         .from("new_crime_cases")
-        .select("id, created_at, method")
+        .select("id, created_at, title, image_urls, category, is_pinned") // title, image_urls, category, is_pinned 추가
         .eq("is_published", true)
         .order('is_pinned', { ascending: false })
         .order("created_at", { ascending: false });
@@ -54,7 +57,7 @@ function NewCrimeCaseListScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [refreshing]);
 
   useEffect(() => {
     if (isFocused) {
@@ -64,8 +67,7 @@ function NewCrimeCaseListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchCases();
-  }, [fetchCases]);
+  }, []);
 
   const handleCreateCase = () => {
     if (!user) {
@@ -78,47 +80,75 @@ function NewCrimeCaseListScreen() {
     navigation.navigate("NewCrimeCaseCreate");
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.caseItem}
-      onPress={() =>
-        navigation.navigate("NewCrimeCaseDetail", { caseId: item.id })
-      }
-    >
-      <Text style={styles.caseText} numberOfLines={3}>
-        {item.method}
-      </Text>
-      <View style={styles.itemFooter}>
-        <Text style={styles.caseDate}>
-          {new Date(item.created_at).toLocaleDateString()}
-        </Text>
-        <Icon name="chevron-right" size={20} color="#7f8c8d" />
-      </View>
-    </TouchableOpacity>
-  );
+  // --- 핵심 수정: renderItem 로직을 NoticeListScreen과 동일하게 변경 ---
+  const renderItem = ({ item }) => {
+    const thumbnailUrl =
+      item.image_urls && item.image_urls.length > 0
+        ? item.image_urls[0]
+        : null;
 
-  if (isLoading && !refreshing && cases.length === 0) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3d5afe" />
-      </View>
+      <TouchableOpacity
+        style={styles.noticeItem} // 스타일 이름 통일
+        onPress={() =>
+          navigation.navigate("NewCrimeCaseDetail", { caseId: item.id })
+        }
+      >
+        <View style={styles.noticeContent}>
+          {/* 썸네일 이미지 또는 플레이스홀더 아이콘 표시 */}
+          {thumbnailUrl ? (
+            <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
+              <Icon name="alert-decagram-outline" size={30} color="#bdc3c7" />
+            </View>
+          )}
+          <View style={styles.textContainer}>
+            <View style={styles.titleContainer}>
+              {item.is_pinned && (
+                <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
+              )}
+              <Text style={styles.noticeTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+            </View>
+            <View style={styles.noticeMeta}>
+              {/* author_name 대신 category 표시 */}
+              <Text style={styles.noticeAuthor} numberOfLines={1}>
+                {item.category || '기타 사례'}
+              </Text>
+              <Text style={styles.noticeDate}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
     );
-  }
+  };
 
-  if (error) {
+  const ListContent = () => {
+    if (isLoading && !refreshing) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#3d5afe" />
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centered}>
+          <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>다시 시도</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.centered}>
-        <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={fetchCases} style={styles.retryButton}>
-          <Text style={styles.retryButtonText}>다시 시도</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
       <FlatList
         data={cases}
         renderItem={renderItem}
@@ -140,18 +170,26 @@ function NewCrimeCaseListScreen() {
           />
         }
       />
-      <TouchableOpacity style={styles.fab} onPress={handleCreateCase}>
-        <Icon name="plus" size={30} color="white" />
-      </TouchableOpacity>
-    </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <ListContent />
+        <TouchableOpacity style={styles.fab} onPress={handleCreateCase}>
+          <Icon name="plus" size={30} color="white" />
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
+// --- 핵심 수정: 스타일 전체를 NoticeListScreen과 거의 동일하게 변경 ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f0f2f5",
-    paddingBottom: 60
   },
   centered: {
     flex: 1,
@@ -160,34 +198,65 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   listContainer: {
-    padding: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
   },
-  caseItem: {
-    backgroundColor: "#ffffff",
-    padding: 15,
+  noticeItem: {
+    backgroundColor: '#ffffff',
     borderRadius: 8,
-    marginBottom: 12,
-    borderLeftWidth: 5,
-    borderLeftColor: "#e74c3c",
-    elevation: 2,
-    justifyContent: "space-between",
-    minHeight: 100,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    elevation: 1,
+    padding: 15,
   },
-  caseText: {
-    fontSize: 16,
-    color: "#34495e",
-    lineHeight: 24,
+  noticeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  thumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 15,
+  },
+  thumbnailPlaceholder: {
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textContainer: {
     flex: 1,
   },
-  itemFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 10,
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
-  caseDate: {
+  pinIcon: {
+    marginRight: 6,
+    marginTop: 2,
+  },
+  noticeTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    flex: 1,
+  },
+  noticeMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  noticeAuthor: {
     fontSize: 12,
-    color: "#7f8c8d",
+    color: '#7f8c8d',
+    flex: 1, // 카테고리 이름이 길어질 경우를 대비
+  },
+  noticeDate: {
+    fontSize: 12,
+    color: '#95a5a6',
   },
   errorText: {
     marginTop: 10,
@@ -202,16 +271,15 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    margin: 16,
-    right: 10,
-    bottom: 10,
-    backgroundColor: "#3d5afe",
     width: 60,
     height: 60,
     borderRadius: 30,
+    backgroundColor: "#3d5afe",
     justifyContent: "center",
     alignItems: "center",
     elevation: 8,
+    right: 20,
+    bottom: 60,
   },
   retryButton: {
     marginTop: 20,

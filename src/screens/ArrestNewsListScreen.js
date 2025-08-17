@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     right: 20,
-    bottom: 40,
+    bottom: 60,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
