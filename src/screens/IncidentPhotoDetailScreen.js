@@ -18,6 +18,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
+import { useIncrementView } from '../hooks/useIncrementView';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,8 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  useIncrementView('incident_photos', photoId);
 
   useEffect(() => {
     if (photoTitle) {
@@ -58,7 +61,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('incident_photos')
-        .select('id, title, created_at, image_urls, category, description, link_url')
+        .select('id, title, created_at, image_urls, category, description, link_url, views')
         .eq('id', photoId)
         .eq('is_published', true)
         .single();
@@ -154,13 +157,11 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 화면 전체 키보드 회피 + 흰 배경으로 갭 메우기 */}
       <KeyboardAvoidingView
         style={styles.kbWrapper}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
-        {/* 본문만 세로 ScrollView로 렌더링 */}
         <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
           <View style={styles.headerContainer}>
             <Text style={styles.title}>{photo.title}</Text>
@@ -179,6 +180,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
                 <Icon name="calendar-blank-outline" size={15} color="#7f8c8d" />{" "}
                 {new Date(photo.created_at).toLocaleDateString()}
               </Text>
+              <Text style={styles.date}>조회수: {photo.views || 0}</Text>
             </View>
 
             <View style={styles.contentContainer}>
@@ -193,10 +195,10 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
           </View>
-        </ScrollView>
 
-        {/* 댓글 섹션: ScrollView 바깥(형제) → FlatList 중첩 경고 제거 */}
-        <CommentsSection postId={photoId} boardType="incident_photos" />
+          {/* ✅ 댓글 섹션을 같은 ScrollView 내부에 배치 */}
+          <CommentsSection postId={photoId} boardType="incident_photos" />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

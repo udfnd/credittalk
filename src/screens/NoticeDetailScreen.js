@@ -18,8 +18,8 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
-
 import CommentsSection from '../components/CommentsSection';
+import { useIncrementView } from '../hooks/useIncrementView';
 
 const { width } = Dimensions.get('window');
 const contentPadding = 20;
@@ -31,7 +31,8 @@ const NoticeDetailScreen = () => {
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 공지 상세 불러오기
+  useIncrementView('notices', noticeId);
+
   useEffect(() => {
     const fetchNoticeDetails = async () => {
       if (!noticeId) {
@@ -111,9 +112,12 @@ const NoticeDetailScreen = () => {
       >
         <View style={styles.postContainer}>
           <Text style={styles.title}>{notice.title}</Text>
-          <Text style={styles.date}>
-            {format(new Date(notice.created_at), 'yyyy년 MM월 dd일 HH:mm', { locale: ko })}
-          </Text>
+          <View style={styles.metaContainer}>
+            <Text style={styles.date}>
+              {format(new Date(notice.created_at), 'yyyy년 MM월 dd일 HH:mm', { locale: ko })}
+            </Text>
+            <Text style={styles.date}>조회수: {notice.views || 0}</Text>
+          </View>
           <View style={styles.separator} />
           <Text style={styles.content}>{notice.content}</Text>
 
@@ -139,8 +143,8 @@ const NoticeDetailScreen = () => {
             </TouchableOpacity>
           )}
         </View>
+        <CommentsSection postId={noticeId} boardType="notices" />
       </ScrollView>
-      <CommentsSection postId={noticeId} boardType="notices" />
     </SafeAreaView>
   );
 };
@@ -159,6 +163,12 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F8F9FA',
   },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 12, color: '#212529' },
+  metaContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
   date: { fontSize: 14, color: '#868E96', marginBottom: 20 },
   separator: { height: 1, backgroundColor: '#E9ECEF', marginBottom: 25 },
   content: { fontSize: 16, lineHeight: 28, color: '#495057', marginBottom: 20 },
