@@ -21,6 +21,7 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigation } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import CommentsSection from "../components/CommentsSection";
+import { useIncrementView } from '../hooks/useIncrementView';
 
 const { width } = Dimensions.get("window");
 
@@ -35,10 +36,10 @@ function CommunityPostDetailScreen({ route }) {
   const [error, setError] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  useIncrementView('community_posts', postId);
+
   useEffect(() => {
-    if (postTitle) {
-      navigation.setOptions({ title: postTitle });
-    }
+    if (postTitle) navigation.setOptions({ title: postTitle });
   }, [postTitle, navigation]);
 
   const fetchPostDetail = useCallback(async () => {
@@ -48,7 +49,7 @@ function CommunityPostDetailScreen({ route }) {
       const { data, error: fetchError } = await supabase
         .from("community_posts_with_author_profile")
         .select(
-          "id, title, content, created_at, author_auth_id, author_name, views, image_urls, link_url"
+          "id, title, content, created_at, author_auth_id, author_name, views, image_urls, link_url, views"
         )
         .eq("id", postId)
         .single();
@@ -61,12 +62,6 @@ function CommunityPostDetailScreen({ route }) {
       }
       setPost(data);
 
-      if (data && data.author_auth_id !== user?.id) {
-        const { error: rpcError } = await supabase.rpc("increment_post_view", {
-          post_id_input: postId,
-        });
-        if (rpcError) console.error("Failed to increment view count:", rpcError);
-      }
     } catch (err) {
       console.error("Error in fetchPostDetail:", err);
       setError(err.message || "게시글 상세 정보를 불러오는데 실패했습니다.");
@@ -91,11 +86,8 @@ function CommunityPostDetailScreen({ route }) {
     const url = sanitizeUrl(rawUrl);
     try {
       const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        await Linking.openURL(url);
-      }
+      if (supported) await Linking.openURL(url);
+      else await Linking.openURL(url);
     } catch (e) {
       Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
     }
@@ -114,26 +106,23 @@ function CommunityPostDetailScreen({ route }) {
         onPress: async () => {
           setIsLoading(true);
           try {
+            // 1) 스토리지 이미지 삭제
             if (post.image_urls && post.image_urls.length > 0) {
-              const filePaths = post.image_urls.map((url) => {
-                const path = url.split("/post-images/")[1];
-                return path;
-              });
-
-              const { error: storageError } = await supabase.storage
-                .from("post-images")
-                .remove(filePaths);
-
-              if (storageError) {
-                console.warn("Storage 이미지 삭제 실패:", storageError.message);
+              const filePaths = post.image_urls
+                .map((url) => url.split("/post-images/")[1])
+                .filter(Boolean);
+              if (filePaths.length > 0) {
+                const { error: storageError } = await supabase.storage
+                  .from("post-images")
+                  .remove(filePaths);
+                if (storageError) console.warn("Storage 이미지 삭제 실패:", storageError.message);
               }
             }
-
+            // 2) DB 레코드 삭제
             const { error: deleteError } = await supabase
               .from("community_posts")
               .delete()
               .eq("id", postId);
-
             if (deleteError) throw deleteError;
 
             Alert.alert("삭제 완료", "게시글이 삭제되었습니다.");
@@ -159,6 +148,7 @@ function CommunityPostDetailScreen({ route }) {
 
     return (
       <View style={styles.imageGalleryContainer}>
+        {/* 가로 스크롤은 세로 ScrollView와 방향이 달라 중첩 이슈 없음 */}
         <ScrollView
           horizontal
           pagingEnabled
@@ -222,12 +212,13 @@ function CommunityPostDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 화면 전체 키보드 회피 */}
       <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: '#fff' }}
+        style={{ flex: 1, backgroundColor: "#fff" }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
-        {/* ⬇️ 본문만 세로 ScrollView로 표시 */}
+        {/* ✅ 본문 + 댓글을 같은 ScrollView에 배치하여 단일 스크롤 구성 */}
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.headerContainer}>
             <Text style={styles.title}>{post.title}</Text>
@@ -241,6 +232,7 @@ function CommunityPostDetailScreen({ route }) {
           <View style={styles.metaContainer}>
             <Text style={styles.author}>작성자: {post.author_name || "익명"}</Text>
             <Text style={styles.date}>게시일: {new Date(post.created_at).toLocaleString()}</Text>
+            <Text style={styles.date}>조회수: {post.views || 0}</Text>
           </View>
 
           {renderImages()}
@@ -255,10 +247,10 @@ function CommunityPostDetailScreen({ route }) {
               <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
             </TouchableOpacity>
           )}
-        </ScrollView>
 
-        {/* ⬇️ 댓글 섹션은 ScrollView 바깥(형제)으로 분리 → VirtualizedList 중첩 경고 제거 */}
-        <CommentsSection postId={postId} boardType="community_posts" />
+          {/* ✅ 댓글 섹션: 같은 ScrollView 내부 (CommentsSection의 FlatList는 scrollEnabled={false} 가정) */}
+          <CommentsSection postId={postId} boardType="community_posts" />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -276,7 +268,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  // 본문 ScrollView 전용 여백 (댓글은 형제라 여기 paddingBottom 크게 줄 필요 X)
+  // 본문 + 댓글 단일 스크롤 컨테이너
   scrollContainer: {
     paddingBottom: 8,
   },

@@ -18,6 +18,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
+import { useIncrementView } from '../hooks/useIncrementView';
 
 const { width } = Dimensions.get('window');
 
@@ -26,8 +27,9 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   const [news, setNews] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  useIncrementView('arrest_news', newsId);
 
-  const headerHeight = useHeaderHeight(); // KeyboardAvoidingView offset에 사용
+  const headerHeight = useHeaderHeight(); // KeyboardAvoidingView offset
 
   useEffect(() => {
     if (newsTitle) {
@@ -60,7 +62,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select('id, title, content, created_at, author_name, image_urls, is_pinned, link_url')
+        .select('id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views')
         .eq('id', newsId)
         .eq('is_published', true)
         .single();
@@ -96,7 +98,6 @@ function ArrestNewsDetailScreen({ route, navigation }) {
       );
     }
 
-    // 여러 장일 때: 가로 스크롤(세로 ScrollView와 방향이 달라서 괜찮음)
     return (
       <ScrollView
         horizontal
@@ -165,6 +166,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
               <Text style={styles.date}>
                 게시일: {new Date(news.created_at).toLocaleDateString()}
               </Text>
+              <Text style={styles.date}>조회수: {news.views || 0}</Text>
             </View>
           </View>
 
@@ -180,10 +182,10 @@ function ArrestNewsDetailScreen({ route, navigation }) {
               <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
             </TouchableOpacity>
           )}
-        </ScrollView>
 
-        {/* ⬇️ 댓글 섹션은 ScrollView 바깥(형제)으로 분리 → VirtualizedList 중첩 경고 해결 */}
-        <CommentsSection postId={newsId} boardType="arrest_news" />
+          {/* ✅ 댓글 섹션 (CommentsSection의 FlatList는 scrollEnabled={false} 상태여야 함) */}
+          <CommentsSection postId={newsId} boardType="arrest_news" />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
