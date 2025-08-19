@@ -18,11 +18,11 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
-import CommentsSection from "../components/CommentsSection";
+import CommentsSection from '../components/CommentsSection';
+import { useIncrementView } from '../hooks/useIncrementView';
 
 const { width } = Dimensions.get('window');
 
-// 별점 표시 컴포넌트
 const StarRating = ({ rating }) => {
   if (rating == null || rating < 1 || rating > 5) return null;
   const stars = [];
@@ -45,6 +45,8 @@ function ReviewDetailScreen({ route }) {
   const headerHeight = useHeaderHeight(); // iOS 키보드 회피 offset
   const { reviewId, reviewTitle } = route.params;
   const { user } = useAuth();
+
+  useIncrementView('reviews', reviewId);
 
   const [review, setReview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +73,8 @@ function ReviewDetailScreen({ route }) {
           author_auth_id,
           rating,
           author_name,
-          image_urls
+          image_urls,
+          views
         `)
         .eq('id', reviewId)
         .eq('is_published', true)
@@ -91,7 +94,6 @@ function ReviewDetailScreen({ route }) {
   }, [fetchReviewDetail]);
 
   const handleDeleteReview = async () => {
-    // ⬇️ 쿼리에 없는 user_id 대신 author_auth_id로 체크
     if (review?.author_auth_id !== user?.id) {
       Alert.alert('권한 없음', '자신의 후기만 삭제할 수 있습니다.');
       return;
@@ -104,11 +106,9 @@ function ReviewDetailScreen({ route }) {
         onPress: async () => {
           setIsLoading(true);
           try {
-            // 1) 스토리지 이미지 삭제 (있다면)
             if (review.image_urls && review.image_urls.length > 0) {
               const filePaths = review.image_urls
                 .map((url) => {
-                  // 버킷 경로가 다를 수 있으니 split 실패 방지
                   const parts = url.split('/reviews-images/');
                   return parts[1] || null;
                 })
@@ -156,7 +156,6 @@ function ReviewDetailScreen({ route }) {
 
     return (
       <View style={styles.imageGalleryContainer}>
-        {/* 가로 스크롤은 세로 ScrollView와 방향이 달라 중첩 경고 없음 */}
         <ScrollView
           horizontal
           pagingEnabled
@@ -220,13 +219,11 @@ function ReviewDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 화면 전체 키보드 회피 + 흰 배경으로 키보드-입력창 사이 갭 메우기 */}
       <KeyboardAvoidingView
         style={styles.kbWrapper}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
-        {/* ⬇️ 본문만 세로 ScrollView로 렌더링 */}
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.headerContainer}>
             <Text style={styles.title}>{review.title}</Text>
@@ -240,7 +237,10 @@ function ReviewDetailScreen({ route }) {
           <View style={styles.metaContainer}>
             <Text style={styles.author}>작성자: {review.author_name || '익명'}</Text>
             {review.rating && <StarRating rating={review.rating} />}
-            <Text style={styles.date}>게시일: {new Date(review.created_at).toLocaleString()}</Text>
+            <View style={styles.dataContainer}>
+              <Text style={styles.date}>게시일: {new Date(review.created_at).toLocaleString()}</Text>
+              <Text style={styles.date}>조회수: {review.views || 0}</Text>
+            </View>
           </View>
 
           {renderImages()}
@@ -248,10 +248,9 @@ function ReviewDetailScreen({ route }) {
           <View style={styles.contentContainer}>
             <Text style={styles.content}>{review.content || '내용이 없습니다.'}</Text>
           </View>
-        </ScrollView>
 
-        {/* ⬇️ 댓글 섹션은 ScrollView 바깥(형제)으로 분리 → VirtualizedList 중첩 경고 제거 */}
-        <CommentsSection postId={reviewId} boardType="reviews" />
+          <CommentsSection postId={reviewId} boardType="reviews" />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -260,7 +259,7 @@ function ReviewDetailScreen({ route }) {
 const styles = StyleSheet.create({
   // 레이아웃
   container: { flex: 1, backgroundColor: '#fff' },
-  kbWrapper: { flex: 1, backgroundColor: '#fff' }, // 키보드-입력창 사이 갭을 흰색으로
+  kbWrapper: { flex: 1, backgroundColor: '#fff' },
 
   // 로딩/에러/빈 상태
   centered: {
@@ -284,8 +283,13 @@ const styles = StyleSheet.create({
     marginBottom: 20, paddingBottom: 15, paddingHorizontal: 20,
     borderBottomWidth: 1, borderBottomColor: '#ecf0f1',
   },
+  dataContainer: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 5,
+  },
   author: { fontSize: 14, color: '#3498db', marginBottom: 5 },
   starContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+
   date: { fontSize: 14, color: '#7f8c8d', marginTop: 5 },
 
   // 이미지 갤러리(가로 방향)

@@ -74,7 +74,6 @@ function NoticeListScreen() {
       }
     >
       <View style={styles.noticeContent}>
-        {/* 썸네일 이미지 표시 */}
         {item.image_urls && item.image_urls.length > 0 && (
           <Image source={{ uri: item.image_urls[0] }} style={styles.thumbnail} />
         )}

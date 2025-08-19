@@ -19,6 +19,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useNavigation } from "@react-navigation/native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import CommentsSection from "../components/CommentsSection";
+import { useIncrementView } from '../hooks/useIncrementView';
 
 const { width } = Dimensions.get("window");
 
@@ -31,36 +32,16 @@ function NewCrimeCaseDetailScreen({ route }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const incrementView = async () => {
-      if (!caseId) return;
+  useIncrementView('new_crime_cases', caseId);
 
-      try {
-        const { error: rpcError } = await supabase.rpc('increment_new_crime_case_view', {
-          case_id_input: caseId
-        });
-
-        if (rpcError) {
-          console.error("Failed to increment view count:", rpcError);
-        }
-      } catch (err) {
-        console.error("An unexpected error occurred while incrementing view count:", err);
-      }
-    };
-
-    incrementView();
-  }, [caseId]);
-
-
+  // 상세 조회
   const fetchCaseDetail = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      // ## [CORE MODIFICATION] ##
-      // Added `views` to the select query to fetch the view count.
       const { data, error: fetchError } = await supabase
         .from("new_crime_cases")
-        .select("id, created_at, title, method, image_urls, link_url, views") // `views` column added
+        .select("id, created_at, title, method, image_urls, link_url, views")
         .eq("id", caseId)
         .eq("is_published", true)
         .single();
@@ -98,6 +79,7 @@ function NewCrimeCaseDetailScreen({ route }) {
     }
   };
 
+  // 상태별 UI
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -128,22 +110,19 @@ function NewCrimeCaseDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* 화면 전체 키보드 회피 */}
       <KeyboardAvoidingView
         style={styles.kbWrapper}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
+        {/* ✅ 본문 + 댓글을 같은 ScrollView에 포함 → 단일 스크롤 */}
         <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Text style={styles.title}>{caseDetail.title}</Text>
             <View style={styles.metaContainer}>
-              <Text style={styles.date}>
-                게시일: {new Date(caseDetail.created_at).toLocaleDateString()}
-              </Text>
-              {/* ## [CORE MODIFICATION] ## Display the fetched view count */}
-              <Text style={styles.date}>
-                조회수: {caseDetail.views || 0}
-              </Text>
+              <Text style={styles.date}>게시일: {new Date(caseDetail.created_at).toLocaleDateString()}</Text>
+              <Text style={styles.date}>조회수: {caseDetail.views || 0}</Text>
             </View>
           </View>
 
@@ -151,7 +130,7 @@ function NewCrimeCaseDetailScreen({ route }) {
             <Text style={styles.content}>{caseDetail.method}</Text>
           </View>
 
-          {Array.isArray(caseDetail.image_urls) && caseDetail.image_urls.length > 0 && (
+          {!!(Array.isArray(caseDetail.image_urls) && caseDetail.image_urls.length) && (
             <View style={styles.imageSection}>
               <Text style={styles.label}>첨부 사진</Text>
               {caseDetail.image_urls.map((url, index) => (
@@ -171,9 +150,11 @@ function NewCrimeCaseDetailScreen({ route }) {
               <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
             </TouchableOpacity>
           )}
-        </ScrollView>
 
-        <CommentsSection postId={caseId} boardType="new_crime_cases" />
+          {/* ✅ 댓글 섹션을 같은 ScrollView 내부에 배치
+              (CommentsSection 내부 FlatList는 scrollEnabled={false} 상태여야 부모 스크롤만 동작) */}
+          <CommentsSection postId={caseId} boardType="new_crime_cases" />
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -182,6 +163,7 @@ function NewCrimeCaseDetailScreen({ route }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   kbWrapper: { flex: 1, backgroundColor: "#fff" },
+
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -195,6 +177,7 @@ const styles = StyleSheet.create({
     marginTop: 20, backgroundColor: "#3d5afe", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
   },
   retryButtonText: { color: "white", fontSize: 16 },
+
   header: {
     marginBottom: 15,
     paddingBottom: 15,
@@ -206,15 +189,17 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: "bold", color: "#2c3e50", marginBottom: 12 },
   metaContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 4,
   },
   label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
   date: { fontSize: 13, color: "#7f8c8d" },
+
   contentContainer: { marginBottom: 25, paddingHorizontal: 20, backgroundColor: "#fff" },
   content: { fontSize: 16, lineHeight: 26, color: "#34495e" },
+
   imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
   image: {
     width: "100%",
@@ -223,22 +208,23 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: "#e9ecef",
   },
+
   linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3d5afe',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3d5afe",
     paddingVertical: 14,
     borderRadius: 8,
     marginTop: 15,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     marginHorizontal: 20,
   },
-  linkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+  linkButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
 });
 
 export default NewCrimeCaseDetailScreen;
