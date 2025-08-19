@@ -124,12 +124,6 @@ const CommentsSection = ({ postId, boardType }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [replyingToId, setReplyingToId] = useState(null);
-  const [composerHeight, setComposerHeight] = useState(56);
-
-  const onComposerLayout = (e) => {
-    const h = e?.nativeEvent?.layout?.height ?? 56;
-    setComposerHeight(h);
-  };
 
   const fetchComments = useCallback(async () => {
     try {
@@ -211,14 +205,9 @@ const CommentsSection = ({ postId, boardType }) => {
 
   return (
     <View style={styles.container}>
-      {/* --- 핵심 수정 부분 --- */}
       <View style={styles.sectionTitleContainer}>
-        <Text style={styles.warningText}>
-          아래로 스크롤하여 본문 전체 내용을 확인하세요
-        </Text>
         <Text style={styles.sectionTitle}>댓글 ({comments.length})</Text>
       </View>
-      {/* --- 여기까지 --- */}
 
       {loading ? (
         <ActivityIndicator style={{ marginVertical: 20 }} color="#3d5afe" />
@@ -237,16 +226,15 @@ const CommentsSection = ({ postId, boardType }) => {
           )}
           ListEmptyComponent={<Text style={styles.noCommentsText}>가장 먼저 댓글을 남겨보세요.</Text>}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: composerHeight + insets.bottom + 16 }}
+          scrollEnabled={false}
+          nestedScrollEnabled={false}
         />
       )}
 
       {user ? (
-        <AvoidSoftInputView
-          avoidOffset={insets.bottom}
-          style={styles.footerAvoidWrapper}
-        >
-          <View onLayout={onComposerLayout} style={styles.footerInputBar}>
+        // ✅ 입력창은 스크롤의 끝(리스트 아래)에 표시되며 키보드에 안전하게 밀림
+        <AvoidSoftInputView avoidOffset={insets.bottom} style={styles.footerAvoidWrapper}>
+          <View style={styles.footerInputBar}>
             <TextInput
               style={styles.input}
               placeholder="따뜻한 댓글을 남겨주세요."
@@ -275,18 +263,20 @@ const CommentsSection = ({ postId, boardType }) => {
 
 const styles = StyleSheet.create({
   // 섹션 컨테이너
-  container: { padding: 15, marginTop: 10, backgroundColor: '#fff', borderTopWidth: 8, borderTopColor: '#f8f9fa' },
+  container: {
+    padding: 15,
+    marginTop: 10,
+    backgroundColor: '#fff',
+    borderTopWidth: 8,
+    borderTopColor: '#f8f9fa',
+  },
   sectionTitleContainer: {
-    flexDirection: 'column', // 세로 정렬
-    alignItems: 'flex-start', // 좌측 정렬
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     marginBottom: 15,
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  warningText: {
-    fontSize: 12,
-    color: '#e74c3c',
-    marginBottom: 8,
-  },
+  warningText: { fontSize: 12, color: '#e74c3c', marginBottom: 8 },
 
   commentWrapper: {},
   commentContainer: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
@@ -308,13 +298,13 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
+  // 입력창
   footerAvoidWrapper: {},
   footerInputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 10,
     paddingVertical: 8,
-    paddingBottom: 40,
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
     backgroundColor: '#fff',
@@ -333,7 +323,14 @@ const styles = StyleSheet.create({
   submitButton: { backgroundColor: '#3d5afe', padding: 10, borderRadius: 20, marginLeft: 8 },
 
   // 로그인 유도
-  loginPrompt: { justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa', borderRadius: 8, marginTop: 10 },
+  loginPrompt: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    marginTop: 10,
+  },
   loginPromptText: { fontSize: 14, color: '#555', marginBottom: 10 },
   loginButtonText: { fontSize: 15, color: '#3d5afe', fontWeight: 'bold' },
 });
