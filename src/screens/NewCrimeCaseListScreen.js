@@ -42,7 +42,7 @@ function NewCrimeCaseListScreen() {
       // NoticeListScreen과 유사한 컬럼들을 가져오도록 쿼리 수정
       const { data, error: fetchError } = await supabase
         .from("new_crime_cases")
-        .select("id, created_at, title, image_urls, category, is_pinned") // title, image_urls, category, is_pinned 추가
+        .select("id, created_at, title, image_urls, category, views, is_pinned") // title, image_urls, category, is_pinned 추가
         .eq("is_published", true)
         .order('is_pinned', { ascending: false })
         .order("created_at", { ascending: false });
@@ -113,9 +113,11 @@ function NewCrimeCaseListScreen() {
               </Text>
             </View>
             <View style={styles.noticeMeta}>
-              {/* author_name 대신 category 표시 */}
               <Text style={styles.noticeAuthor} numberOfLines={1}>
                 {item.category || '기타 사례'}
+              </Text>
+              <Text style={styles.noticeDate} numberOfLines={1}>
+                조회 {item.views || 0}
               </Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
@@ -185,7 +187,6 @@ function NewCrimeCaseListScreen() {
   );
 }
 
-// --- 핵심 수정: 스타일 전체를 NoticeListScreen과 거의 동일하게 변경 ---
 const styles = StyleSheet.create({
   container: {
     flex: 1,
