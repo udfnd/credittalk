@@ -11,21 +11,18 @@ import {
   Dimensions,
   Linking,
   Alert,
-  Platform,
-  KeyboardAvoidingView,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigation } from "@react-navigation/native";
-import { useHeaderHeight } from "@react-navigation/elements";
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
+import { AvoidSoftInput } from "react-native-avoid-softinput"; // ✅ 추가
 
 const { width } = Dimensions.get("window");
 
 function NewCrimeCaseDetailScreen({ route }) {
   const navigation = useNavigation();
-  const headerHeight = useHeaderHeight();
   const { caseId } = route.params;
 
   const [caseDetail, setCaseDetail] = useState(null);
@@ -34,7 +31,13 @@ function NewCrimeCaseDetailScreen({ route }) {
 
   useIncrementView('new_crime_cases', caseId);
 
-  // 상세 조회
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
+
   const fetchCaseDetail = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -79,7 +82,6 @@ function NewCrimeCaseDetailScreen({ route }) {
     }
   };
 
-  // 상태별 UI
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -110,59 +112,48 @@ function NewCrimeCaseDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 화면 전체 키보드 회피 */}
-      <KeyboardAvoidingView
-        style={styles.kbWrapper}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
-      >
-        {/* ✅ 본문 + 댓글을 같은 ScrollView에 포함 → 단일 스크롤 */}
-        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Text style={styles.title}>{caseDetail.title}</Text>
-            <View style={styles.metaContainer}>
-              <Text style={styles.date}>게시일: {new Date(caseDetail.created_at).toLocaleDateString()}</Text>
-              <Text style={styles.date}>조회수: {caseDetail.views || 0}</Text>
-            </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <Text style={styles.title}>{caseDetail.title}</Text>
+          <View style={styles.metaContainer}>
+            <Text style={styles.date}>게시일: {new Date(caseDetail.created_at).toLocaleDateString()}</Text>
+            <Text style={styles.date}>조회수: {caseDetail.views || 0}</Text>
           </View>
+        </View>
 
-          <View style={styles.contentContainer}>
-            <Text style={styles.content}>{caseDetail.method}</Text>
+        <View style={styles.contentContainer}>
+          <Text style={styles.content}>{caseDetail.method}</Text>
+        </View>
+
+        {!!(Array.isArray(caseDetail.image_urls) && caseDetail.image_urls.length) && (
+          <View style={styles.imageSection}>
+            <Text style={styles.label}>첨부 사진</Text>
+            {caseDetail.image_urls.map((url, index) => (
+              <Image
+                key={index}
+                source={{ uri: url }}
+                style={styles.image}
+                resizeMode="contain"
+              />
+            ))}
           </View>
+        )}
 
-          {!!(Array.isArray(caseDetail.image_urls) && caseDetail.image_urls.length) && (
-            <View style={styles.imageSection}>
-              <Text style={styles.label}>첨부 사진</Text>
-              {caseDetail.image_urls.map((url, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: url }}
-                  style={styles.image}
-                  resizeMode="contain"
-                />
-              ))}
-            </View>
-          )}
+        {caseDetail.link_url && (
+          <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(caseDetail.link_url)}>
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
+        )}
 
-          {caseDetail.link_url && (
-            <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(caseDetail.link_url)}>
-              <Icon name="link-variant" size={20} color="#fff" />
-              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* ✅ 댓글 섹션을 같은 ScrollView 내부에 배치
-              (CommentsSection 내부 FlatList는 scrollEnabled={false} 상태여야 부모 스크롤만 동작) */}
-          <CommentsSection postId={caseId} boardType="new_crime_cases" />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <CommentsSection postId={caseId} boardType="new_crime_cases" />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  kbWrapper: { flex: 1, backgroundColor: "#fff" },
 
   centered: {
     flex: 1,

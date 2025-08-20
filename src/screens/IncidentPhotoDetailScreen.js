@@ -11,20 +11,17 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
-  Platform,
-  KeyboardAvoidingView,
 } from "react-native";
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useHeaderHeight } from '@react-navigation/elements';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 const { width } = Dimensions.get('window');
 
 function IncidentPhotoDetailScreen({ route, navigation }) {
   const { photoId, photoTitle } = route.params;
-  const headerHeight = useHeaderHeight(); // iOS 키보드 회피 offset
 
   const [photo, setPhoto] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +35,13 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
       navigation.setOptions({ title: photoTitle });
     }
   }, [photoTitle, navigation]);
+
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
 
   const sanitizeUrl = (raw) => {
     if (!raw) return "";
@@ -93,7 +97,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
     return (
       <View style={styles.imageContainer}>
-        {/* 가로 스크롤은 세로 ScrollView와 방향이 달라 중첩 경고 없음 */}
         <ScrollView
           horizontal
           pagingEnabled
@@ -157,59 +160,49 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.kbWrapper}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-      >
-        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>{photo.title}</Text>
-          </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>{photo.title}</Text>
+        </View>
 
-          {renderImages()}
+        {renderImages()}
 
-          <View style={styles.detailsContainer}>
-            <View style={styles.metaContainer}>
-              {photo.category && (
-                <Text style={styles.category}>
-                  <Icon name="tag-outline" size={15} color="#2980b9" /> {photo.category}
-                </Text>
-              )}
-              <Text style={styles.date}>
-                <Icon name="calendar-blank-outline" size={15} color="#7f8c8d" />{" "}
-                {new Date(photo.created_at).toLocaleDateString()}
+        <View style={styles.detailsContainer}>
+          <View style={styles.metaContainer}>
+            {photo.category && (
+              <Text style={styles.category}>
+                <Icon name="tag-outline" size={15} color="#2980b9" /> {photo.category}
               </Text>
-              <Text style={styles.date}>조회수: {photo.views || 0}</Text>
-            </View>
-
-            <View style={styles.contentContainer}>
-              <Text style={styles.descriptionLabel}>상세 정보</Text>
-              <Text style={styles.content}>{photo.description || '설명이 없습니다.'}</Text>
-            </View>
-
-            {photo.link_url && (
-              <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(photo.link_url)}>
-                <Icon name="link-variant" size={20} color="#fff" />
-                <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
-              </TouchableOpacity>
             )}
+            <Text style={styles.date}>
+              <Icon name="calendar-blank-outline" size={15} color="#7f8c8d" />{" "}
+              {new Date(photo.created_at).toLocaleDateString()}
+            </Text>
+            <Text style={styles.date}>조회수: {photo.views || 0}</Text>
           </View>
 
-          {/* ✅ 댓글 섹션을 같은 ScrollView 내부에 배치 */}
-          <CommentsSection postId={photoId} boardType="incident_photos" />
-        </ScrollView>
-      </KeyboardAvoidingView>
+          <View style={styles.contentContainer}>
+            <Text style={styles.descriptionLabel}>상세 정보</Text>
+            <Text style={styles.content}>{photo.description || '설명이 없습니다.'}</Text>
+          </View>
+
+          {photo.link_url && (
+            <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(photo.link_url)}>
+              <Icon name="link-variant" size={20} color="#fff" />
+              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <CommentsSection postId={photoId} boardType="incident_photos" />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  // 레이아웃/배경
   container: { flex: 1, backgroundColor: '#f9f9f9' },
-  kbWrapper: { flex: 1, backgroundColor: '#fff' }, // 키보드-입력창 사이 갭 흰색 처리
 
-  // 로딩/에러 상태
   centered: {
     flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa',
   },
@@ -220,16 +213,14 @@ const styles = StyleSheet.create({
   },
   retryButtonText: { color: 'white', fontSize: 16 },
 
-  // 본문 헤더/제목
   headerContainer: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, backgroundColor: '#fff' },
   title: { fontSize: 26, fontWeight: 'bold', color: '#2c3e50', textAlign: 'left' },
 
-  // 이미지 갤러리(가로 방향)
   imageContainer: { marginBottom: 20 },
   photoImage: {
     width,
     height: width * 0.8,
-    backgroundColor: '#000', // contain 시 레터박스 영역을 검정으로
+    backgroundColor: '#000',
   },
   indicatorContainer: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
@@ -240,7 +231,6 @@ const styles = StyleSheet.create({
   },
   activeIndicator: { backgroundColor: '#ffffff' },
 
-  // 상세 카드
   detailsContainer: {
     backgroundColor: '#ffffff',
     padding: 20,
@@ -262,7 +252,6 @@ const styles = StyleSheet.create({
   descriptionLabel: { fontSize: 18, fontWeight: 'bold', color: '#34495e', marginBottom: 10 },
   content: { fontSize: 16, lineHeight: 26, color: '#34495e' },
 
-  // 링크 버튼
   linkButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#3d5afe', paddingVertical: 14, borderRadius: 8, marginTop: 15,

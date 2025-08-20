@@ -1,5 +1,4 @@
 // supabase/functions/send-sens-notification/index.ts (관리자 알림 버전)
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
@@ -26,8 +25,6 @@ serve(async (req) => {
     const { record } = await req.json();
     const helpQuestion = record;
 
-    // *** [수정됨] ***
-    // Vault에서 관리자 전화번호를 가져옵니다.
     const adminPhoneNumber = Deno.env.get('ADMIN_PHONE_NUMBER');
     if (!adminPhoneNumber) {
       throw new Error("수신자인 관리자 전화번호(ADMIN_PHONE_NUMBER)가 Vault에 설정되지 않았습니다.");
@@ -67,8 +64,6 @@ serve(async (req) => {
       content: `[크레딧톡] 새로운 헬프데스크 문의가 등록되었습니다: "${helpQuestion.title}"`,
       messages: [
         {
-          // *** [수정됨] ***
-          // 수신자를 관리자 전화번호로 설정합니다.
           to: adminPhoneNumber.replace(/-/g, ''),
         },
       ],

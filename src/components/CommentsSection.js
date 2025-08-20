@@ -232,7 +232,6 @@ const CommentsSection = ({ postId, boardType }) => {
       )}
 
       {user ? (
-        // ✅ 입력창은 스크롤의 끝(리스트 아래)에 표시되며 키보드에 안전하게 밀림
         <AvoidSoftInputView avoidOffset={insets.bottom} style={styles.footerAvoidWrapper}>
           <View style={styles.footerInputBar}>
             <TextInput

@@ -6,19 +6,17 @@ import {
   SafeAreaView,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
   Image,
   Dimensions,
+  TouchableOpacity,
   Linking,
   Alert,
-  Platform,
-  KeyboardAvoidingView,
 } from "react-native";
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useHeaderHeight } from '@react-navigation/elements';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 const { width } = Dimensions.get('window');
 
@@ -29,13 +27,18 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   const [error, setError] = useState(null);
   useIncrementView('arrest_news', newsId);
 
-  const headerHeight = useHeaderHeight(); // KeyboardAvoidingView offset
-
   useEffect(() => {
     if (newsTitle) {
       navigation.setOptions({ title: newsTitle });
     }
   }, [newsTitle, navigation]);
+
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
 
   const sanitizeUrl = (raw) => {
     if (!raw) return "";
@@ -147,46 +150,37 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: '#fff' }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-      >
-        <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerContainer}>
-            {news.is_pinned && (
-              <View style={styles.pinnedContainer}>
-                <Icon name="pin" size={16} color="#d35400" />
-                <Text style={styles.pinnedText}>상단 고정된 소식</Text>
-              </View>
-            )}
-            <Text style={styles.title}>{news.title}</Text>
-            <View style={styles.metaContainer}>
-              <Text style={styles.author}>작성자: {news.author_name || '관리자'}</Text>
-              <Text style={styles.date}>
-                게시일: {new Date(news.created_at).toLocaleDateString()}
-              </Text>
-              <Text style={styles.date}>조회수: {news.views || 0}</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+        <View style={styles.headerContainer}>
+          {news.is_pinned && (
+            <View style={styles.pinnedContainer}>
+              <Icon name="pin" size={16} color="#d35400" />
+              <Text style={styles.pinnedText}>상단 고정된 소식</Text>
             </View>
-          </View>
-
-          {renderImages()}
-
-          <View style={styles.contentContainer}>
-            <Text style={styles.content}>{news.content || '내용이 없습니다.'}</Text>
-          </View>
-
-          {news.link_url && (
-            <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(news.link_url)}>
-              <Icon name="link-variant" size={20} color="#fff" />
-              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
-            </TouchableOpacity>
           )}
+          <Text style={styles.title}>{news.title}</Text>
+          <View style={styles.metaContainer}>
+            <Text style={styles.author}>작성자: {news.author_name || '관리자'}</Text>
+            <Text style={styles.date}>게시일: {new Date(news.created_at).toLocaleDateString()}</Text>
+            <Text style={styles.date}>조회수: {news.views || 0}</Text>
+          </View>
+        </View>
 
-          {/* ✅ 댓글 섹션 (CommentsSection의 FlatList는 scrollEnabled={false} 상태여야 함) */}
-          <CommentsSection postId={newsId} boardType="arrest_news" />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        {renderImages()}
+
+        <View style={styles.contentContainer}>
+          <Text style={styles.content}>{news.content || '내용이 없습니다.'}</Text>
+        </View>
+
+        {news.link_url && (
+          <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(news.link_url)}>
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
+        )}
+
+        <CommentsSection postId={newsId} boardType="arrest_news" />
+      </ScrollView>
     </SafeAreaView>
   );
 }

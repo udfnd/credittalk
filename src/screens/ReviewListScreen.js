@@ -64,7 +64,8 @@ function ReviewListScreen() {
           created_at,
           author_auth_id,
           rating,
-          author_name     
+          author_name,
+          views   
         `
           )
           .eq('is_published', true)
@@ -118,6 +119,7 @@ function ReviewListScreen() {
       {item.rating && <StarRating rating={item.rating} />}
       <View style={styles.reviewMeta}>
         <Text style={styles.reviewAuthor}>{item.author_name || '익명'}</Text>
+        <Text style={styles.reviewDate}>조회 {item.views || 0}</Text>
         <Text style={styles.reviewDate}>
           {new Date(item.created_at).toLocaleDateString()}
         </Text>
