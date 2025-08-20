@@ -10,16 +10,14 @@ import {
   Alert,
   Image,
   Dimensions,
-  Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-import { useHeaderHeight } from '@react-navigation/elements';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 const { width } = Dimensions.get('window');
 
@@ -42,7 +40,6 @@ const StarRating = ({ rating }) => {
 
 function ReviewDetailScreen({ route }) {
   const navigation = useNavigation();
-  const headerHeight = useHeaderHeight(); // iOS 키보드 회피 offset
   const { reviewId, reviewTitle } = route.params;
   const { user } = useAuth();
 
@@ -58,6 +55,13 @@ function ReviewDetailScreen({ route }) {
       navigation.setOptions({ title: reviewTitle });
     }
   }, [reviewTitle, navigation]);
+
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
 
   const fetchReviewDetail = useCallback(async () => {
     setIsLoading(true);
@@ -125,7 +129,6 @@ function ReviewDetailScreen({ route }) {
               }
             }
 
-            // 2) DB 레코드 삭제
             const { error: deleteError } = await supabase
               .from('reviews')
               .delete()
@@ -219,49 +222,40 @@ function ReviewDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.kbWrapper}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>{review.title}</Text>
-            {user && review.author_auth_id === user.id && (
-              <TouchableOpacity onPress={handleDeleteReview} style={styles.deleteButton}>
-                <Icon name="delete-outline" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            )}
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>{review.title}</Text>
+          {user && review.author_auth_id === user.id && (
+            <TouchableOpacity onPress={handleDeleteReview} style={styles.deleteButton}>
+              <Icon name="delete-outline" size={24} color="#e74c3c" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.metaContainer}>
+          <Text style={styles.author}>작성자: {review.author_name || '익명'}</Text>
+          {review.rating && <StarRating rating={review.rating} />}
+          <View style={styles.dataContainer}>
+            <Text style={styles.date}>게시일: {new Date(review.created_at).toLocaleString()}</Text>
+            <Text style={styles.date}>조회수: {review.views || 0}</Text>
           </View>
+        </View>
 
-          <View style={styles.metaContainer}>
-            <Text style={styles.author}>작성자: {review.author_name || '익명'}</Text>
-            {review.rating && <StarRating rating={review.rating} />}
-            <View style={styles.dataContainer}>
-              <Text style={styles.date}>게시일: {new Date(review.created_at).toLocaleString()}</Text>
-              <Text style={styles.date}>조회수: {review.views || 0}</Text>
-            </View>
-          </View>
+        {renderImages()}
 
-          {renderImages()}
+        <View style={styles.contentContainer}>
+          <Text style={styles.content}>{review.content || '내용이 없습니다.'}</Text>
+        </View>
 
-          <View style={styles.contentContainer}>
-            <Text style={styles.content}>{review.content || '내용이 없습니다.'}</Text>
-          </View>
-
-          <CommentsSection postId={reviewId} boardType="reviews" />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <CommentsSection postId={reviewId} boardType="reviews" />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  // 레이아웃
   container: { flex: 1, backgroundColor: '#fff' },
-  kbWrapper: { flex: 1, backgroundColor: '#fff' },
 
-  // 로딩/에러/빈 상태
   centered: {
     flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa',
   },
@@ -270,7 +264,6 @@ const styles = StyleSheet.create({
   retryButton: { marginTop: 20, backgroundColor: '#3d5afe', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5 },
   retryButtonText: { color: 'white', fontSize: 16 },
 
-  // 본문 ScrollView
   scrollContainer: { paddingBottom: 8 },
   headerContainer: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -289,10 +282,8 @@ const styles = StyleSheet.create({
   },
   author: { fontSize: 14, color: '#3498db', marginBottom: 5 },
   starContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-
   date: { fontSize: 14, color: '#7f8c8d', marginTop: 5 },
 
-  // 이미지 갤러리(가로 방향)
   imageGalleryContainer: { width, height: width * 0.75, marginBottom: 20 },
   galleryImage: { width, height: '100%', backgroundColor: '#e9ecef' },
   indicatorContainer: {
@@ -302,7 +293,6 @@ const styles = StyleSheet.create({
   indicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.4)', marginHorizontal: 4 },
   activeIndicator: { backgroundColor: '#fff' },
 
-  // 본문 내용
   contentContainer: { paddingHorizontal: 20 },
   content: { fontSize: 16, lineHeight: 26, color: '#34495e', textAlign: 'justify' },
 });

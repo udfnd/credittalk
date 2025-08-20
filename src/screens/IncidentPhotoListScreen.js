@@ -38,7 +38,7 @@ function IncidentPhotoListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('incident_photos')
-        .select('id, title, created_at, image_urls, category, description, is_pinned')
+        .select('id, title, created_at, image_urls, category, description, is_pinned, views')
         .eq('is_published', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -94,8 +94,9 @@ function IncidentPhotoListScreen() {
             </View>
             <View style={styles.noticeMeta}>
               {item.category && (
-                <Text style={styles.noticeAuthor}>유형: {item.category}</Text>
+                <Text style={styles.noticeAuthor} numberOfLines={1}>{item.category}</Text>
               )}
+              <Text style={styles.noticeDate}>조회 {item.views || 0}</Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
               </Text>
@@ -223,6 +224,7 @@ const styles = StyleSheet.create({
   noticeMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 16,
     alignItems: 'center',
     marginTop: 4,
   },
@@ -257,7 +259,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
   },
-  // FAB 스타일 추가
   fab: {
     position: 'absolute',
     width: 60,

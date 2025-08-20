@@ -37,7 +37,7 @@ function ArrestNewsListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select('id, title, created_at, author_name, image_urls, is_pinned')
+        .select('id, title, created_at, author_name, image_urls, views, is_pinned')
         .eq('is_published', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -95,6 +95,7 @@ function ArrestNewsListScreen() {
             </View>
             <View style={styles.noticeMeta}>
               <Text style={styles.noticeAuthor}>{item.author_name || '관리자'}</Text>
+              <Text style={styles.noticeDate}>조회 {item.views || 0}</Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
               </Text>

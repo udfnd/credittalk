@@ -39,7 +39,7 @@ function NoticeListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('notices')
-        .select('id, title, created_at, author_name, image_urls') // image_urls 추가
+        .select('id, title, created_at, author_name, image_urls, views') // image_urls 추가
         .eq('is_published', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -83,6 +83,7 @@ function NoticeListScreen() {
             {item.author_name && (
               <Text style={styles.noticeAuthor}>작성자: {item.author_name}</Text>
             )}
+            <Text style={styles.noticeDate}>조회 {item.views}</Text>
             <Text style={styles.noticeDate}>
               {new Date(item.created_at).toLocaleDateString()}
             </Text>
