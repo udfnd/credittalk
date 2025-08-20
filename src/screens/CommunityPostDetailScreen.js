@@ -12,22 +12,19 @@ import {
   Image,
   Dimensions,
   Linking,
-  Platform,
-  KeyboardAvoidingView,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNavigation } from "@react-navigation/native";
-import { useHeaderHeight } from "@react-navigation/elements";
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
+import { AvoidSoftInput } from "react-native-avoid-softinput";
 
 const { width } = Dimensions.get("window");
 
 function CommunityPostDetailScreen({ route }) {
   const navigation = useNavigation();
-  const headerHeight = useHeaderHeight(); // iOS 키보드 회피 오프셋
   const { postId, postTitle } = route.params;
   const { user } = useAuth();
 
@@ -41,6 +38,13 @@ function CommunityPostDetailScreen({ route }) {
   useEffect(() => {
     if (postTitle) navigation.setOptions({ title: postTitle });
   }, [postTitle, navigation]);
+
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
 
   const fetchPostDetail = useCallback(async () => {
     setIsLoading(true);
@@ -61,9 +65,7 @@ function CommunityPostDetailScreen({ route }) {
         throw fetchError;
       }
       setPost(data);
-
     } catch (err) {
-      console.error("Error in fetchPostDetail:", err);
       setError(err.message || "게시글 상세 정보를 불러오는데 실패했습니다.");
     } finally {
       setIsLoading(false);
@@ -106,7 +108,6 @@ function CommunityPostDetailScreen({ route }) {
         onPress: async () => {
           setIsLoading(true);
           try {
-            // 1) 스토리지 이미지 삭제
             if (post.image_urls && post.image_urls.length > 0) {
               const filePaths = post.image_urls
                 .map((url) => url.split("/post-images/")[1])
@@ -118,7 +119,6 @@ function CommunityPostDetailScreen({ route }) {
                 if (storageError) console.warn("Storage 이미지 삭제 실패:", storageError.message);
               }
             }
-            // 2) DB 레코드 삭제
             const { error: deleteError } = await supabase
               .from("community_posts")
               .delete()
@@ -148,7 +148,6 @@ function CommunityPostDetailScreen({ route }) {
 
     return (
       <View style={styles.imageGalleryContainer}>
-        {/* 가로 스크롤은 세로 ScrollView와 방향이 달라 중첩 이슈 없음 */}
         <ScrollView
           horizontal
           pagingEnabled
@@ -212,46 +211,37 @@ function CommunityPostDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 화면 전체 키보드 회피 */}
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: "#fff" }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
-      >
-        {/* ✅ 본문 + 댓글을 같은 ScrollView에 배치하여 단일 스크롤 구성 */}
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>{post.title}</Text>
-            {user && post.author_auth_id === user.id && (
-              <TouchableOpacity onPress={handleDeletePost} style={styles.deleteButton}>
-                <Icon name="delete-outline" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View style={styles.metaContainer}>
-            <Text style={styles.author}>작성자: {post.author_name || "익명"}</Text>
-            <Text style={styles.date}>게시일: {new Date(post.created_at).toLocaleString()}</Text>
-            <Text style={styles.date}>조회수: {post.views || 0}</Text>
-          </View>
-
-          {renderImages()}
-
-          <View style={styles.contentContainer}>
-            <Text style={styles.content}>{post.content || "내용이 없습니다."}</Text>
-          </View>
-
-          {post.link_url && (
-            <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(post.link_url)}>
-              <Icon name="link-variant" size={20} color="#fff" />
-              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        <View style={styles.headerContainer}>
+          <Text style={styles.title}>{post.title}</Text>
+          {user && post.author_auth_id === user.id && (
+            <TouchableOpacity onPress={handleDeletePost} style={styles.deleteButton}>
+              <Icon name="delete-outline" size={24} color="#e74c3c" />
             </TouchableOpacity>
           )}
+        </View>
 
-          {/* ✅ 댓글 섹션: 같은 ScrollView 내부 (CommentsSection의 FlatList는 scrollEnabled={false} 가정) */}
-          <CommentsSection postId={postId} boardType="community_posts" />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <View style={styles.metaContainer}>
+          <Text style={styles.author}>작성자: {post.author_name || "익명"}</Text>
+          <Text style={styles.date}>게시일: {new Date(post.created_at).toLocaleString()}</Text>
+          <Text style={styles.date}>조회수: {post.views || 0}</Text>
+        </View>
+
+        {renderImages()}
+
+        <View style={styles.contentContainer}>
+          <Text style={styles.content}>{post.content || "내용이 없습니다."}</Text>
+        </View>
+
+        {post.link_url && (
+          <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(post.link_url)}>
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
+        )}
+
+        <CommentsSection postId={postId} boardType="community_posts" />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -268,7 +258,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  // 본문 + 댓글 단일 스크롤 컨테이너
   scrollContainer: {
     paddingBottom: 8,
   },
