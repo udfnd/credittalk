@@ -203,7 +203,8 @@ function HomeScreen() {
           <View style={styles.searchBarContainer}>
             <TextInput
               style={styles.searchInput}
-              placeholder="연락처, 계좌번호, 이름 등 검색"
+              placeholder="사기에 사용된 계좌, 닉네임, 전화번호"
+              placeholderTextColor="#6c757d"
               value={searchTerm}
               onChangeText={setSearchTerm}
               keyboardType="default"
