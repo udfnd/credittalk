@@ -1,16 +1,18 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   Platform,
   View,
   StyleSheet,
   Text,
-  ActivityIndicator, PermissionsAndroid
+  ActivityIndicator,
+  PermissionsAndroid
 } from "react-native";
 import {
   NavigationContainer,
+  NavigationContainerRef
 } from "@react-navigation/native";
 import {
   createNativeStackNavigator,
@@ -23,7 +25,13 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-// import { syncBlacklist } from "./src/native_modules/CallDetection";
+
+// 🔔 Push 유틸 추가
+import {
+  ensureNotificationChannel,
+  wireMessageHandlers,
+  registerPushToken,
+} from "./src/lib/push";
 
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
@@ -67,6 +75,7 @@ const linking = {
   config: {
     screens: {
       UpdatePassword: "update-password",
+      // 필요 시 딥링크 맵을 더 추가하세요.
     },
   },
 };
@@ -228,7 +237,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="HelpCenterTab"
-        component={HelpDeskStack} // listener 방식 대신 스택 컴포넌트를 직접 연결
+        component={HelpDeskStack}
         options={{ title: "헬프센터" }}
       />
     </Tab.Navigator>
@@ -237,6 +246,18 @@ function MainTabs() {
 
 function AppNavigator() {
   const { user, profile, isLoading } = useAuth();
+
+  // ✅ 로그인 후 토큰 업서트 (여기에 두면 AuthProvider 컨텍스트를 활용 가능)
+  useEffect(() => {
+    const run = async () => {
+      if (user?.id) {
+        await ensureNotificationChannel();
+        // profile?.id = public.users.id (bigint), user.id = auth.users.id (uuid)
+        await registerPushToken(user.id, '26', { authUserId: user.id, appUserId: profile?.id });
+      }
+    };
+    run();
+  }, [user?.id, profile?.id]);
 
   if (isLoading) {
     return (
@@ -407,6 +428,18 @@ function AppNavigator() {
 }
 
 function App(): React.JSX.Element {
+  // 네비게이션 참조(알림 탭 시 화면 이동에 사용)
+  const navRef = useRef<NavigationContainerRef<any>>(null);
+
+  // 알림 → 화면 이동 함수
+  const navigateTo = (screen: string, params?: any) => {
+    const nav = navRef.current;
+    if (!nav) return;
+    if (nav.isReady()) {
+      nav.navigate(screen as never, params as never);
+    }
+  };
+
   useEffect(() => {
     NaverLogin.initialize({
       appName: "크레딧톡",
@@ -417,40 +450,17 @@ function App(): React.JSX.Element {
     });
   }, []);
 
-  // const setupCallDetection = async () => {
-  //   // 안드로이드 플랫폼에서만 실행
-  //   if (Platform.OS === 'android') {
-  //     try {
-  //       // 사용자에게 전화 및 연락처 관련 권한을 요청합니다.
-  //       const granted = await PermissionsAndroid.requestMultiple([
-  //         PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-  //         PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
-  //         PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
-  //       ]);
-  //
-  //       if (
-  //         granted[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] === PermissionsAndroid.RESULTS.GRANTED &&
-  //         granted[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] === PermissionsAndroid.RESULTS.GRANTED &&
-  //         granted[PermissionsAndroid.PERMISSIONS.READ_CONTACTS] === PermissionsAndroid.RESULTS.GRANTED
-  //       ) {
-  //         console.log('Call detection permissions granted.');
-  //         // 권한이 모두 부여되면, Supabase에서 블랙리스트를 가져와 네이티브 모듈에 동기화합니다.
-  //         await syncBlacklist();
-  //       } else {
-  //         console.log('One or more call detection permissions were denied.');
-  //       }
-  //     } catch (err) {
-  //       console.warn('Error requesting call detection permissions:', err);
-  //     }
-  //   }
-  // };
-  //
-  // setupCallDetection();
+  // 🔔 앱 시작 시: 채널 보장 + 알림 핸들러 연결(전역)
+  useEffect(() => {
+    ensureNotificationChannel();       // Android 채널(최초 1회, 중복 호출 무해)
+    wireMessageHandlers(navigateTo);   // 알림 탭 → 해당 스크린으로 이동
+  }, []);
 
   return (
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer
+          ref={navRef}
           linking={linking}
           fallback={<Text>Loading...</Text>}
         >
