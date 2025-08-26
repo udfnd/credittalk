@@ -82,8 +82,8 @@ android {
         applicationId "com.credittalka"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "8"
+        versionCode 9
+        versionName "9"
     }
     signingConfigs {
         debug {
@@ -127,3 +127,4 @@ dependencies {
 }
 
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+apply plugin: 'com.google.gms.google-services'

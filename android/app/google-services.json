@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "544156354790",
+    "project_id": "credittalk-prod",
+    "storage_bucket": "credittalk-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:544156354790:android:2586f786d2ceb76bbf5327",
+        "android_client_info": {
+          "package_name": "com.credittalka"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwdT19IoY07iOjrcILEUFTtopt-0YZpqg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
