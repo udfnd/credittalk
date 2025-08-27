@@ -18,9 +18,11 @@ import {
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import LinearGradient from "react-native-linear-gradient";
+
 import { useAuth } from "../context/AuthContext";
 import { logPageView } from "../lib/pageViewLogger";
 import { supabase } from "../lib/supabaseClient";
+import PartnersCarousel from '../components/PartnersCarousel';
 
 const { width } = Dimensions.get("window");
 const BANNER_HEIGHT = 150;
@@ -41,7 +43,6 @@ function HomeScreen() {
   const isFocused = useIsFocused();
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --- 1. stats 상태 객체 구조를 함수 반환값에 맞게 변경 ---
   const [stats, setStats] = useState({
     todayHelpCount: 0,
     totalHelpCount: 0,
@@ -197,6 +198,8 @@ function HomeScreen() {
             <Text style={styles.adminButtonText}>관리자 페이지</Text>
           </TouchableOpacity>
         )}
+
+        <PartnersCarousel />
 
         <View style={styles.searchSection}>
           <Text style={styles.sectionTitle}>사기 피해사례 검색</Text>
@@ -404,7 +407,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     marginHorizontal: 20,
-    marginTop: 25,
     elevation: 3,
   },
   sectionTitle: {
