@@ -1,10 +1,9 @@
-// src/lib/push.js
 import { Platform, Alert } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidStyle } from '@notifee/react-native';
 import { supabase } from '../lib/supabaseClient';
 
-// ✅ 새 채널 ID (기존 'default' 대체)
+// ✅ 새 채널 ID (항상 HIGH)
 export const CHANNEL_ID = 'push_default_v2';
 
 /** 안드로이드 알림 채널 생성(최초 1회, 이미 있으면 no-op) */
@@ -14,14 +13,10 @@ export async function ensureNotificationChannel() {
   await notifee.createChannel({
     id: CHANNEL_ID,
     name: 'Default (High)',
-    importance: AndroidImportance.HIGH, // 🔥 항상 HIGH
-    // 필요시 옵션
-    // sound: 'default',
-    // vibration: true,
-    // vibrationPattern: [300, 500],
+    importance: AndroidImportance.HIGH,
   });
 
-  // (선택) 예전 채널을 더 이상 쓰지 않는다면 삭제 가능
+  // (선택) 더 이상 쓰지 않는 기존 채널 정리
   // try { await notifee.deleteChannel('default'); } catch {}
 }
 
@@ -35,7 +30,6 @@ export async function requestPushPermission() {
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
       return enabled;
     } else {
-      // Android: 표시 권한은 notifee가 처리
       try { await notifee.requestPermission(); } catch {}
       return true;
     }
@@ -113,13 +107,29 @@ export async function registerPushToken(userIdOrAuthId, appVersion, opts = {}) {
 
 /** 알림 수신/탭 핸들러 연결 (navigateTo: (screen, params) => void) */
 export function wireMessageHandlers(navigateTo) {
-  // 포어그라운드 수신 → 로컬 표시
+  // 포어그라운드 수신 → 로컬 표시 (이미지 있을 때 BigPicture)
   messaging().onMessage(async (remoteMessage) => {
     await ensureNotificationChannel();
+
+    const dataImage =
+      remoteMessage?.data?.image ||
+      remoteMessage?.notification?.android?.imageUrl ||
+      remoteMessage?.notification?.imageUrl;
+
     await notifee.displayNotification({
       title: remoteMessage.notification?.title,
       body: remoteMessage.notification?.body,
-      android: { channelId: CHANNEL_ID }, // ✅ 새 채널 사용
+      android: {
+        channelId: CHANNEL_ID,
+        ...(dataImage
+          ? {
+            style: {
+              type: AndroidStyle.BIGPICTURE,
+              picture: dataImage,
+            },
+          }
+          : {}),
+      },
       data: remoteMessage.data,
     });
   });
