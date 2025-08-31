@@ -3,49 +3,64 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 serve(async (req) => {
-  // CORS preflight 요청을 처리합니다.
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 앱에서 보낸 인증 헤더를 사용해 Supabase 클라이언트를 생성합니다.
-    const supabaseClient = createClient(
+    // 인증된 사용자 컨텍스트로 실행
+    const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
     );
 
-    // 현재 로그인된 사용자 정보를 가져옵니다.
-    const { data: { user } } = await supabaseClient.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return new Response(JSON.stringify({ error: '인증된 사용자가 아닙니다.' }), {
+      return new Response(JSON.stringify({ error: "인증 필요" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
       });
     }
 
-    // 요청 본문에서 검색어를 추출합니다.
-    const { searchTerm } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const rawTerm = typeof body?.searchTerm === "string" ? body.searchTerm.trim() : "";
+    if (!rawTerm) {
+      return new Response(JSON.stringify({ error: "searchTerm is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
 
-    // 'search_logs' 테이블에 새로운 검색 기록을 삽입합니다.
-    const { error } = await supabaseClient
+    // 1) 정확일치 검색 실행 (search_reports는 이미 정확일치 로직으로 재정의됨)
+    const { data: rows, error: rpcError } = await supabase.rpc("search_reports", {
+      search_term: rawTerm,
+    });
+    if (rpcError) throw rpcError;
+
+    // RETURNS TABLE 이므로 0~1행 배열
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    const totalCount = row?.total_count ?? 0;
+    const exactMatch = totalCount > 0;
+
+    // 2) 로그 저장 (정확일치 여부 함께 기록)
+    const { error: insertError } = await supabase
       .from("search_logs")
       .insert({
         user_id: user.id,
-        search_term: searchTerm,
+        search_term: rawTerm,
+        exact_match: exactMatch,
       });
 
-    if (error) throw error;
+    if (insertError) throw insertError;
 
-    return new Response(JSON.stringify({ message: "검색이 성공적으로 기록되었습니다." }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 201, // 201 Created
-    });
-  } catch (error) {
-    console.error("Log Search Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(
+      JSON.stringify({ ok: true, exactMatch, totalCount }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 201 },
+    );
+  } catch (error: any) {
+    console.error("log-search error:", error?.message || error);
+    return new Response(JSON.stringify({ error: error?.message || String(error) }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });
