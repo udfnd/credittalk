@@ -31,7 +31,9 @@ import {
   ensureNotificationChannel,
   wireMessageHandlers,
   registerPushToken,
+  openFromPayload,                 // ✅ 추가: push payload로 화면이동/외부링크 여는 헬퍼
 } from "./src/lib/push";
+import notifee from "@notifee/react-native"; // ✅ 추가: 종료상태에서 notifee로 띄운 알림을 탭하고 진입한 경우 처리
 
 // Screens
 import HomeScreen from "./src/screens/HomeScreen";
@@ -254,12 +256,11 @@ function MainTabs() {
 function AppNavigator() {
   const { user, profile, isLoading } = useAuth();
 
-  // ✅ 로그인 후 토큰 업서트 (여기에 두면 AuthProvider 컨텍스트를 활용 가능)
+  // ✅ 로그인 후 토큰 업서트
   useEffect(() => {
     const run = async () => {
       if (user?.id) {
         await ensureNotificationChannel();
-        // profile?.id = public.users.id (bigint), user.id = auth.users.id (uuid)
         await registerPushToken(user.id, '26', { authUserId: user.id, appUserId: profile?.id });
       }
     };
@@ -460,7 +461,15 @@ function App(): React.JSX.Element {
   // 🔔 앱 시작 시: 채널 보장 + 알림 핸들러 연결(전역)
   useEffect(() => {
     ensureNotificationChannel();       // Android 채널(최초 1회, 중복 호출 무해)
-    wireMessageHandlers(navigateTo);   // 알림 탭 → 해당 스크린으로 이동
+    wireMessageHandlers(navigateTo);   // 푸시 데이터(screen/params 또는 link_url)을 처리
+
+    // ✅ 종료상태에서 notifee 알림을 탭하여 앱이 시작된 경우 처리
+    (async () => {
+      const initial = await notifee.getInitialNotification();
+      if (initial?.notification?.data) {
+        openFromPayload(navigateTo, initial.notification.data);
+      }
+    })();
   }, []);
 
   return (
