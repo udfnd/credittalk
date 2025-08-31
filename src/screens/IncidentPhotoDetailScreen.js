@@ -1,3 +1,4 @@
+// src/screens/IncidentPhotoDetailScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -26,7 +27,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   const [photo, setPhoto] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   useIncrementView('incident_photos', photoId);
 
@@ -45,15 +45,16 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
   const sanitizeUrl = (raw) => {
     if (!raw) return "";
-    return String(raw).trim().replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "").replace(/\s+/g, "");
+    return String(raw)
+      .trim()
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
+      .replace(/\s+/g, "");
   };
 
   const handleLinkPress = async (rawUrl) => {
     const url = sanitizeUrl(rawUrl);
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) await Linking.openURL(url);
-      else await Linking.openURL(url);
+      await Linking.openURL(url);
     } catch (e) {
       Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
     }
@@ -77,58 +78,17 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
         throw fetchError;
       }
       setPhoto(data);
+      if (data?.title) {
+        navigation.setOptions({ title: data.title });
+      }
     } catch (err) {
       setError(err.message || '사진 자료 상세 정보를 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
-  }, [photoId]);
+  }, [photoId, navigation]);
 
   useEffect(() => { fetchPhotoDetail(); }, [fetchPhotoDetail]);
-
-  const handleScroll = (event) => {
-    const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffsetX / width);
-    setCurrentImageIndex(index);
-  };
-
-  const renderImages = () => {
-    if (!photo?.image_urls || photo.image_urls.length === 0) return null;
-
-    return (
-      <View style={styles.imageContainer}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-        >
-          {photo.image_urls.map((url, index) => (
-            <Image
-              key={index}
-              source={{ uri: url }}
-              style={styles.photoImage}
-              resizeMode="contain"
-            />
-          ))}
-        </ScrollView>
-        {photo.image_urls.length > 1 && (
-          <View style={styles.indicatorContainer}>
-            {photo.image_urls.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.indicator,
-                  index === currentImageIndex ? styles.activeIndicator : null,
-                ]}
-              />
-            ))}
-          </View>
-        )}
-      </View>
-    );
-  };
 
   if (isLoading) {
     return (
@@ -160,40 +120,58 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
-        <View style={styles.headerContainer}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 8 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* 헤더 (제목/메타) */}
+        <View style={styles.header}>
           <Text style={styles.title}>{photo.title}</Text>
-        </View>
-
-        {renderImages()}
-
-        <View style={styles.detailsContainer}>
           <View style={styles.metaContainer}>
-            {photo.category && (
-              <Text style={styles.category}>
-                <Icon name="tag-outline" size={15} color="#2980b9" /> {photo.category}
-              </Text>
-            )}
             <Text style={styles.date}>
-              <Icon name="calendar-blank-outline" size={15} color="#7f8c8d" />{" "}
-              {new Date(photo.created_at).toLocaleDateString()}
+              게시일: {new Date(photo.created_at).toLocaleDateString()}
             </Text>
             <Text style={styles.date}>조회수: {photo.views || 0}</Text>
           </View>
-
-          <View style={styles.contentContainer}>
-            <Text style={styles.descriptionLabel}>상세 정보</Text>
-            <Text style={styles.content}>{photo.description || '설명이 없습니다.'}</Text>
-          </View>
-
-          {photo.link_url && (
-            <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(photo.link_url)}>
-              <Icon name="link-variant" size={20} color="#fff" />
-              <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
-            </TouchableOpacity>
+          {!!photo.category && (
+            <Text style={[styles.date, { marginTop: 4 }]}>
+              카테고리: {photo.category}
+            </Text>
           )}
         </View>
 
+        {/* 본문 설명 */}
+        <View style={styles.contentContainer}>
+          <Text style={styles.content}>{photo.description || '설명이 없습니다.'}</Text>
+        </View>
+
+        {/* ✅ 이미지 섹션 — NewCrimeCaseDetailScreen 과 동일한 방식 */}
+        {!!(Array.isArray(photo.image_urls) && photo.image_urls.length) && (
+          <View style={styles.imageSection}>
+            <Text style={styles.label}>첨부 사진</Text>
+            {photo.image_urls.map((url, index) => (
+              <Image
+                key={index}
+                source={{ uri: url }}
+                style={styles.image}
+                resizeMode="contain"
+              />
+            ))}
+          </View>
+        )}
+
+        {/* 링크 버튼 */}
+        {photo.link_url && (
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => handleLinkPress(photo.link_url)}
+          >
+            <Icon name="link-variant" size={20} color="#fff" />
+            <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* 댓글 */}
         <CommentsSection postId={photoId} boardType="incident_photos" />
       </ScrollView>
     </SafeAreaView>
@@ -201,64 +179,63 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9f9f9' },
+  container: { flex: 1, backgroundColor: "#fff" },
 
   centered: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa',
+    flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#f8f9fa",
   },
-  errorText: { marginTop: 10, fontSize: 16, color: '#e74c3c', textAlign: 'center' },
-  emptyText: { fontSize: 16, color: '#7f8c8d' },
+  errorText: { marginTop: 10, fontSize: 16, color: "#e74c3c", textAlign: "center" },
+  emptyText: { fontSize: 16, color: "#7f8c8d" },
   retryButton: {
-    marginTop: 20, backgroundColor: '#3d5afe', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
+    marginTop: 20, backgroundColor: "#3d5afe", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
   },
-  retryButtonText: { color: 'white', fontSize: 16 },
+  retryButtonText: { color: "white", fontSize: 16 },
 
-  headerContainer: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 15, backgroundColor: '#fff' },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#2c3e50', textAlign: 'left' },
-
-  imageContainer: { marginBottom: 20 },
-  photoImage: {
-    width,
-    height: width * 0.8,
-    backgroundColor: '#000',
+  header: {
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ecf0f1",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    backgroundColor: "#fff",
   },
-  indicatorContainer: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    position: 'absolute', bottom: 15, width: '100%',
-  },
-  indicator: {
-    width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.5)', marginHorizontal: 4,
-  },
-  activeIndicator: { backgroundColor: '#ffffff' },
-
-  detailsContainer: {
-    backgroundColor: '#ffffff',
-    padding: 20,
-    marginHorizontal: 15,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
+  title: { fontSize: 22, fontWeight: "bold", color: "#2c3e50", marginBottom: 12 },
   metaContainer: {
-    marginBottom: 15, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#ecf0f1',
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
   },
-  category: { fontSize: 16, color: '#2980b9', marginBottom: 8, fontWeight: '600' },
-  date: { fontSize: 14, color: '#7f8c8d' },
+  date: { fontSize: 13, color: "#7f8c8d" },
 
-  contentContainer: { marginTop: 5 },
-  descriptionLabel: { fontSize: 18, fontWeight: 'bold', color: '#34495e', marginBottom: 10 },
-  content: { fontSize: 16, lineHeight: 26, color: '#34495e' },
+  contentContainer: { marginBottom: 25, paddingHorizontal: 20, backgroundColor: "#fff" },
+  content: { fontSize: 16, lineHeight: 26, color: "#34495e" },
+
+  // 🔽 NewCrimeCaseDetailScreen 과 동일한 스타일
+  imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
+  label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
+  image: {
+    width: "100%",
+    height: width * 0.8,
+    borderRadius: 8,
+    marginBottom: 15,
+    backgroundColor: "#e9ecef",
+  },
 
   linkButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#3d5afe', paddingVertical: 14, borderRadius: 8, marginTop: 15,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3d5afe",
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    marginHorizontal: 20,
   },
-  linkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+  linkButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
 });
 
 export default IncidentPhotoDetailScreen;

@@ -67,6 +67,7 @@ import UpdatePasswordScreen from "./src/screens/UpdatePasswordScreen";
 import HelpDeskListScreen from "./src/screens/HelpDeskListScreen";
 import HelpDeskCreateScreen from "./src/screens/HelpDeskCreateScreen";
 import HelpDeskDetailScreen from "./src/screens/HelpDeskDetailScreen";
+import HelpDeskNoticeDetailScreen from "./src/screens/HelpDeskNoticeDetailScreen";
 import AdditionalInfoScreen from "./src/screens/AdditionalInfoScreen";
 import NewCrimeCaseDetailScreen from "./src/screens/NewCrimeCaseDetailScreen";
 
@@ -84,6 +85,7 @@ export type HelpDeskStackParamList = {
   HelpDeskList: undefined;
   HelpDeskCreate: undefined;
   HelpDeskDetail: { questionId: number };
+  HelpDeskNoticeDetail: { noticeId: number; noticeTitle: string };
 };
 
 export type RootStackParamList = {
@@ -174,6 +176,11 @@ function HelpDeskStack() {
         name="HelpDeskDetail"
         component={HelpDeskDetailScreen}
         options={{ title: "문의 상세" }}
+      />
+      <HelpDeskNativeStack.Screen
+        name="HelpDeskNoticeDetail"
+        component={HelpDeskNoticeDetailScreen}
+        options={{ title: '공지 상세' }}
       />
     </HelpDeskNativeStack.Navigator>
   );
