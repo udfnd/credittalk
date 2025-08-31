@@ -13,6 +13,13 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 
+function cleanUrl(raw) {
+  if (!raw) return null;
+  return String(raw)
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '') // 제로폭/불가시 공백 제거
+    .trim();
+}
+
 // URL 정규화: 스킴이 없으면 https:// 붙임
 function normalizeUrl(raw) {
   if (!raw) return null;
@@ -24,22 +31,28 @@ function normalizeUrl(raw) {
 }
 
 async function handleOpen(raw) {
-  const url = normalizeUrl(raw);
-  if (!url) {
+  const primary = normalizeUrl(raw);
+  if (!primary) {
     Alert.alert('링크가 없어요', '배너의 링크 URL이 비어 있습니다.');
     return;
   }
   try {
-    const supported = await Linking.canOpenURL(url);
-    if (!supported) {
-      Alert.alert('열 수 없는 링크', url);
+    if (await Linking.canOpenURL(primary)) {
+      await Linking.openURL(primary);
       return;
     }
-    await Linking.openURL(url);
+
+    const fallback = primary.replace(/^https:\/\//i, 'http://');
+    if (fallback !== primary && (await Linking.canOpenURL(fallback))) {
+      await Linking.openURL(fallback);
+      return;
+    }
+    Alert.alert('열 수 없는 링크', cleanUrl(raw) || '');
   } catch (e) {
     Alert.alert('링크를 열 수 없어요', e?.message ?? String(e));
   }
 }
+
 
 export default function PartnersCarousel() {
   const [items, setItems] = useState([]);
