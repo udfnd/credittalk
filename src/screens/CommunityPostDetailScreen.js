@@ -31,7 +31,6 @@ function CommunityPostDetailScreen({ route }) {
   const [post, setPost] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   useIncrementView('community_posts', postId);
 
@@ -137,46 +136,20 @@ function CommunityPostDetailScreen({ route }) {
     ]);
   };
 
-  const handleScroll = (event) => {
-    const contentOffsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffsetX / width);
-    setCurrentImageIndex(index);
-  };
-
+  // ✅ NewCrimeCaseDetailScreen처럼: 세로로 이미지 나열
   const renderImages = () => {
-    if (!post?.image_urls || post.image_urls.length === 0) return null;
-
+    if (!Array.isArray(post?.image_urls) || post.image_urls.length === 0) return null;
     return (
-      <View style={styles.imageGalleryContainer}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-        >
-          {post.image_urls.map((url, index) => (
-            <Image
-              key={index}
-              source={{ uri: url }}
-              style={styles.galleryImage}
-              resizeMode="cover"
-            />
-          ))}
-        </ScrollView>
-        {post.image_urls.length > 1 && (
-          <View style={styles.indicatorContainer}>
-            {post.image_urls.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.indicator,
-                  index === currentImageIndex ? styles.activeIndicator : null,
-                ]}
-              />
-            ))}
-          </View>
-        )}
+      <View style={styles.imageSection}>
+        <Text style={styles.label}>첨부 사진</Text>
+        {post.image_urls.map((url, index) => (
+          <Image
+            key={index}
+            source={{ uri: url }}
+            style={styles.image}
+            resizeMode="contain"
+          />
+        ))}
       </View>
     );
   };
@@ -248,133 +221,55 @@ function CommunityPostDetailScreen({ route }) {
 
 const styles = StyleSheet.create({
   centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#f8f9fa",
+    flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#f8f9fa",
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  scrollContainer: {
-    paddingBottom: 8,
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  scrollContainer: { paddingBottom: 8 },
+
   headerContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 10,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start",
+    marginBottom: 10, paddingHorizontal: 20, paddingTop: 20,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    flex: 1,
-    marginRight: 10,
+    fontSize: 24, fontWeight: "bold", color: "#2c3e50", flex: 1, marginRight: 10,
   },
-  deleteButton: {
-    padding: 5,
-  },
+  deleteButton: { padding: 5 },
+
   metaContainer: {
-    flexDirection: "column",
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ecf0f1",
-    paddingHorizontal: 20,
+    flexDirection: "column", marginBottom: 20, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: "#ecf0f1", paddingHorizontal: 20,
   },
-  author: {
-    fontSize: 14,
-    color: "#3498db",
-    marginBottom: 5,
-  },
-  date: {
-    fontSize: 14,
-    color: "#7f8c8d",
-  },
-  imageGalleryContainer: {
-    width,
-    height: width * 0.75,
-    marginBottom: 20,
-  },
-  galleryImage: {
-    width,
-    height: "100%",
+  author: { fontSize: 14, color: "#3498db", marginBottom: 5 },
+  date: { fontSize: 14, color: "#7f8c8d" },
+
+  // ✅ NewCrimeCaseDetailScreen과 맞춘 이미지 섹션 스타일
+  imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
+  label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
+  image: {
+    width: "100%",
+    height: width * 0.8,
+    borderRadius: 8,
+    marginBottom: 15,
     backgroundColor: "#e9ecef",
   },
-  indicatorContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
-    bottom: 10,
-    width: "100%",
-  },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    marginHorizontal: 4,
-  },
-  activeIndicator: {
-    backgroundColor: "#fff",
-  },
-  contentContainer: {
-    marginBottom: 25,
-    paddingHorizontal: 20,
-  },
-  content: {
-    fontSize: 16,
-    lineHeight: 26,
-    color: "#34495e",
-    textAlign: "left",
-  },
-  errorText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#e74c3c",
-    textAlign: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#7f8c8d",
-  },
+
+  contentContainer: { marginBottom: 25, paddingHorizontal: 20 },
+  content: { fontSize: 16, lineHeight: 26, color: "#34495e", textAlign: "left" },
+
+  errorText: { marginTop: 10, fontSize: 16, color: "#e74c3c", textAlign: "center" },
+  emptyText: { fontSize: 16, color: "#7f8c8d" },
   retryButton: {
-    marginTop: 20,
-    backgroundColor: "#3d5afe",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
+    marginTop: 20, backgroundColor: "#3d5afe", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
   },
-  retryButtonText: {
-    color: "white",
-    fontSize: 16,
-  },
+  retryButtonText: { color: "white", fontSize: 16 },
+
   linkButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#3d5afe",
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginTop: 15,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    backgroundColor: "#3d5afe", paddingVertical: 14, borderRadius: 8, marginTop: 15,
+    elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 2,
   },
-  linkButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
+  linkButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
 });
 
 export default CommunityPostDetailScreen;
