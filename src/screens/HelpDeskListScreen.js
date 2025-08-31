@@ -14,6 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { logPageView } from "../lib/pageViewLogger";
+import HelpDeskPinnedNotices from "../components/HelpDeskPinnedNotices";
 
 export default function HelpDeskListScreen({ navigation }) {
   const { user } = useAuth(); // 현재 로그인한 사용자 정보
@@ -21,6 +22,7 @@ export default function HelpDeskListScreen({ navigation }) {
   const [publicIdSet, setPublicIdSet] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notices, setNotices] = useState([]);
 
   useEffect(() => {
     if (user) {
@@ -28,12 +30,25 @@ export default function HelpDeskListScreen({ navigation }) {
     }
   }, [user]);
 
+  const fetchPinnedNotices = async () => {
+    const { data, error } = await supabase
+      .from("help_desk_notices")
+      .select("id, title, body, pinned, pinned_at, pinned_until")
+      .eq("is_published", true)
+      .order("pinned", { ascending: false })
+      .order("pinned_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(3);
+    if (!error) setNotices(data || []);
+  };
+
   const fetchQuestionsAndPublicStatus = async () => {
     if (!user) {
       setQuestions([]);
       setLoading(false);
       return;
     }
+    await fetchPinnedNotices();
 
     const { data: questionsData, error: questionsError } = await supabase
       .from("help_questions")
@@ -81,8 +96,12 @@ export default function HelpDeskListScreen({ navigation }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchQuestionsAndPublicStatus().then(() => setRefreshing(false));
+    Promise.all([fetchPinnedNotices(), fetchQuestionsAndPublicStatus()]).finally(() => setRefreshing(false));
   }, [user]);
+
+  const openNotice = (n) => {
+    navigation.navigate("HelpDeskNoticeDetail", { noticeId: n.id });
+  };
 
   const renderItem = ({ item }) => {
     const isPublic = publicIdSet.has(item.id);
@@ -169,6 +188,7 @@ export default function HelpDeskListScreen({ navigation }) {
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ paddingBottom: 80 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListHeaderComponent={<HelpDeskPinnedNotices notices={notices} onPressNotice={openNotice} />}
         />
       )}
       <TouchableOpacity
