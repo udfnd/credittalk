@@ -56,13 +56,20 @@ const maskPhoneNumberCustom = (phoneNumber) => {
 
 const maskAccountNumber = (accountNumber) => {
   if (!accountNumber || typeof accountNumber !== "string") return accountNumber || "";
+
   const clean = accountNumber.replace(/-/g, "");
+  // 3~6번째를 가리려면 최소 6자리는 있어야 함
   if (clean.length < 6) return accountNumber;
-  const PREFIX_COUNT = 2;
-  const MASK_COUNT = 2;
-  const endMaskedIndex = PREFIX_COUNT + MASK_COUNT;
-  return clean.substring(0, PREFIX_COUNT) + "*".repeat(MASK_COUNT) + clean.substring(endMaskedIndex);
+
+  const PREFIX_COUNT = 2;   // 앞 2자리 노출
+  const MASK_COUNT = 4;     // 3~6번째 총 4자리 마스킹
+
+  const start = PREFIX_COUNT;
+  const end = PREFIX_COUNT + MASK_COUNT;
+
+  return clean.substring(0, start) + "*".repeat(MASK_COUNT) + clean.substring(end);
 };
+
 
 const DetailItem = ({ label, value }) => {
   if (!value) return null;
