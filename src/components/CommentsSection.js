@@ -1,14 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Keyboard,
+  View, Text, TextInput, TouchableOpacity, FlatList,
+  StyleSheet, Alert, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -19,25 +12,40 @@ import { useNavigation } from '@react-navigation/native';
 import { AvoidSoftInputView } from 'react-native-avoid-softinput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const ReplyInput = ({ onAddReply, onCancel }) => {
+const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
   const [replyText, setReplyText] = useState('');
+  const disabled = loading;
+
   return (
     <AvoidSoftInputView avoidOffset={8}>
       <View style={styles.replyInputContainer}>
         <TextInput
-          style={styles.replyInput}
+          style={[styles.replyInput, disabled && { opacity: 0.6 }]}
           placeholder="대댓글을 입력하세요..."
           placeholderTextColor="#999"
           value={replyText}
           onChangeText={setReplyText}
           multiline
           autoFocus
+          editable={!disabled}
         />
         <View style={styles.replyButtonContainer}>
-          <TouchableOpacity style={styles.replyActionButton} onPress={() => onAddReply(replyText)}>
-            <Text style={styles.replyActionButtonText}>등록</Text>
+          <TouchableOpacity
+            style={[styles.replyActionButton, disabled && { opacity: 0.6 }]}
+            onPress={() => onAddReply(replyText)}
+            disabled={disabled}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.replyActionButtonText}>등록</Text>
+            )}
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.replyActionButton, styles.cancelButton]} onPress={onCancel}>
+          <TouchableOpacity
+            style={[styles.replyActionButton, styles.cancelButton, disabled && { opacity: 0.6 }]}
+            onPress={onCancel}
+            disabled={disabled}
+          >
             <Text style={styles.replyActionButtonText}>취소</Text>
           </TouchableOpacity>
         </View>
@@ -46,7 +54,15 @@ const ReplyInput = ({ onAddReply, onCancel }) => {
   );
 };
 
-const CommentItem = ({ comment, currentProfileId, onReplyPress, replyingToId, onReplySubmit, isReply = false }) => {
+const CommentItem = ({
+                       comment,
+                       currentProfileId,
+                       onReplyPress,
+                       replyingToId,
+                       onReplySubmit,
+                       submittingReplyId,
+                       isReply = false,
+                     }) => {
   const handleDelete = async () => {
     Alert.alert(
       '댓글 삭제',
@@ -64,6 +80,9 @@ const CommentItem = ({ comment, currentProfileId, onReplyPress, replyingToId, on
       ],
     );
   };
+
+  const replyOpenForThis = replyingToId === comment.id;
+  const isSubmittingThisReply = submittingReplyId === comment.id;
 
   return (
     <View style={styles.commentWrapper}>
@@ -89,8 +108,9 @@ const CommentItem = ({ comment, currentProfileId, onReplyPress, replyingToId, on
         </View>
       </View>
 
-      {replyingToId === comment.id && (
+      {replyOpenForThis && (
         <ReplyInput
+          loading={isSubmittingThisReply}
           onAddReply={(replyText) => onReplySubmit(replyText, comment.id)}
           onCancel={() => onReplyPress(null)}
         />
@@ -106,6 +126,7 @@ const CommentItem = ({ comment, currentProfileId, onReplyPress, replyingToId, on
               onReplyPress={onReplyPress}
               replyingToId={replyingToId}
               onReplySubmit={onReplySubmit}
+              submittingReplyId={submittingReplyId}
               isReply
             />
           ))}
@@ -124,6 +145,10 @@ const CommentsSection = ({ postId, boardType }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [replyingToId, setReplyingToId] = useState(null);
+
+  // ✅ 중복 제출 방지용 로딩 플래그
+  const [submittingRoot, setSubmittingRoot] = useState(false);
+  const [submittingReplyId, setSubmittingReplyId] = useState(null);
 
   const fetchComments = useCallback(async () => {
     try {
@@ -186,20 +211,39 @@ const CommentsSection = ({ postId, boardType }) => {
     const trimmed = (content || '').trim();
     if (!trimmed) return;
 
-    Keyboard.dismiss();
-    const { error } = await supabase.from('comments').insert({
-      post_id: postId,
-      board_type: boardType,
-      user_id: profile.id,
-      content: trimmed,
-      parent_comment_id: parentId,
-    });
+    // ✅ 이미 제출 중이면 무시 (연타 방지)
+    if (submittingRoot || submittingReplyId !== null) return;
 
-    if (error) {
-      Alert.alert('오류', '댓글 등록에 실패했습니다: ' + error.message);
-    } else {
+    // 로딩 상태 설정
+    if (parentId) setSubmittingReplyId(parentId);
+    else setSubmittingRoot(true);
+
+    Keyboard.dismiss();
+
+    try {
+      const { error } = await supabase.from('comments').insert({
+        post_id: postId,
+        board_type: boardType,
+        user_id: profile.id, // BIGINT 주의: DB가 BIGINT이고 JS number여도 보통 안전, 다만 매우 큰 값이면 RPC 권장
+        content: trimmed,
+        parent_comment_id: parentId,
+      });
+
+      if (error) {
+        Alert.alert('오류', '댓글 등록에 실패했습니다: ' + error.message);
+        return;
+      }
+
+      // 입력 초기화
       if (parentId) setReplyingToId(null);
       else setNewComment('');
+
+      // 즉시 갱신(실시간이 늦게 오더라도 UX 부드럽게)
+      await fetchComments();
+    } finally {
+      // 로딩 해제
+      if (parentId) setSubmittingReplyId(null);
+      else setSubmittingRoot(false);
     }
   };
 
@@ -222,6 +266,7 @@ const CommentsSection = ({ postId, boardType }) => {
               onReplyPress={setReplyingToId}
               replyingToId={replyingToId}
               onReplySubmit={handleAddComment}
+              submittingReplyId={submittingReplyId}
             />
           )}
           ListEmptyComponent={<Text style={styles.noCommentsText}>가장 먼저 댓글을 남겨보세요.</Text>}
@@ -235,16 +280,25 @@ const CommentsSection = ({ postId, boardType }) => {
         <AvoidSoftInputView avoidOffset={insets.bottom} style={styles.footerAvoidWrapper}>
           <View style={styles.footerInputBar}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, submittingRoot && { opacity: 0.6 }]}
               placeholder="따뜻한 댓글을 남겨주세요."
               placeholderTextColor="#999"
               value={newComment}
               onChangeText={setNewComment}
               multiline
               blurOnSubmit={false}
+              editable={!submittingRoot}
             />
-            <TouchableOpacity style={styles.submitButton} onPress={() => handleAddComment(newComment)}>
-              <Icon name="send" size={20} color="#fff" />
+            <TouchableOpacity
+              style={[styles.submitButton, submittingRoot && { opacity: 0.7 }]}
+              onPress={() => handleAddComment(newComment)}
+              disabled={submittingRoot}
+            >
+              {submittingRoot ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Icon name="send" size={20} color="#fff" />
+              )}
             </TouchableOpacity>
           </View>
         </AvoidSoftInputView>
@@ -276,7 +330,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  warningText: { fontSize: 12, color: '#e74c3c', marginBottom: 8 },
 
   commentWrapper: {},
   commentContainer: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
@@ -288,7 +341,6 @@ const styles = StyleSheet.create({
   replyButtonText: { fontSize: 12, color: '#3d5afe', fontWeight: 'bold' },
   deleteButton: { padding: 5 },
   repliesContainer: { marginLeft: 20, borderLeftWidth: 2, borderLeftColor: '#e9ecef', paddingLeft: 10 },
-  noCommentsText: { textAlign: 'center', color: '#aaa', marginVertical: 25, fontSize: 14 },
 
   // 대댓글 입력
   replyInputContainer: { marginVertical: 10, marginLeft: 20, backgroundColor: '#f8f9fa', borderRadius: 8, padding: 10 },
@@ -297,6 +349,9 @@ const styles = StyleSheet.create({
   replyActionButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, backgroundColor: '#3d5afe' },
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+
+  // 빈 목록
+  noCommentsText: { textAlign: 'center', color: '#aaa', marginVertical: 25, fontSize: 14 },
 
   // 입력창
   footerAvoidWrapper: {},
