@@ -33,7 +33,6 @@ function normalizeHttpUrl(raw) {
   }
 }
 
-// ✅ canOpenURL에 의존하지 말고 openURL을 시도 → 실패 시 http로 재시도
 async function openExternal(raw) {
   const primary = normalizeHttpUrl(raw);
   if (!primary) {
@@ -44,7 +43,6 @@ async function openExternal(raw) {
     await Linking.openURL(primary);
     return;
   } catch {
-    // https가 막힌 기기/브라우저에서 http로 한번 더
     const httpFallback = primary.replace(/^https:\/\//i, 'http://');
     if (httpFallback !== primary) {
       try {
@@ -126,8 +124,7 @@ export default function PartnersCarousel() {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>제휴사</Text>
-
-      <View style={styles.scroller}>
+      <View style={styles.scroller} pointerEvents="box-none">
         <Animated.View
           style={[styles.row, { transform: [{ translateX }] }]}
           pointerEvents="box-none"
