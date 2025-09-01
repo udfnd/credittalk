@@ -122,7 +122,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 8 }}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
       >
         {/* 헤더 (제목/메타) */}
         <View style={styles.header}>
