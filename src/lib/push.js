@@ -19,6 +19,7 @@ export async function ensureNotificationChannel() {
   // try { await notifee.deleteChannel('default'); } catch {}
 }
 
+
 /** 권한 요청(iOS 필수, Android 13+ 권장) */
 export async function requestPushPermission() {
   try {
