@@ -112,7 +112,7 @@ function NewCrimeCaseDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="always">
         <View style={styles.header}>
           <Text style={styles.title}>{caseDetail.title}</Text>
           <View style={styles.metaContainer}>

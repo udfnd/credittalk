@@ -150,7 +150,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
           {news.is_pinned && (
             <View style={styles.pinnedContainer}>

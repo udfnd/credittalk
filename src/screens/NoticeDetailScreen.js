@@ -108,7 +108,7 @@ const NoticeDetailScreen = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
       >
         <View style={styles.postContainer}>
           <Text style={styles.title}>{notice.title}</Text>
