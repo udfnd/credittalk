@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
+    gap: 8,
   },
   noticeAuthor: {
     fontSize: 12,

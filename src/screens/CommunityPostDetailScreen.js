@@ -184,7 +184,7 @@ function CommunityPostDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{post.title}</Text>
           {user && post.author_auth_id === user.id && (

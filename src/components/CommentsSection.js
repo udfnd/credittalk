@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/components/CommentsSection.js
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, Alert, ActivityIndicator, Keyboard,
+  StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -28,12 +29,15 @@ const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
           multiline
           autoFocus
           editable={!disabled}
+          // 중요: 키보드 그대로 둠 (여기서 Keyboard.dismiss 안 함)
         />
         <View style={styles.replyButtonContainer}>
           <TouchableOpacity
             style={[styles.replyActionButton, disabled && { opacity: 0.6 }]}
-            onPress={() => onAddReply(replyText)}
+            // ✅ onPress 대신 onPressIn 으로 즉시 처리 (키보드가 떠 있어도 동작)
+            onPressIn={() => onAddReply(replyText)}
             disabled={disabled}
+            delayPressIn={0}
           >
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -146,9 +150,12 @@ const CommentsSection = ({ postId, boardType }) => {
   const [loading, setLoading] = useState(true);
   const [replyingToId, setReplyingToId] = useState(null);
 
-  // ✅ 중복 제출 방지용 로딩 플래그
+  // 중복 제출 방지
   const [submittingRoot, setSubmittingRoot] = useState(false);
   const [submittingReplyId, setSubmittingReplyId] = useState(null);
+
+  // 드물게 첫 탭이 캔슬되는 단말용 2중 가드
+  const guardingRef = useRef(false);
 
   const fetchComments = useCallback(async () => {
     try {
@@ -204,29 +211,27 @@ const CommentsSection = ({ postId, boardType }) => {
   }, [postId, boardType, fetchComments]);
 
   const handleAddComment = async (content, parentId = null) => {
-    if (!user || !profile?.id) {
+    if (!user) {
       Alert.alert('로그인 필요', '댓글을 작성하려면 로그인이 필요합니다.');
       return;
     }
     const trimmed = (content || '').trim();
     if (!trimmed) return;
 
-    // ✅ 이미 제출 중이면 무시 (연타 방지)
-    if (submittingRoot || submittingReplyId !== null) return;
-
-    // 로딩 상태 설정
+    // 중복 제출 가드
+    if (submittingRoot || submittingReplyId !== null || guardingRef.current) return;
+    guardingRef.current = true;
     if (parentId) setSubmittingReplyId(parentId);
     else setSubmittingRoot(true);
 
-    Keyboard.dismiss();
-
     try {
-      const { error } = await supabase.from('comments').insert({
-        post_id: postId,
-        board_type: boardType,
-        user_id: profile.id, // BIGINT 주의: DB가 BIGINT이고 JS number여도 보통 안전, 다만 매우 큰 값이면 RPC 권장
-        content: trimmed,
-        parent_comment_id: parentId,
+      // ❌ 여기서 Keyboard.dismiss() 호출하지 않음 (이벤트 캔슬 방지)
+      // ✅ RPC: user_id는 DB 함수가 auth.uid()로 매핑
+      const { error } = await supabase.rpc('add_comment', {
+        _post_id: postId,
+        _board_type: boardType,
+        _content: trimmed,
+        _parent_comment_id: parentId, // null 가능
       });
 
       if (error) {
@@ -234,16 +239,24 @@ const CommentsSection = ({ postId, boardType }) => {
         return;
       }
 
-      // 입력 초기화
+      // 입력 초기화 & 즉시 새로고침
       if (parentId) setReplyingToId(null);
       else setNewComment('');
-
-      // 즉시 갱신(실시간이 늦게 오더라도 UX 부드럽게)
       await fetchComments();
+
+      // (선택) 성공 후에만 키보드 닫기 원하면 아래 주석 해제
+      // Keyboard.dismiss();
     } finally {
-      // 로딩 해제
       if (parentId) setSubmittingReplyId(null);
       else setSubmittingRoot(false);
+      guardingRef.current = false;
+    }
+  };
+
+  // ✅ 버튼은 onPressIn에서 바로 전송
+  const onPressSendRoot = () => {
+    if (!submittingRoot) {
+      handleAddComment(newComment);
     }
   };
 
@@ -270,15 +283,16 @@ const CommentsSection = ({ postId, boardType }) => {
             />
           )}
           ListEmptyComponent={<Text style={styles.noCommentsText}>가장 먼저 댓글을 남겨보세요.</Text>}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"   // ⭐️ 중요
           scrollEnabled={false}
           nestedScrollEnabled={false}
+          removeClippedSubviews={false}
         />
       )}
 
       {user ? (
         <AvoidSoftInputView avoidOffset={insets.bottom} style={styles.footerAvoidWrapper}>
-          <View style={styles.footerInputBar}>
+          <View style={styles.footerInputBar} collapsable={false}>
             <TextInput
               style={[styles.input, submittingRoot && { opacity: 0.6 }]}
               placeholder="따뜻한 댓글을 남겨주세요."
@@ -288,11 +302,15 @@ const CommentsSection = ({ postId, boardType }) => {
               multiline
               blurOnSubmit={false}
               editable={!submittingRoot}
+              // returnKeyType="send"  // 원하면 키보드 '보내기' 표시
+              // onSubmitEditing={() => handleAddComment(newComment)} // (안드로이드 multiline에서는 잘 안옴)
             />
             <TouchableOpacity
               style={[styles.submitButton, submittingRoot && { opacity: 0.7 }]}
-              onPress={() => handleAddComment(newComment)}
+              // ✅ onPress 대신 onPressIn
+              onPressIn={onPressSendRoot}
               disabled={submittingRoot}
+              delayPressIn={0}
             >
               {submittingRoot ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -350,7 +368,6 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
-  // 빈 목록
   noCommentsText: { textAlign: 'center', color: '#aaa', marginVertical: 25, fontSize: 14 },
 
   // 입력창
@@ -363,6 +380,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
     backgroundColor: '#fff',
+    zIndex: 10,
   },
   input: {
     flex: 1,
