@@ -222,7 +222,7 @@ function ReviewDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{review.title}</Text>
           {user && review.author_auth_id === user.id && (
