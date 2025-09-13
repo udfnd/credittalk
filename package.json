@@ -28,16 +28,20 @@
     "base64-js": "^1.5.1",
     "buffer": "^6.0.3",
     "date-fns": "^4.1.0",
+    "js-sha256": "^0.11.1",
     "lodash": "^4.17.21",
+    "nanoid": "^5.1.5",
     "node-libs-react-native": "^1.2.1",
     "react": "19.0.0",
     "react-native": "0.79.1",
+    "react-native-apple-authentication": "^2.0.0",
     "react-native-avoid-softinput": "^7.0.2",
     "react-native-blob-util": "^0.22.2",
     "react-native-fs": "^2.20.0",
     "react-native-get-random-values": "^1.11.0",
     "react-native-gifted-chat": "2.6.5",
     "react-native-image-picker": "^8.2.1",
+    "react-native-image-viewing": "^0.2.2",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
     "react-native-keyboard-controller": "^1.17.3",
     "react-native-linear-gradient": "^2.8.3",
@@ -88,5 +92,6 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
 }

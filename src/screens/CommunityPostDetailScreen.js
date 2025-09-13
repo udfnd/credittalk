@@ -1,5 +1,5 @@
 // src/screens/CommunityPostDetailScreen.js
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { useNavigation } from "@react-navigation/native";
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from "react-native-avoid-softinput";
+import ImageViewing from "react-native-image-viewing";
 
 const { width } = Dimensions.get("window");
 
@@ -31,6 +32,10 @@ function CommunityPostDetailScreen({ route }) {
   const [post, setPost] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // 이미지 뷰어 상태
+  const [isViewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   useIncrementView('community_posts', postId);
 
@@ -136,19 +141,33 @@ function CommunityPostDetailScreen({ route }) {
     ]);
   };
 
-  // ✅ NewCrimeCaseDetailScreen처럼: 세로로 이미지 나열
+  const viewerImages = useMemo(() => {
+    if (!Array.isArray(post?.image_urls)) return [];
+    return post.image_urls.filter(Boolean).map((uri) => ({ uri }));
+  }, [post]);
+
+  const openViewerAt = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
+
   const renderImages = () => {
     if (!Array.isArray(post?.image_urls) || post.image_urls.length === 0) return null;
     return (
       <View style={styles.imageSection}>
         <Text style={styles.label}>첨부 사진</Text>
         {post.image_urls.map((url, index) => (
-          <Image
+          <TouchableOpacity
             key={index}
-            source={{ uri: url }}
-            style={styles.image}
-            resizeMode="contain"
-          />
+            activeOpacity={0.9}
+            onPress={() => openViewerAt(index)}
+          >
+            <Image
+              source={{ uri: url }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         ))}
       </View>
     );
@@ -215,6 +234,24 @@ function CommunityPostDetailScreen({ route }) {
 
         <CommentsSection postId={postId} boardType="community_posts" />
       </ScrollView>
+
+      {/* ✅ 전체화면 이미지 뷰어 (핀치/더블탭 줌 지원) */}
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={viewerIndex}
+        visible={isViewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        // iOS에서 전체화면 프레젠테이션
+        presentationStyle="fullScreen"
+        // 상단 닫기 버튼
+        HeaderComponent={() => (
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -242,7 +279,6 @@ const styles = StyleSheet.create({
   author: { fontSize: 14, color: "#3498db", marginBottom: 5 },
   date: { fontSize: 14, color: "#7f8c8d" },
 
-  // ✅ NewCrimeCaseDetailScreen과 맞춘 이미지 섹션 스타일
   imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
   label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
   image: {
@@ -270,6 +306,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 2,
   },
   linkButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
+
+  viewerHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  viewerCloseBtn: { padding: 8 },
 });
 
 export default CommunityPostDetailScreen;

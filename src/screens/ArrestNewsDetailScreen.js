@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/screens/ArrestNewsDetailScreen.js
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +18,7 @@ import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
+import ImageViewing from "react-native-image-viewing"; // ✅ 추가
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +28,10 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   useIncrementView('arrest_news', newsId);
+
+  // ✅ 뷰어 상태
+  const [isViewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   useEffect(() => {
     if (newsTitle) {
@@ -42,8 +48,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   const sanitizeUrl = (raw) => {
     if (!raw) return "";
-    return String(raw)
-      .trim()
+    return String(raw).trim()
       .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
       .replace(/\s+/g, "");
   };
@@ -88,16 +93,29 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     fetchNewsDetail();
   }, [fetchNewsDetail]);
 
+  // ✅ 뷰어에 사용할 이미지 배열 (형식: [{ uri }])
+  const viewerImages = useMemo(() => {
+    if (!Array.isArray(news?.image_urls)) return [];
+    return news.image_urls.filter(Boolean).map((uri) => ({ uri }));
+  }, [news]);
+
+  const openViewerAt = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
+
   const renderImages = () => {
     if (!news?.image_urls || news.image_urls.length === 0) return null;
 
     if (news.image_urls.length === 1) {
       return (
-        <Image
-          source={{ uri: news.image_urls[0] }}
-          style={styles.mainImage}
-          resizeMode="cover"
-        />
+        <TouchableOpacity onPress={() => openViewerAt(0)} activeOpacity={0.9}>
+          <Image
+            source={{ uri: news.image_urls[0] }}
+            style={styles.mainImage}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
       );
     }
 
@@ -109,12 +127,13 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         pagingEnabled
       >
         {news.image_urls.map((url, index) => (
-          <Image
-            key={index}
-            source={{ uri: url }}
-            style={styles.galleryImage}
-            resizeMode="cover"
-          />
+          <TouchableOpacity key={index} onPress={() => openViewerAt(index)} activeOpacity={0.9}>
+            <Image
+              source={{ uri: url }}
+              style={styles.galleryImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
         ))}
       </ScrollView>
     );
@@ -181,6 +200,22 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
         <CommentsSection postId={newsId} boardType="arrest_news" />
       </ScrollView>
+
+      {/* ✅ 전체화면 이미지 뷰어 (핀치/더블탭 줌 지원) */}
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={viewerIndex}
+        visible={isViewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        presentationStyle="fullScreen"
+        HeaderComponent={() => (
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -231,6 +266,18 @@ const styles = StyleSheet.create({
     elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2,
   },
   linkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+
+  viewerHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  viewerCloseBtn: { padding: 8 },
 });
 
 export default ArrestNewsDetailScreen;
