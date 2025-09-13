@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from "react";
+// src/screens/HelpDeskDetailScreen.js
+import React, { useCallback, useLayoutEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,13 +7,13 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  RefreshControl
+  RefreshControl,
+  TouchableOpacity,
 } from "react-native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { supabase } from "../lib/supabaseClient";
-import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 
-// 마스킹 함수들은 변경 없이 그대로 유지
 const maskNameMiddle = (name) => {
   if (!name || typeof name !== "string" || name.length <= 1) return name || "";
   if (name.length === 2) return `${name[0]}*`;
@@ -56,20 +57,14 @@ const maskPhoneNumberCustom = (phoneNumber) => {
 
 const maskAccountNumber = (accountNumber) => {
   if (!accountNumber || typeof accountNumber !== "string") return accountNumber || "";
-
   const clean = accountNumber.replace(/-/g, "");
-  // 3~6번째를 가리려면 최소 6자리는 있어야 함
   if (clean.length < 6) return accountNumber;
-
-  const PREFIX_COUNT = 2;   // 앞 2자리 노출
-  const MASK_COUNT = 4;     // 3~6번째 총 4자리 마스킹
-
+  const PREFIX_COUNT = 2;
+  const MASK_COUNT = 4;
   const start = PREFIX_COUNT;
   const end = PREFIX_COUNT + MASK_COUNT;
-
   return clean.substring(0, start) + "*".repeat(MASK_COUNT) + clean.substring(end);
 };
-
 
 const DetailItem = ({ label, value }) => {
   if (!value) return null;
@@ -86,15 +81,18 @@ const AnswerItem = ({ answer }) => {
     <View style={styles.answerItemContainer}>
       <Text style={styles.answerContent}>{answer.content}</Text>
       <Text style={styles.answerDate}>
-        {new Date(answer.created_at).toLocaleString('ko-KR')}
+        {new Date(answer.created_at).toLocaleString("ko-KR")}
       </Text>
     </View>
   );
 };
 
-export default function HelpDeskDetailScreen({ route }) {
-  const { questionId } = route.params;
+export default function HelpDeskDetailScreen() {
+  const route = useRoute();
+  const navigation = useNavigation();
   const { user } = useAuth();
+  const { questionId } = route.params || {};
+
   const [question, setQuestion] = useState(null);
   const [isPublic, setIsPublic] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -107,7 +105,7 @@ export default function HelpDeskDetailScreen({ route }) {
       .eq("id", questionId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error && error.code !== "PGRST116") {
       console.error("Error fetching question details:", error);
       Alert.alert("오류", "문의 내용을 불러오는 데 실패했습니다.");
       setQuestion(null);
@@ -116,12 +114,13 @@ export default function HelpDeskDetailScreen({ route }) {
 
     if (data) {
       setQuestion(data);
-      const { data: publicCase } = await supabase
-        .from('new_crime_cases')
-        .select('id', { count: 'exact', head: true }) // 데이터 없이 존재 여부만 확인하여 더 효율적
-        .eq('source_help_question_id', questionId);
+      // 공개 여부(연동 케이스 존재 여부)
+      const { count } = await supabase
+        .from("new_crime_cases")
+        .select("id", { count: "exact", head: true })
+        .eq("source_help_question_id", questionId);
 
-      setIsPublic(publicCase && publicCase.count > 0);
+      setIsPublic(!!count && count > 0);
     } else {
       setQuestion(null);
     }
@@ -136,33 +135,64 @@ export default function HelpDeskDetailScreen({ route }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchQuestion().then(() => setRefreshing(false));
+    fetchQuestion().finally(() => setRefreshing(false));
   }, [fetchQuestion]);
 
+  const currentUserId = user?.id || user?.uid;
+  const isOwner = question?.user_id === currentUserId;
+
+  // 헤더에 '수정' 버튼 (소유자 & 미답변)
+  useLayoutEffect(() => {
+    const canEdit = !!question && isOwner && !question.is_answered;
+    navigation.setOptions({
+      headerRight: () =>
+        canEdit ? (
+          <TouchableOpacity
+            onPress={() => navigation.navigate("HelpDeskEdit", { questionId })}
+            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+          >
+            <Text style={{ color: "#3d5afe", fontWeight: "600" }}>수정</Text>
+          </TouchableOpacity>
+        ) : null,
+    });
+  }, [navigation, question, isOwner, questionId]);
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#5262F5" /></View>;
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#5262F5" />
+      </View>
+    );
   }
 
   if (!question) {
-    return <View style={styles.centered}><Text style={styles.infoText}>문의 내역을 찾을 수 없거나 접근 권한이 없습니다.</Text></View>;
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.infoText}>문의 내역을 찾을 수 없거나 접근 권한이 없습니다.</Text>
+      </View>
+    );
   }
 
-  const currentUserId = user?.id || user?.uid;
-  const isOwner = currentUserId === question.user_id;
+  // 비공개 + 소유자 아님 → 접근 불가
+  if (!isOwner && !isPublic) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.infoText}>비공개 문의입니다. 작성자만 볼 수 있어요.</Text>
+      </View>
+    );
+  }
+
   const shouldMaskData = isPublic && !isOwner;
 
-  // [핵심 최종 수정]
-  // help_answers가 배열이든, 단일 객체이든, null이든 상관없이 항상 배열로 만듭니다.
+  // help_answers를 항상 배열로
   let answers = [];
   if (question?.help_answers) {
     if (Array.isArray(question.help_answers)) {
-      answers = question.help_answers.filter(Boolean); // null 값 제거
-    } else if (typeof question.help_answers === 'object' && question.help_answers !== null) {
-      answers = [question.help_answers]; // 객체를 배열로 감쌉니다.
+      answers = question.help_answers.filter(Boolean);
+    } else if (typeof question.help_answers === "object") {
+      answers = [question.help_answers];
     }
   }
-
   const hasAnswer = answers.length > 0;
   const canViewAnswer = (isOwner || isPublic) && hasAnswer;
 
@@ -192,7 +222,8 @@ export default function HelpDeskDetailScreen({ route }) {
           ))}
         </View>
       ) : (
-        isOwner && !hasAnswer && (
+        isOwner &&
+        !hasAnswer && (
           <View style={[styles.section, styles.pendingSection]}>
             <Text style={styles.pendingText}>답변을 준비중입니다.</Text>
           </View>
@@ -203,21 +234,9 @@ export default function HelpDeskDetailScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#f8f9fa",
-  },
-  infoText: {
-    fontSize: 16,
-    color: '#495057',
-  },
+  container: { flex: 1, backgroundColor: "#f8f9fa" },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#f8f9fa" },
+  infoText: { fontSize: 16, color: "#495057" },
   section: {
     backgroundColor: "white",
     padding: 20,
@@ -230,53 +249,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    color: "#343a40",
-  },
-  detailItem: {
-    marginBottom: 16,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#868e96",
-    marginBottom: 6,
-  },
-  detailValue: {
-    fontSize: 16,
-    color: "#212529",
-    lineHeight: 24,
-  },
-  answerItemContainer: {
-    backgroundColor: '#f1f3f5',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 10,
-  },
-  answerContent: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#343a40',
-  },
-  answerDate: {
-    fontSize: 12,
-    color: "#868e96",
-    textAlign: "right",
-    marginTop: 12,
-  },
-  pendingSection: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    backgroundColor: '#fff',
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  pendingText: {
-    fontSize: 16,
-    color: "#495057",
-    fontWeight: "500"
-  },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 15, color: "#343a40" },
+  detailItem: { marginBottom: 16 },
+  detailLabel: { fontSize: 14, fontWeight: "600", color: "#868e96", marginBottom: 6 },
+  detailValue: { fontSize: 16, color: "#212529", lineHeight: 24 },
+  answerItemContainer: { backgroundColor: "#f1f3f5", borderRadius: 8, padding: 16, marginBottom: 10 },
+  answerContent: { fontSize: 16, lineHeight: 24, color: "#343a40" },
+  answerDate: { fontSize: 12, color: "#868e96", textAlign: "right", marginTop: 12 },
+  pendingSection: { alignItems: "center", paddingVertical: 30, backgroundColor: "#fff", elevation: 0, shadowOpacity: 0 },
+  pendingText: { fontSize: 16, color: "#495057", fontWeight: "500" },
 });

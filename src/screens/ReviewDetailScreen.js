@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/screens/ReviewDetailScreen.js
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
-import { AvoidSoftInput } from 'react-native-avoid-softinput';
+import ImageViewing from 'react-native-image-viewing'; // ✅ 추가
 
 const { width } = Dimensions.get('window');
 
@@ -50,18 +51,15 @@ function ReviewDetailScreen({ route }) {
   const [error, setError] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // ✅ 뷰어 상태
+  const [isViewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
   useEffect(() => {
     if (reviewTitle) {
       navigation.setOptions({ title: reviewTitle });
     }
   }, [reviewTitle, navigation]);
-
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
 
   const fetchReviewDetail = useCallback(async () => {
     setIsLoading(true);
@@ -154,6 +152,17 @@ function ReviewDetailScreen({ route }) {
     setCurrentImageIndex(index);
   };
 
+  // ✅ 뷰어에 공급할 이미지 배열 (형식: [{ uri }])
+  const viewerImages = useMemo(() => {
+    if (!Array.isArray(review?.image_urls)) return [];
+    return review.image_urls.filter(Boolean).map((uri) => ({ uri }));
+  }, [review]);
+
+  const openViewerAt = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
+
   const renderImages = () => {
     if (!review?.image_urls || review.image_urls.length === 0) return null;
 
@@ -167,12 +176,17 @@ function ReviewDetailScreen({ route }) {
           scrollEventThrottle={16}
         >
           {review.image_urls.map((url, index) => (
-            <Image
+            <TouchableOpacity
               key={index}
-              source={{ uri: url }}
-              style={styles.galleryImage}
-              resizeMode="cover"
-            />
+              activeOpacity={0.9}
+              onPress={() => openViewerAt(index)} // ✅ 탭 → 뷰어 오픈
+            >
+              <Image
+                source={{ uri: url }}
+                style={styles.galleryImage}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
           ))}
         </ScrollView>
         {review.image_urls.length > 1 && (
@@ -249,6 +263,21 @@ function ReviewDetailScreen({ route }) {
 
         <CommentsSection postId={reviewId} boardType="reviews" />
       </ScrollView>
+
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={viewerIndex}
+        visible={isViewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        presentationStyle="fullScreen"
+        HeaderComponent={() => (
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -295,6 +324,14 @@ const styles = StyleSheet.create({
 
   contentContainer: { paddingHorizontal: 20 },
   content: { fontSize: 16, lineHeight: 26, color: '#34495e', textAlign: 'justify' },
+
+  viewerHeader: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    paddingTop: 12, paddingHorizontal: 12,
+    flexDirection: 'row', justifyContent: 'flex-end',
+  },
+  viewerCloseBtn: { padding: 8 },
 });
 
 export default ReviewDetailScreen;

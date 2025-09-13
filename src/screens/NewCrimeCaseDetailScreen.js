@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+// src/screens/NewCrimeCaseDetailScreen.js
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -17,7 +18,8 @@ import { supabase } from "../lib/supabaseClient";
 import { useNavigation } from "@react-navigation/native";
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
-import { AvoidSoftInput } from "react-native-avoid-softinput"; // ✅ 추가
+import { AvoidSoftInput } from "react-native-avoid-softinput";
+import ImageViewing from "react-native-image-viewing"; // ✅ 추가
 
 const { width } = Dimensions.get("window");
 
@@ -30,6 +32,10 @@ function NewCrimeCaseDetailScreen({ route }) {
   const [error, setError] = useState(null);
 
   useIncrementView('new_crime_cases', caseId);
+
+  // ✅ 뷰어 상태
+  const [isViewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
@@ -82,6 +88,16 @@ function NewCrimeCaseDetailScreen({ route }) {
     }
   };
 
+  const viewerImages = useMemo(() => {
+    if (!Array.isArray(caseDetail?.image_urls)) return [];
+    return caseDetail.image_urls.filter(Boolean).map((uri) => ({ uri }));
+  }, [caseDetail]);
+
+  const openViewerAt = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -129,12 +145,17 @@ function NewCrimeCaseDetailScreen({ route }) {
           <View style={styles.imageSection}>
             <Text style={styles.label}>첨부 사진</Text>
             {caseDetail.image_urls.map((url, index) => (
-              <Image
+              <TouchableOpacity
                 key={index}
-                source={{ uri: url }}
-                style={styles.image}
-                resizeMode="contain"
-              />
+                activeOpacity={0.9}
+                onPress={() => openViewerAt(index)}
+              >
+                <Image
+                  source={{ uri: url }}
+                  style={styles.image}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -148,6 +169,21 @@ function NewCrimeCaseDetailScreen({ route }) {
 
         <CommentsSection postId={caseId} boardType="new_crime_cases" />
       </ScrollView>
+
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={viewerIndex}
+        visible={isViewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        presentationStyle="fullScreen"
+        HeaderComponent={() => (
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -216,6 +252,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   linkButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
+
+  // 뷰어 헤더
+  viewerHeader: {
+    position: "absolute",
+    top: 0, left: 0, right: 0,
+    paddingTop: 12, paddingHorizontal: 12,
+    flexDirection: "row", justifyContent: "flex-end",
+  },
+  viewerCloseBtn: { padding: 8 },
 });
 
 export default NewCrimeCaseDetailScreen;

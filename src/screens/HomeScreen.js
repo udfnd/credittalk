@@ -226,8 +226,8 @@ function HomeScreen() {
         <View style={styles.bannerSection}>
           {renderImageBanner( "크레딧톡 개발 회사 소개", "한국금융범죄예방연구센터 소개입니다.", companyLogoImg, () => Linking.openURL("https://www.xn--jj0bj76bm2k.com/page/about") )}
           {renderImageBanner( "공지사항", "크레딧톡 새로운 소식을 확인하세요.", noticeBannerImg, () => navigation.navigate("NoticeList"), )}
-          {renderImageBanner( "검거소식", "주요 금융범죄 검거 사례를 알려드립니다.", arrestBannerImg, () => navigation.navigate("ArrestNewsList", { screen: "ArrestNewsList", }), )}
           {renderImageBanner( "신종범죄 피해사례 목록", "최신 사기 수법과 피해 사례를 확인하세요.", crimeListBannerImg, () => navigation.navigate("NewCrimeCaseList"), )}
+          {renderImageBanner( "검거소식", "주요 금융범죄 검거 사례를 알려드립니다.", arrestBannerImg, () => navigation.navigate("ArrestNewsList", { screen: "ArrestNewsList", }), )}
           {renderImageBanner( "크레딧톡 후기", "어플 오류, 개선사항 및 후기", reviewBannerImg, () => navigation.navigate("ReviewList"), )}
           {renderImageBanner( "사건 사진자료", "카톡대화, 텔레그램, 문자 등 사진공유", incidentPhotosBannerImg, () => navigation.navigate("IncidentPhotoList"), )}
           {renderImageBanner( "자유 게시판", "여러분들의 생각공유 공간", freeBoardBannerImg, () => navigation.navigate("MainApp", { screen: "CommunityTab", params: { screen: "CommunityList" }, }), )}
