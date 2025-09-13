@@ -1,5 +1,5 @@
 // src/screens/IncidentPhotoDetailScreen.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabaseClient';
 import CommentsSection from "../components/CommentsSection";
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
+import ImageViewing from 'react-native-image-viewing';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,9 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   const [error, setError] = useState(null);
 
   useIncrementView('incident_photos', photoId);
+
+  const [isViewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   useEffect(() => {
     if (photoTitle) {
@@ -90,6 +94,16 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
   useEffect(() => { fetchPhotoDetail(); }, [fetchPhotoDetail]);
 
+  const viewerImages = useMemo(() => {
+    if (!Array.isArray(photo?.image_urls)) return [];
+    return photo.image_urls.filter(Boolean).map((uri) => ({ uri }));
+  }, [photo]);
+
+  const openViewerAt = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -124,7 +138,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
         contentContainerStyle={{ paddingBottom: 8 }}
         keyboardShouldPersistTaps="always"
       >
-        {/* 헤더 (제목/메타) */}
         <View style={styles.header}>
           <Text style={styles.title}>{photo.title}</Text>
           <View style={styles.metaContainer}>
@@ -140,27 +153,29 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* 본문 설명 */}
         <View style={styles.contentContainer}>
           <Text style={styles.content}>{photo.description || '설명이 없습니다.'}</Text>
         </View>
 
-        {/* ✅ 이미지 섹션 — NewCrimeCaseDetailScreen 과 동일한 방식 */}
         {!!(Array.isArray(photo.image_urls) && photo.image_urls.length) && (
           <View style={styles.imageSection}>
             <Text style={styles.label}>첨부 사진</Text>
             {photo.image_urls.map((url, index) => (
-              <Image
+              <TouchableOpacity
                 key={index}
-                source={{ uri: url }}
-                style={styles.image}
-                resizeMode="contain"
-              />
+                activeOpacity={0.9}
+                onPress={() => openViewerAt(index)}
+              >
+                <Image
+                  source={{ uri: url }}
+                  style={styles.image}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {/* 링크 버튼 */}
         {photo.link_url && (
           <TouchableOpacity
             style={styles.linkButton}
@@ -171,9 +186,23 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
 
-        {/* 댓글 */}
         <CommentsSection postId={photoId} boardType="incident_photos" />
       </ScrollView>
+
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={viewerIndex}
+        visible={isViewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        presentationStyle="fullScreen"
+        HeaderComponent={() => (
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -209,7 +238,6 @@ const styles = StyleSheet.create({
   contentContainer: { marginBottom: 25, paddingHorizontal: 20, backgroundColor: "#fff" },
   content: { fontSize: 16, lineHeight: 26, color: "#34495e" },
 
-  // 🔽 NewCrimeCaseDetailScreen 과 동일한 스타일
   imageSection: { marginTop: 10, paddingHorizontal: 20, backgroundColor: "#fff" },
   label: { fontSize: 18, fontWeight: "bold", color: "#2c3e50", marginBottom: 8 },
   image: {
@@ -236,6 +264,14 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   linkButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
+
+  viewerHeader: {
+    position: "absolute",
+    top: 0, left: 0, right: 0,
+    paddingTop: 12, paddingHorizontal: 12,
+    flexDirection: "row", justifyContent: "flex-end",
+  },
+  viewerCloseBtn: { padding: 8 },
 });
 
 export default IncidentPhotoDetailScreen;
