@@ -2,68 +2,58 @@
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
 platform :ios, '15.6'
-# 전역 use_modular_headers! / use_frameworks! 사용 안 함
+prepare_react_native_project!
 
 pre_install do |installer|
-  # 일부 정적 의존성 검증 완화
-  Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
-
-  # kakao-login은 static library 강제
+  # kakao-login은 static library 강제 (필요시 유지)
   installer.pod_targets.each do |pod|
     if pod.name.start_with?('kakao-login')
       def pod.build_type; Pod::BuildType.static_library end
     end
   end
 
-  # fast_float 6.1.4 -> 8.0.0 (RN 0.79 충돌 회피) - 따옴표 보존
-  rn_blob = File.expand_path('../node_modules/react-native/Libraries/Blob/React-RCTBlob.podspec', __dir__)
-  if File.exist?(rn_blob)
-    txt = File.read(rn_blob)
-    patched = txt.gsub(/(s\.dependency\s+["']fast_float["']\s*,\s*["'])6\.1\.4(["'])/, '\18.0.0\2')
-    File.write(rn_blob, patched) if patched != txt
+  # 🔧 RN 내부 podspec들에 박힌 fast_float 6.1.4 → 8.0.0 일괄 치환
+  rn_dir = File.expand_path('../node_modules/react-native', __dir__)
+  Dir.glob(File.join(rn_dir, '**/*.podspec')).each do |spec_path|
+    next unless File.file?(spec_path)
+    txt = File.read(spec_path)
+    patched = txt.gsub(/(s\.dependency\s+["']fast_float["']\s*,\s*["'])6\.1\.4(["'])/i, '\18.0.0\2')
+    File.write(spec_path, patched) if patched != txt
+  end
+
+  # fast_float podspec 자체 버전도 8.0.0으로 고정
+  ff_path = File.join(rn_dir, 'third-party-podspecs/fast_float.podspec')
+  if File.exist?(ff_path)
+    txt = File.read(ff_path)
+    patched = txt.gsub(/s\.version\s*=\s*['"].*?['"]/, "s.version = '8.0.0'")
+    File.write(ff_path, patched) if patched != txt
   end
 end
-
-prepare_react_native_project!
 
 target 'CreditTalk' do
   config = use_native_modules!
 
-  # --- Firebase/GoogleUtilities에 "선택적 모듈 헤더" 적용 (모듈맵 생성) ---
-  pod 'GoogleUtilities',        :modular_headers => true
-  pod 'FirebaseCore',           :modular_headers => true
-  pod 'FirebaseCoreInternal',   :modular_headers => true
-  pod 'FirebaseInstallations',  :modular_headers => true
-  # ----------------------------------------------------------------------
+  # FirebaseCoreInternal ↔ GoogleUtilities 정적+Swift 경고 방지 (최소 설정)
+  pod 'GoogleUtilities', :modular_headers => true
 
   # 외부 SDK
   pod 'NidThirdPartyLogin'
   pod 'RNVectorIcons', :path => '../node_modules/react-native-vector-icons'
 
-  # RN: Hermes 켜서 React-jsc 의존 제거, New Arch OFF로 안정화
   use_react_native!(
     :path => config[:reactNativePath],
-    hermes_enabled: true,
-    new_arch_enabled: false
+    :hermes_enabled => true,
+    :new_arch_enabled => false
   )
 end
 
 post_install do |installer|
   react_native_post_install(installer)
 
-  react_common_path = '$(PODS_ROOT)/../../node_modules/react-native/ReactCommon'
+  # 비모듈 포함 허용(브리징 헤더 경고 억제)
   installer.pods_project.targets.each do |t|
     t.build_configurations.each do |cfg|
-      cfg.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
-      cfg.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Private/React-debug'
-      cfg.build_settings['HEADER_SEARCH_PATHS'] << ' $(PODS_ROOT)/Headers/Public/React-debug'
-      cfg.build_settings['HEADER_SEARCH_PATHS'] << " #{react_common_path}"
       cfg.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-
-      # 안전장치: Firebase 핵심 Pod에 모듈 정의 플래그 부여(정적 링크에서도 모듈 인식 보조)
-      if t.name =~ /^(FirebaseCore|FirebaseCoreInternal|FirebaseInstallations|GoogleUtilities)$/
-        cfg.build_settings['DEFINES_MODULE'] = 'YES'
-      end
     end
   end
 end
