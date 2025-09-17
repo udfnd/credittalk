@@ -1,7 +1,6 @@
-// src/lib/push.js
 import { Platform, Alert, Linking } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance, AndroidStyle } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
 import { supabase } from '../lib/supabaseClient';
 
 // 항상 HIGH로 설정된 알림 채널
@@ -10,11 +9,13 @@ export const CHANNEL_ID = 'push_default_v2';
 /** 안드로이드 알림 채널 생성(최초 1회, 이미 있으면 no-op) */
 export async function ensureNotificationChannel() {
   if (Platform.OS !== 'android') return;
-  await notifee.createChannel({
-    id: CHANNEL_ID,
-    name: 'Default (High)',
-    importance: AndroidImportance.HIGH,
-  });
+  try {
+    await notifee.createChannel({
+      id: CHANNEL_ID,
+      name: 'Default (High)',
+      importance: AndroidImportance.HIGH,
+    });
+  } catch {}
 }
 
 /** 알림 권한 요청 (iOS에서는 명시 요청 필요) */
@@ -157,6 +158,34 @@ function normalizeExternalUrl(raw) {
   return `https://${s}`;
 }
 
+// youtu.be → youtube watch로 변환
+function rewriteYoutubeShort(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'youtu.be') {
+      const id = u.pathname.replace(/^\/+/, '');
+      if (!id) return null;
+      const qs = u.search ? `&${u.search.slice(1)}` : '';
+      return `https://www.youtube.com/watch?v=${id}${qs}`;
+    }
+  } catch {}
+  return null;
+}
+
+// http/https는 canOpenURL 없이 바로 시도하고, 실패 시 유튜브 단축링크 재시도
+async function openExternalUrlBestEffort(url) {
+  if (!url) return;
+  try {
+    await Linking.openURL(url);
+    return;
+  } catch {
+    const yt = rewriteYoutubeShort(url);
+    if (yt && yt !== url) {
+      try { await Linking.openURL(yt); } catch {}
+    }
+  }
+}
+
 /**
  * payload 규칙:
  * - 내부 이동: { screen: 'ScreenName', params: { ... } }  (params는 JSON 문자열도 허용)
@@ -176,10 +205,8 @@ function openFromPayload(navigateTo, data = {}) {
     // 2) 외부 링크 열기 (스킴 자동 보정)
     const raw = typeof link_url === 'string' ? link_url : (typeof url === 'string' ? url : null);
     const normalized = normalizeExternalUrl(raw);
-
     if (normalized) {
-      Linking.canOpenURL(normalized)
-        .then((ok) => ok && Linking.openURL(normalized))
+      openExternalUrlBestEffort(normalized)
         .catch((e) => console.warn('[FCM] openURL error:', e?.message || e));
     }
   } catch (e) {
@@ -196,41 +223,69 @@ export async function wireMessageHandlers(navigateTo) {
 
   // 포그라운드 수신 → 로컬 표시
   messaging().onMessage(async (remoteMessage) => {
-    const title = remoteMessage?.notification?.title || '알림';
-    const body = remoteMessage?.notification?.body || '';
+    try {
+      const title = remoteMessage?.notification?.title || '알림';
+      const body = remoteMessage?.notification?.body || '';
 
-    await notifee.displayNotification({
-      title,
-      body,
-      android: {
-        channelId: CHANNEL_ID,
-        pressAction: { id: 'default' },
-        style: body?.length > 60 ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
+      await notifee.displayNotification({
+        title,
+        body,
+        android: {
+          channelId: CHANNEL_ID,
+          pressAction: { id: 'default' },
+          style: body?.length > 60 ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
+        },
         // payload는 data에 그대로 유지
-      },
-      data: remoteMessage.data,
-    });
+        data: remoteMessage.data,
+      });
+    } catch (e) {
+      console.warn('[FCM] onMessage display error:', e?.message || e);
+    }
   });
 
-  // 백그라운드에서 탭
+  // ✅ Notifee "포그라운드" 탭 이벤트 (앱이 켜져 있을 때)
+  notifee.onForegroundEvent(async ({ type, detail }) => {
+    try {
+      if (type === EventType.PRESS) {
+        const payload = detail?.notification?.data || {};
+        openFromPayload(navigateTo, payload);
+      }
+    } catch (e) {
+      console.warn('[FCM] onForegroundEvent error:', e?.message || e);
+    }
+  });
+
+  // FCM: 백그라운드 → 포그라운드 (notification payload 경로)
   messaging().onNotificationOpenedApp((remoteMessage) => {
-    if (!remoteMessage) return;
-    openFromPayload(navigateTo, remoteMessage.data || {});
+    try {
+      if (!remoteMessage) return;
+      openFromPayload(navigateTo, remoteMessage.data || {});
+    } catch (e) {
+      console.warn('[FCM] onNotificationOpenedApp error:', e?.message || e);
+    }
   });
 
-  // 종료 상태에서 알림 탭 후 진입
+  // FCM: 종료 상태에서 알림 탭 후 진입
   messaging().getInitialNotification().then((remoteMessage) => {
-    if (!remoteMessage) return;
-    openFromPayload(navigateTo, remoteMessage.data || {});
-  });
+    try {
+      if (!remoteMessage) return;
+      openFromPayload(navigateTo, remoteMessage.data || {});
+    } catch (e) {
+      console.warn('[FCM] getInitialNotification error:', e?.message || e);
+    }
+  }).catch(() => {});
 }
 
 /** 현재 기기 토큰 비활성화(선택) */
 export async function unregisterPushToken(token) {
-  if (!token) {
-    try { token = await messaging().getToken(); } catch { token = undefined; }
-  }
-  if (token) {
-    await supabase.from('device_push_tokens').update({ enabled: false }).eq('token', token);
+  try {
+    if (!token) {
+      try { token = await messaging().getToken(); } catch { token = undefined; }
+    }
+    if (token) {
+      await supabase.from('device_push_tokens').update({ enabled: false }).eq('token', token);
+    }
+  } catch (e) {
+    console.warn('[FCM] unregisterPushToken error:', e?.message || e);
   }
 }
