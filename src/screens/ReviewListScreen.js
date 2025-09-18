@@ -13,7 +13,7 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { logPageView } from "../lib/pageViewLogger";
+import { logPageView } from '../lib/pageViewLogger';
 
 // 별점 표시 컴포넌트 (간단 예시)
 const StarRating = ({ rating }) => {
@@ -56,9 +56,9 @@ function ReviewListScreen() {
     try {
       // 후기와 함께 작성자 프로필 정보(이름)를 가져오기
       const { data, error: fetchError } = await supabase
-          .from('reviews_with_author_profile') // 변경
-          .select(
-              `
+        .from('reviews_with_author_profile') // 변경
+        .select(
+          `
           id,
           title,
           created_at,
@@ -66,11 +66,11 @@ function ReviewListScreen() {
           rating,
           author_name,
           views   
-        `
-          )
-          .eq('is_published', true)
-          .order('is_pinned', { ascending: false })
-          .order('created_at', { ascending: false });
+        `,
+        )
+        .eq('is_published', true)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
       setReviews(data || []); // data를 직접 사용
@@ -113,8 +113,7 @@ function ReviewListScreen() {
           reviewId: item.id,
           reviewTitle: item.title,
         })
-      }
-    >
+      }>
       <Text style={styles.reviewTitle}>{item.title}</Text>
       {item.rating && <StarRating rating={item.rating} />}
       <View style={styles.reviewMeta}>
@@ -152,7 +151,7 @@ function ReviewListScreen() {
       <FlatList
         data={reviews}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           !isLoading && (

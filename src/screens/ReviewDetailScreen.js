@@ -67,7 +67,8 @@ function ReviewDetailScreen({ route }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('reviews_with_author_profile')
-        .select(`
+        .select(
+          `
           id,
           title,
           content,
@@ -77,7 +78,8 @@ function ReviewDetailScreen({ route }) {
           author_name,
           image_urls,
           views
-        `)
+        `,
+        )
         .eq('id', reviewId)
         .eq('is_published', true)
         .single();
@@ -110,15 +112,14 @@ function ReviewDetailScreen({ route }) {
           try {
             if (review.image_urls && review.image_urls.length > 0) {
               const filePaths = review.image_urls
-                .map((url) => {
+                .map(url => {
                   const parts = url.split('/reviews-images/');
                   return parts[1] || null;
                 })
                 .filter(Boolean);
 
               if (filePaths.length > 0) {
-                const { error: storageError } = await supabase
-                  .storage
+                const { error: storageError } = await supabase.storage
                   .from('reviews-images')
                   .remove(filePaths);
                 if (storageError) {
@@ -146,7 +147,7 @@ function ReviewDetailScreen({ route }) {
     ]);
   };
 
-  const handleScroll = (event) => {
+  const handleScroll = event => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(contentOffsetX / width);
     setCurrentImageIndex(index);
@@ -155,10 +156,10 @@ function ReviewDetailScreen({ route }) {
   // ✅ 뷰어에 공급할 이미지 배열 (형식: [{ uri }])
   const viewerImages = useMemo(() => {
     if (!Array.isArray(review?.image_urls)) return [];
-    return review.image_urls.filter(Boolean).map((uri) => ({ uri }));
+    return review.image_urls.filter(Boolean).map(uri => ({ uri }));
   }, [review]);
 
-  const openViewerAt = useCallback((index) => {
+  const openViewerAt = useCallback(index => {
     setViewerIndex(index);
     setViewerVisible(true);
   }, []);
@@ -173,8 +174,7 @@ function ReviewDetailScreen({ route }) {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={handleScroll}
-          scrollEventThrottle={16}
-        >
+          scrollEventThrottle={16}>
           {review.image_urls.map((url, index) => (
             <TouchableOpacity
               key={index}
@@ -219,7 +219,9 @@ function ReviewDetailScreen({ route }) {
       <View style={styles.centered}>
         <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={fetchReviewDetail} style={styles.retryButton}>
+        <TouchableOpacity
+          onPress={fetchReviewDetail}
+          style={styles.retryButton}>
           <Text style={styles.retryButtonText}>다시 시도</Text>
         </TouchableOpacity>
       </View>
@@ -236,21 +238,29 @@ function ReviewDetailScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="always">
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{review.title}</Text>
           {user && review.author_auth_id === user.id && (
-            <TouchableOpacity onPress={handleDeleteReview} style={styles.deleteButton}>
+            <TouchableOpacity
+              onPress={handleDeleteReview}
+              style={styles.deleteButton}>
               <Icon name="delete-outline" size={24} color="#e74c3c" />
             </TouchableOpacity>
           )}
         </View>
 
         <View style={styles.metaContainer}>
-          <Text style={styles.author}>작성자: {review.author_name || '익명'}</Text>
+          <Text style={styles.author}>
+            작성자: {review.author_name || '익명'}
+          </Text>
           {review.rating && <StarRating rating={review.rating} />}
           <View style={styles.dataContainer}>
-            <Text style={styles.date}>게시일: {new Date(review.created_at).toLocaleString()}</Text>
+            <Text style={styles.date}>
+              게시일: {new Date(review.created_at).toLocaleString()}
+            </Text>
             <Text style={styles.date}>조회수: {review.views || 0}</Text>
           </View>
         </View>
@@ -258,7 +268,9 @@ function ReviewDetailScreen({ route }) {
         {renderImages()}
 
         <View style={styles.contentContainer}>
-          <Text style={styles.content}>{review.content || '내용이 없습니다.'}</Text>
+          <Text style={styles.content}>
+            {review.content || '내용이 없습니다.'}
+          </Text>
         </View>
 
         <CommentsSection postId={reviewId} boardType="reviews" />
@@ -272,7 +284,9 @@ function ReviewDetailScreen({ route }) {
         presentationStyle="fullScreen"
         HeaderComponent={() => (
           <View style={styles.viewerHeader}>
-            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+            <TouchableOpacity
+              onPress={() => setViewerVisible(false)}
+              style={styles.viewerCloseBtn}>
               <Icon name="close" size={28} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -286,50 +300,103 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
   centered: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f8f9fa',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
   },
-  errorText: { marginTop: 10, fontSize: 16, color: '#e74c3c', textAlign: 'center' },
+  errorText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#e74c3c',
+    textAlign: 'center',
+  },
   emptyText: { fontSize: 16, color: '#7f8c8d' },
-  retryButton: { marginTop: 20, backgroundColor: '#3d5afe', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5 },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#3d5afe',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
   retryButtonText: { color: 'white', fontSize: 16 },
 
   scrollContainer: { paddingBottom: 8 },
   headerContainer: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 10, paddingHorizontal: 20, paddingTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#2c3e50', flex: 1, marginRight: 10 },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    flex: 1,
+    marginRight: 10,
+  },
   deleteButton: { padding: 5 },
 
   metaContainer: {
-    marginBottom: 20, paddingBottom: 15, paddingHorizontal: 20,
-    borderBottomWidth: 1, borderBottomColor: '#ecf0f1',
+    marginBottom: 20,
+    paddingBottom: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f1',
   },
   dataContainer: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 5,
   },
   author: { fontSize: 14, color: '#3498db', marginBottom: 5 },
-  starContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  starContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   date: { fontSize: 14, color: '#7f8c8d', marginTop: 5 },
 
   imageGalleryContainer: { width, height: width * 0.75, marginBottom: 20 },
   galleryImage: { width, height: '100%', backgroundColor: '#e9ecef' },
   indicatorContainer: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    position: 'absolute', bottom: 10, width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: 10,
+    width: '100%',
   },
-  indicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.4)', marginHorizontal: 4 },
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    marginHorizontal: 4,
+  },
   activeIndicator: { backgroundColor: '#fff' },
 
   contentContainer: { paddingHorizontal: 20 },
-  content: { fontSize: 16, lineHeight: 26, color: '#34495e', textAlign: 'justify' },
+  content: {
+    fontSize: 16,
+    lineHeight: 26,
+    color: '#34495e',
+    textAlign: 'justify',
+  },
 
   viewerHeader: {
     position: 'absolute',
-    top: 0, left: 0, right: 0,
-    paddingTop: 12, paddingHorizontal: 12,
-    flexDirection: 'row', justifyContent: 'flex-end',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   viewerCloseBtn: { padding: 8 },
 });

@@ -20,7 +20,10 @@ export const useIncrementView = (tableName, postId) => {
         });
 
         if (error) {
-          console.warn(`[View Count Error] table:${tableName}, post:${postId}`, error.message);
+          console.warn(
+            `[View Count Error] table:${tableName}, post:${postId}`,
+            error.message,
+          );
         } else {
           console.log(`조회수 증가 요청: ${tableName}-${postId}`);
         }
@@ -30,6 +33,5 @@ export const useIncrementView = (tableName, postId) => {
     };
 
     increment();
-
   }, [tableName, postId]);
 };

@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,13 @@ import {
   TouchableOpacity,
   ScrollView,
   Linking,
-  Alert, Platform
-} from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useAuth } from "../context/AuthContext";
-import { useNavigation } from "@react-navigation/native";
+  Alert,
+  Platform,
+  Button,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 function SettingsScreen() {
   const { user, profile, signOutUser, isLoading: authIsLoading } = useAuth();
@@ -18,20 +20,20 @@ function SettingsScreen() {
 
   const handleHelpCenterLink = () => {
     Alert.alert(
-      "헬프센터 안내",
-      "한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.",
+      '헬프센터 안내',
+      '한국금융범죄예방연구센터에 상담글을 올려주시면, 담당자가 순차적으로 연락드릴 예정입니다.',
       [
         {
-          text: "확인",
+          text: '확인',
           onPress: () => {
-            Linking.openURL("https://naver.me/GhSYIDyA").catch(() =>
-              Alert.alert("오류", "링크를 열 수 없습니다."),
+            Linking.openURL('https://naver.me/GhSYIDyA').catch(() =>
+              Alert.alert('오류', '링크를 열 수 없습니다.'),
             );
           },
         },
         {
-          text: "취소",
-          style: "cancel",
+          text: '취소',
+          style: 'cancel',
         },
       ],
       { cancelable: true },
@@ -40,9 +42,11 @@ function SettingsScreen() {
 
   const handleMaliciousAppDetection = async () => {
     try {
-      const playStoreUrl = "market://details?id=com.infinigru.police.phishingeyes";
-      const appStoreUrl  = "itms-apps://itunes.apple.com/app/id<YOUR_IOS_APP_ID>";
-      const storeUrl = Platform.OS === "android" ? playStoreUrl : appStoreUrl;
+      const playStoreUrl =
+        'market://details?id=com.infinigru.police.phishingeyes';
+      const appStoreUrl =
+        'itms-apps://itunes.apple.com/app/id<YOUR_IOS_APP_ID>';
+      const storeUrl = Platform.OS === 'android' ? playStoreUrl : appStoreUrl;
 
       const supported = await Linking.canOpenURL(storeUrl);
 
@@ -50,69 +54,68 @@ function SettingsScreen() {
         await Linking.openURL(storeUrl);
       } else {
         await Linking.openURL(
-          "https://play.google.com/store/apps/details?id=com.infinigru.police.phishingeyes&hl=ko"
+          'https://play.google.com/store/apps/details?id=com.infinigru.police.phishingeyes&hl=ko',
         );
       }
     } catch (err) {
-      Alert.alert("오류", "스토어를 열 수 없습니다:\n" + err.message);
+      Alert.alert('오류', '스토어를 열 수 없습니다:\n' + err.message);
     }
   };
 
   const handleRealNameCheckService = () => {
-    const url = "https://credit-namecheck.netlify.app/";
+    const url = 'https://credit-namecheck.netlify.app/';
     Linking.openURL(url).catch(() =>
-      Alert.alert("오류", "링크를 열 수 없습니다."),
+      Alert.alert('오류', '링크를 열 수 없습니다.'),
     );
   };
 
   const handlePlaceShareService = () => {
-    const url = "https://creditplacecheck.netlify.app/";
+    const url = 'https://creditplacecheck.netlify.app/';
     Linking.openURL(url).catch(() =>
-      Alert.alert("오류", "링크를 열 수 없습니다."),
+      Alert.alert('오류', '링크를 열 수 없습니다.'),
     );
   };
 
   const menuItems = [
     {
-      id: "myReports",
-      title: "내 신고 내역",
-      icon: "file-document-outline",
-      screen: "MyReports",
+      id: 'myReports',
+      title: '내 신고 내역',
+      icon: 'file-document-outline',
+      screen: 'MyReports',
     },
     {
-      id: "notices",
-      title: "공지사항",
-      icon: "bullhorn-outline",
-      screen: "NoticeList",
+      id: 'notices',
+      title: '공지사항',
+      icon: 'bullhorn-outline',
+      screen: 'NoticeList',
     },
     {
-      id: "reportScam",
-      title: "신종 사기 수법 제보",
-      icon: "lightbulb-on-outline",
-      screen: "NewCrimeCaseCreate",
+      id: 'reportScam',
+      title: '신종 사기 수법 제보',
+      icon: 'lightbulb-on-outline',
+      screen: 'NewCrimeCaseCreate',
     },
     {
-      id: "community",
-      title: "피해 사례 공유",
-      icon: "account-group-outline",
-      screen: "CommunityTab",
+      id: 'community',
+      title: '피해 사례 공유',
+      icon: 'account-group-outline',
+      screen: 'CommunityTab',
     },
     {
-      id: "helpCenter",
-      title: "고객센터",
-      icon: "help-circle-outline",
+      id: 'helpCenter',
+      title: '고객센터',
+      icon: 'help-circle-outline',
       onPress: handleHelpCenterLink,
     },
   ];
 
-  const renderMenuItem = (item) => (
+  const renderMenuItem = item => (
     <TouchableOpacity
       key={item.id}
       style={styles.menuItem}
       onPress={() =>
         item.onPress ? item.onPress() : navigation.navigate(item.screen)
-      }
-    >
+      }>
       <Icon name={item.icon} size={24} color="#555" style={styles.menuIcon} />
       <Text style={styles.menuText}>{item.title}</Text>
       <Icon name="chevron-right" size={24} color="#ccc" />
@@ -126,10 +129,10 @@ function SettingsScreen() {
           <Icon name="account-circle" size={60} color="#3d5afe" />
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>
-              {authIsLoading ? "로딩중..." : profile?.nickname || "사용자"}
+              {authIsLoading ? '로딩중...' : profile?.nickname || '사용자'}
             </Text>
             <Text style={styles.profileEmail}>
-              {authIsLoading ? "" : user?.email}
+              {authIsLoading ? '' : user?.email}
             </Text>
           </View>
         </View>
@@ -138,8 +141,7 @@ function SettingsScreen() {
           <Text style={styles.menuGroupTitle}>보안 도구</Text>
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => navigation.navigate("VoiceAnalysis")}
-          >
+            onPress={() => navigation.navigate('VoiceAnalysis')}>
             <Icon
               name="shield-sound-outline"
               size={24}
@@ -154,8 +156,7 @@ function SettingsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={handleMaliciousAppDetection}
-          >
+            onPress={handleMaliciousAppDetection}>
             <Icon
               name="lightbulb-on-outline"
               size={24}
@@ -170,8 +171,7 @@ function SettingsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={handleRealNameCheckService}
-          >
+            onPress={handleRealNameCheckService}>
             <Icon
               name="card-account-details-outline"
               size={24}
@@ -186,8 +186,8 @@ function SettingsScreen() {
         <View style={styles.menuGroup}>
           <Text style={styles.menuGroupTitle}>서비스</Text>
           {menuItems
-            .filter((item) =>
-              ["myReports", "notices", "reportScam"].includes(item.id),
+            .filter(item =>
+              ['myReports', 'notices', 'reportScam'].includes(item.id),
             )
             .map(renderMenuItem)}
         </View>
@@ -195,15 +195,23 @@ function SettingsScreen() {
         <View style={styles.menuGroup}>
           <Text style={styles.menuGroupTitle}>커뮤니티</Text>
           {menuItems
-            .filter((item) => ["community"].includes(item.id))
+            .filter(item => ['community'].includes(item.id))
             .map(renderMenuItem)}
         </View>
 
         <View style={styles.menuGroup}>
           <Text style={styles.menuGroupTitle}>지원</Text>
           {menuItems
-            .filter((item) => ["helpCenter"].includes(item.id))
+            .filter(item => ['helpCenter'].includes(item.id))
             .map(renderMenuItem)}
+        </View>
+
+        <View style={{ marginTop: 20 }}>
+          <Button
+            title="회원 탈퇴"
+            onPress={() => navigation.navigate('DeleteAccount')} // DeleteAccountScreen으로 이동
+            color="#d9534f" // 빨간색으로 위험 표시
+          />
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={signOutUser}>
@@ -217,30 +225,30 @@ function SettingsScreen() {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
   },
   container: {
     paddingBottom: 30,
   },
   profileSection: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 20,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: '#eee',
   },
   profileInfo: {
     marginLeft: 15,
   },
   profileName: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
+    fontWeight: 'bold',
+    color: '#333',
   },
   profileEmail: {
     fontSize: 14,
-    color: "#777",
+    color: '#777',
     marginTop: 4,
   },
   menuGroup: {
@@ -248,19 +256,19 @@ const styles = StyleSheet.create({
   },
   menuGroupTitle: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#888",
+    fontWeight: '600',
+    color: '#888',
     paddingHorizontal: 20,
     marginBottom: 10,
   },
   menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 15,
     paddingHorizontal: 20,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: '#f0f0f0',
   },
   menuIcon: {
     marginRight: 15,
@@ -268,32 +276,32 @@ const styles = StyleSheet.create({
   menuText: {
     flex: 1,
     fontSize: 16,
-    color: "#333",
+    color: '#333',
   },
   logoutButton: {
     marginTop: 30,
     marginHorizontal: 20,
     padding: 15,
-    backgroundColor: "#f1f3f5",
+    backgroundColor: '#f1f3f5',
     borderRadius: 10,
-    alignItems: "center",
+    alignItems: 'center',
   },
   logoutButtonText: {
-    color: "#adb5bd",
+    color: '#adb5bd',
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: '500',
   },
   newBadge: {
-    backgroundColor: "#e74c3c",
+    backgroundColor: '#e74c3c',
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginRight: 8,
   },
   newBadgeText: {
-    color: "white",
+    color: 'white',
     fontSize: 10,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
 });
 

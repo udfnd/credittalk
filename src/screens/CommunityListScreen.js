@@ -14,7 +14,7 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { logPageView } from "../lib/pageViewLogger";
+import { logPageView } from '../lib/pageViewLogger';
 
 function CommunityListScreen() {
   const navigation = useNavigation();
@@ -40,7 +40,9 @@ function CommunityListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('community_posts_with_author_profile')
-        .select('id, title, created_at, author_auth_id, views, author_name, image_urls') // image_urls added
+        .select(
+          'id, title, created_at, author_auth_id, views, author_name, image_urls',
+        ) // image_urls added
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
 
@@ -79,9 +81,8 @@ function CommunityListScreen() {
 
   // [CORE MODIFICATION] renderItem layout changed to match NoticeListScreen
   const renderItem = ({ item }) => {
-    const thumbnailUrl = item.image_urls && item.image_urls.length > 0
-      ? item.image_urls[0]
-      : null;
+    const thumbnailUrl =
+      item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : null;
 
     return (
       <TouchableOpacity
@@ -91,8 +92,7 @@ function CommunityListScreen() {
             postId: item.id,
             postTitle: item.title,
           })
-        }
-      >
+        }>
         <View style={styles.noticeContent}>
           {thumbnailUrl ? (
             <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
@@ -102,9 +102,13 @@ function CommunityListScreen() {
             </View>
           )}
           <View style={styles.textContainer}>
-            <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={styles.noticeTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
             <View style={styles.noticeMeta}>
-              <Text style={styles.noticeAuthor} numberOfLines={1}>{item.author_name || '익명'}</Text>
+              <Text style={styles.noticeAuthor} numberOfLines={1}>
+                {item.author_name || '익명'}
+              </Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
               </Text>
@@ -141,7 +145,7 @@ function CommunityListScreen() {
       <FlatList
         data={posts}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           !isLoading && (

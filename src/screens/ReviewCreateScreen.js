@@ -24,7 +24,7 @@ import { Buffer } from 'buffer';
 const StarRating = ({ rating, setRating }) => {
   return (
     <View style={styles.starContainer}>
-      {[1, 2, 3, 4, 5].map((star) => (
+      {[1, 2, 3, 4, 5].map(star => (
         <TouchableOpacity key={star} onPress={() => setRating(star)}>
           <Icon
             name={star <= rating ? 'star' : 'star-outline'}
@@ -61,24 +61,27 @@ function ReviewCreateScreen() {
         selectionLimit: selectionLimit, // 남은 개수만큼만 선택 가능
         quality: 0.8,
       },
-      (response) => {
+      response => {
         if (response.didCancel) {
           return;
         }
         if (response.errorCode) {
-          Alert.alert('오류', `이미지를 선택하는 중 오류가 발생했습니다: ${response.errorMessage}`);
+          Alert.alert(
+            '오류',
+            `이미지를 선택하는 중 오류가 발생했습니다: ${response.errorMessage}`,
+          );
           return;
         }
         if (response.assets && response.assets.length > 0) {
-          setImages((prevImages) => [...prevImages, ...response.assets]);
+          setImages(prevImages => [...prevImages, ...response.assets]);
         }
       },
     );
   };
 
   // 선택된 이미지 삭제 함수
-  const handleRemovePhoto = (uri) => {
-    setImages((prevImages) => prevImages.filter((image) => image.uri !== uri));
+  const handleRemovePhoto = uri => {
+    setImages(prevImages => prevImages.filter(image => image.uri !== uri));
   };
 
   // 폼 제출 함수
@@ -98,10 +101,11 @@ function ReviewCreateScreen() {
       const imageUrls = [];
       // Promise.all을 사용하여 모든 이미지를 병렬로 업로드 (효율성 극대화)
       if (images.length > 0) {
-        const uploadPromises = images.map(async (asset) => {
-          const path = Platform.OS === 'android' && asset.uri.startsWith('content://')
-            ? (await RNBlobUtil.fs.stat(asset.uri)).path
-            : asset.uri.replace('file://', '');
+        const uploadPromises = images.map(async asset => {
+          const path =
+            Platform.OS === 'android' && asset.uri.startsWith('content://')
+              ? (await RNBlobUtil.fs.stat(asset.uri)).path
+              : asset.uri.replace('file://', '');
 
           const base64Data = await RNBlobUtil.fs.readFile(path, 'base64');
           const arrayBuffer = Buffer.from(base64Data, 'base64');
@@ -151,10 +155,12 @@ function ReviewCreateScreen() {
 
       Alert.alert('성공', '후기가 성공적으로 등록되었습니다.');
       navigation.goBack(); // 이전 화면으로 돌아가기
-
     } catch (error) {
       console.error('후기 등록 중 오류:', error);
-      Alert.alert('등록 실패', error.message || '알 수 없는 오류가 발생했습니다.');
+      Alert.alert(
+        '등록 실패',
+        error.message || '알 수 없는 오류가 발생했습니다.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -163,9 +169,10 @@ function ReviewCreateScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+      style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>크레딧톡 후기 작성</Text>
 
         <Text style={styles.label}>별점 평가</Text>
@@ -193,19 +200,20 @@ function ReviewCreateScreen() {
 
         <Text style={styles.label}>사진 첨부 (선택, 최대 3장)</Text>
         <View style={styles.imageContainer}>
-          {images.map((image) => (
+          {images.map(image => (
             <View key={image.uri} style={styles.imageWrapper}>
               <Image source={{ uri: image.uri }} style={styles.previewImage} />
               <TouchableOpacity
                 style={styles.removeImageButton}
-                onPress={() => handleRemovePhoto(image.uri)}
-              >
+                onPress={() => handleRemovePhoto(image.uri)}>
                 <Icon name="close-circle" size={28} color="#e74c3c" />
               </TouchableOpacity>
             </View>
           ))}
           {images.length < 3 && (
-            <TouchableOpacity style={styles.addImageButton} onPress={handleChoosePhotos}>
+            <TouchableOpacity
+              style={styles.addImageButton}
+              onPress={handleChoosePhotos}>
               <Icon name="camera-plus-outline" size={40} color="#adb5bd" />
               <Text style={styles.addImageText}>사진 추가</Text>
             </TouchableOpacity>
@@ -213,10 +221,12 @@ function ReviewCreateScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+          style={[
+            styles.submitButton,
+            isLoading && styles.submitButtonDisabled,
+          ]}
           onPress={handleSubmit}
-          disabled={isLoading}
-        >
+          disabled={isLoading}>
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (

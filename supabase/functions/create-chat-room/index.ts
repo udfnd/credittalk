@@ -1,6 +1,9 @@
 // supabase/functions/create-chat-room/index.ts
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  createClient,
+  SupabaseClient,
+} from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts'; //
 
 interface CreateChatRoomPayload {
@@ -23,7 +26,7 @@ serve(async (req: Request) => {
     // Supabase Admin 클라이언트 생성 (서비스 키 사용, 사용자 컨텍스트 전달 제거)
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       // { global: { headers: { Authorization: req.headers.get('Authorization')! } } } // 이 부분을 제거하거나 주석 처리!
     );
 
@@ -35,14 +38,23 @@ serve(async (req: Request) => {
     const userSupabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '', // 일반적으로 anon key 사용
-      { global: { headers: { Authorization: req.headers.get('Authorization')! }}}
+      {
+        global: {
+          headers: { Authorization: req.headers.get('Authorization')! },
+        },
+      },
     );
 
-    const { data: { user: currentUser }, error: userError } = await userSupabaseClient.auth.getUser();
+    const {
+      data: { user: currentUser },
+      error: userError,
+    } = await userSupabaseClient.auth.getUser();
 
     if (userError || !currentUser) {
       console.error('Error fetching current user:', userError);
-      throw new Error('Could not authenticate user. Make sure a valid JWT is provided in Authorization header.');
+      throw new Error(
+        'Could not authenticate user. Make sure a valid JWT is provided in Authorization header.',
+      );
     }
 
     if (currentUser.id === otherUserId) {
@@ -51,10 +63,11 @@ serve(async (req: Request) => {
 
     // (기존 RPC 함수 호출, 채팅방 생성, 참여자 추가 로직은 동일 - supabaseAdminClient 사용)
     // 1. 기존 1:1 채팅방이 있는지 확인 (supabaseAdminClient 사용)
-    const { data: existingRooms, error: rpcError } = await supabaseAdminClient.rpc(
-      'find_existing_dm_room',
-      { user1_id: currentUser.id, user2_id: otherUserId }
-    );
+    const { data: existingRooms, error: rpcError } =
+      await supabaseAdminClient.rpc('find_existing_dm_room', {
+        user1_id: currentUser.id,
+        user2_id: otherUserId,
+      });
 
     if (rpcError) {
       console.error('RPC find_existing_dm_room error:', rpcError);
@@ -67,7 +80,7 @@ serve(async (req: Request) => {
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200,
-        }
+        },
       );
     }
 
@@ -97,25 +110,40 @@ serve(async (req: Request) => {
       .insert(participantsData);
 
     if (participantsError) {
-      console.error('Error inserting chat_room_participants:', participantsError);
-      await supabaseAdminClient.from('chat_rooms').delete().eq('id', newRoom.id);
+      console.error(
+        'Error inserting chat_room_participants:',
+        participantsError,
+      );
+      await supabaseAdminClient
+        .from('chat_rooms')
+        .delete()
+        .eq('id', newRoom.id);
       throw participantsError;
     }
 
     return new Response(
-      JSON.stringify({ roomId: newRoom.id, isNew: true, message: 'Chat room created successfully.' }),
+      JSON.stringify({
+        roomId: newRoom.id,
+        isNew: true,
+        message: 'Chat room created successfully.',
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 201,
-      }
+      },
     );
   } catch (error: any) {
     console.error('Function error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: error.message.includes('authenticate user') || error.message.includes('Forbidden') ? 401
-        : error.message.includes('Missing') || error.message.includes('Cannot create a chat room with yourself') ? 400
-          : 500,
+      status:
+        error.message.includes('authenticate user') ||
+        error.message.includes('Forbidden')
+          ? 401
+          : error.message.includes('Missing') ||
+              error.message.includes('Cannot create a chat room with yourself')
+            ? 400
+            : 500,
     });
   }
 });

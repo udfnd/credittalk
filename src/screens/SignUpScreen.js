@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   TextInput,
@@ -11,100 +11,100 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
-} from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { supabase } from "../lib/supabaseClient";
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../lib/supabaseClient';
 
-const jobTypes = ["일반", "사업자"];
+const jobTypes = ['일반', '사업자'];
 
 function SignUpScreen() {
   const navigation = useNavigation();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [name, setName] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [jobType, setJobType] = useState("일반");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [jobType, setJobType] = useState('일반');
 
-  const [otp, setOtp] = useState("");
+  const [otp, setOtp] = useState('');
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingNickname, setIsCheckingNickname] = useState(false); // 닉네임 확인 전용 로딩 상태
 
-  const [emailMessage, setEmailMessage] = useState("");
+  const [emailMessage, setEmailMessage] = useState('');
   const [isEmailAvailable, setIsEmailAvailable] = useState(null);
 
-  const [nicknameMessage, setNicknameMessage] = useState("닉네임은 실명과 거리가 먼 것으로 작성해주세요.");
-  const [nicknameMessageColor, setNicknameMessageColor] = useState("grey"); // 기본 안내 메시지 색상
+  const [nicknameMessage, setNicknameMessage] = useState(
+    '닉네임은 실명과 거리가 먼 것으로 작성해주세요.',
+  );
+  const [nicknameMessageColor, setNicknameMessageColor] = useState('grey'); // 기본 안내 메시지 색상
   const [isNicknameAvailable, setIsNicknameAvailable] = useState(null);
 
-  const validateEmailFormat = (text) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+  const validateEmailFormat = text => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
 
-  const handleEmailChange = (text) => {
+  const handleEmailChange = text => {
     setEmail(text);
     if (isEmailAvailable !== null) {
       setIsEmailAvailable(null);
-      setEmailMessage("");
+      setEmailMessage('');
     }
   };
 
-  const handleNicknameChange = (text) => {
+  const handleNicknameChange = text => {
     setNickname(text);
     if (isNicknameAvailable !== null) {
       setIsNicknameAvailable(null);
-      setNicknameMessage("닉네임은 실명과 거리가 먼 것으로 작성해주세요.");
-      setNicknameMessageColor("grey");
+      setNicknameMessage('닉네임은 실명과 거리가 먼 것으로 작성해주세요.');
+      setNicknameMessageColor('grey');
     }
   };
-
 
   const handleCheckNickname = async () => {
     Keyboard.dismiss();
     const trimmedNickname = nickname.trim();
     if (trimmedNickname.length < 2) {
-      Alert.alert("입력 오류", "닉네임은 2자 이상이어야 합니다.");
+      Alert.alert('입력 오류', '닉네임은 2자 이상이어야 합니다.');
       return;
     }
 
     setIsCheckingNickname(true);
-    setNicknameMessage("");
+    setNicknameMessage('');
     setIsNicknameAvailable(null);
 
     try {
       const { data, error } = await supabase.functions.invoke(
-        "check-nickname-availability",
+        'check-nickname-availability',
         { body: { nickname: trimmedNickname } },
       );
 
       if (error) throw error;
 
       switch (data.status) {
-        case "available":
+        case 'available':
           setIsNicknameAvailable(true);
-          setNicknameMessage("사용 가능한 닉네임입니다.");
-          setNicknameMessageColor("green"); // 성공 시 녹색
+          setNicknameMessage('사용 가능한 닉네임입니다.');
+          setNicknameMessageColor('green'); // 성공 시 녹색
           break;
-        case "taken":
+        case 'taken':
           setIsNicknameAvailable(false);
           setNicknameMessage(data.message);
-          setNicknameMessageColor("red"); // 실패 시 빨간색
+          setNicknameMessageColor('red'); // 실패 시 빨간색
           break;
-        case "forbidden":
+        case 'forbidden':
           setIsNicknameAvailable(false);
           setNicknameMessage(data.message);
-          setNicknameMessageColor("red"); // 실패 시 빨간색
+          setNicknameMessageColor('red'); // 실패 시 빨간색
           break;
         default:
-          throw new Error("서버로부터 알 수 없는 응답을 받았습니다.");
+          throw new Error('서버로부터 알 수 없는 응답을 받았습니다.');
       }
-
     } catch (err) {
       const errorMessage = err.context?.data?.error || err.message;
       setIsNicknameAvailable(false);
       setNicknameMessage(errorMessage);
-      setNicknameMessageColor("red"); // 실패 시 빨간색
+      setNicknameMessageColor('red'); // 실패 시 빨간색
     } finally {
       setIsCheckingNickname(false);
     }
@@ -113,29 +113,29 @@ function SignUpScreen() {
   const handleCheckEmail = async () => {
     Keyboard.dismiss();
     if (!validateEmailFormat(email)) {
-      Alert.alert("입력 오류", "올바른 이메일 형식이 아닙니다.");
+      Alert.alert('입력 오류', '올바른 이메일 형식이 아닙니다.');
       return;
     }
 
     setIsLoading(true);
-    setEmailMessage("");
+    setEmailMessage('');
     try {
       const { data, error } = await supabase.functions.invoke(
-        "check-email-availability",
+        'check-email-availability',
         { body: { email: email.trim() } },
       );
 
       if (error) throw error;
       if (data.available) {
         setIsEmailAvailable(true);
-        setEmailMessage("사용 가능한 이메일입니다.");
+        setEmailMessage('사용 가능한 이메일입니다.');
       } else {
         setIsEmailAvailable(false);
-        setEmailMessage("이미 사용 중인 이메일입니다.");
+        setEmailMessage('이미 사용 중인 이메일입니다.');
       }
     } catch (err) {
       setIsEmailAvailable(null);
-      setEmailMessage("오류: 이메일 중복 확인에 실패했습니다.");
+      setEmailMessage('오류: 이메일 중복 확인에 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -145,20 +145,20 @@ function SignUpScreen() {
     Keyboard.dismiss();
 
     if (!phoneNumber || !/^\d{10,11}$/.test(phoneNumber)) {
-      Alert.alert("입력 오류", "올바른 휴대폰 번호를 입력해주세요.");
+      Alert.alert('입력 오류', '올바른 휴대폰 번호를 입력해주세요.');
       return;
     }
 
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke(
-        "send-verification-otp",
-        { body: { phone: phoneNumber.trim() } }
+        'send-verification-otp',
+        { body: { phone: phoneNumber.trim() } },
       );
 
       if (error) {
         const contextError = error.context?.errorMessage;
-        let displayError = "인증번호 발송에 실패했습니다.";
+        let displayError = '인증번호 발송에 실패했습니다.';
 
         if (contextError) {
           try {
@@ -167,28 +167,26 @@ function SignUpScreen() {
           } catch {
             displayError = contextError;
           }
-        }
-        else if (error.message) {
+        } else if (error.message) {
           displayError = error.message;
         }
 
-        const title = displayError.includes("가입된")
-          ? "인증 불가"
-          : "인증번호 발송 실패";
+        const title = displayError.includes('가입된')
+          ? '인증 불가'
+          : '인증번호 발송 실패';
 
         Alert.alert(title, displayError);
         return;
       }
 
       Alert.alert(
-        "인증번호 발송",
-        "입력하신 휴대폰 번호로 인증번호를 발송했습니다."
+        '인증번호 발송',
+        '입력하신 휴대폰 번호로 인증번호를 발송했습니다.',
       );
       setIsOtpSent(true);
-
     } catch (err) {
-      console.error("handleSendVerificationCode error:", err);
-      Alert.alert("네트워크 오류", "인증번호 발송 중 문제가 발생했습니다.");
+      console.error('handleSendVerificationCode error:', err);
+      Alert.alert('네트워크 오류', '인증번호 발송 중 문제가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -197,15 +195,15 @@ function SignUpScreen() {
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!isOtpSent) {
-      Alert.alert("인증 필요", "먼저 휴대폰 인증을 완료해주세요.");
+      Alert.alert('인증 필요', '먼저 휴대폰 인증을 완료해주세요.');
       return;
     }
     if (isEmailAvailable !== true) {
-      Alert.alert("이메일 확인 필요", "이메일 중복 확인을 해주세요.");
+      Alert.alert('이메일 확인 필요', '이메일 중복 확인을 해주세요.');
       return;
     }
     if (isNicknameAvailable !== true) {
-      Alert.alert("닉네임 확인 필요", "닉네임 중복 확인을 해주세요.");
+      Alert.alert('닉네임 확인 필요', '닉네임 중복 확인을 해주세요.');
       return;
     }
     if (
@@ -215,21 +213,21 @@ function SignUpScreen() {
       !name.trim() ||
       !nickname.trim()
     ) {
-      Alert.alert("입력 오류", "모든 필수 항목을 입력해주세요.");
+      Alert.alert('입력 오류', '모든 필수 항목을 입력해주세요.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("입력 오류", "비밀번호가 일치하지 않습니다.");
+      Alert.alert('입력 오류', '비밀번호가 일치하지 않습니다.');
       return;
     }
     if (password.length < 6) {
-      Alert.alert("입력 오류", "비밀번호는 6자 이상이어야 합니다.");
+      Alert.alert('입력 오류', '비밀번호는 6자 이상이어야 합니다.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const { error } = await supabase.functions.invoke("verify-and-signup", {
+      const { error } = await supabase.functions.invoke('verify-and-signup', {
         body: {
           email: email.trim(),
           password,
@@ -243,7 +241,7 @@ function SignUpScreen() {
 
       if (error) {
         const contextError = error.context?.errorMessage;
-        let displayError = "알 수 없는 오류가 발생했습니다.";
+        let displayError = '알 수 없는 오류가 발생했습니다.';
         if (contextError) {
           try {
             const parsedError = JSON.parse(contextError);
@@ -258,12 +256,12 @@ function SignUpScreen() {
       }
 
       Alert.alert(
-        "회원가입 성공",
-        "회원가입이 완료되었습니다. 로그인 해주세요.",
-        [{ text: "확인", onPress: () => navigation.navigate("SignIn") }],
+        '회원가입 성공',
+        '회원가입이 완료되었습니다. 로그인 해주세요.',
+        [{ text: '확인', onPress: () => navigation.navigate('SignIn') }],
       );
     } catch (err) {
-      Alert.alert("회원가입 실패", err.message);
+      Alert.alert('회원가입 실패', err.message);
     } finally {
       setIsLoading(false);
     }
@@ -272,8 +270,7 @@ function SignUpScreen() {
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContainer}
-      keyboardShouldPersistTaps="handled"
-    >
+      keyboardShouldPersistTaps="handled">
       <View style={styles.container}>
         <Text style={styles.title}>회원가입</Text>
 
@@ -290,8 +287,7 @@ function SignUpScreen() {
           <TouchableOpacity
             style={styles.checkButton}
             onPress={handleCheckEmail}
-            disabled={isLoading}
-          >
+            disabled={isLoading}>
             <Text style={styles.checkButtonText}>중복확인</Text>
           </TouchableOpacity>
         </View>
@@ -300,8 +296,7 @@ function SignUpScreen() {
             style={[
               styles.message,
               isEmailAvailable ? styles.successMessage : styles.errorMessage,
-            ]}
-          >
+            ]}>
             {emailMessage}
           </Text>
         )}
@@ -343,8 +338,7 @@ function SignUpScreen() {
           <TouchableOpacity
             style={styles.checkButton}
             onPress={handleCheckNickname}
-            disabled={isCheckingNickname}
-          >
+            disabled={isCheckingNickname}>
             {isCheckingNickname ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
@@ -353,33 +347,26 @@ function SignUpScreen() {
           </TouchableOpacity>
         </View>
         {nicknameMessage.length > 0 && (
-          <Text
-            style={[
-              styles.message,
-              { color: nicknameMessageColor }
-            ]}
-          >
+          <Text style={[styles.message, { color: nicknameMessageColor }]}>
             {nicknameMessage}
           </Text>
         )}
 
         <Text style={styles.label}>직업 유형</Text>
         <View style={styles.jobTypeContainer}>
-          {jobTypes.map((type) => (
+          {jobTypes.map(type => (
             <TouchableOpacity
               key={type}
               style={[
                 styles.jobTypeButton,
                 jobType === type && styles.jobTypeButtonSelected,
               ]}
-              onPress={() => setJobType(type)}
-            >
+              onPress={() => setJobType(type)}>
               <Text
                 style={[
                   styles.jobTypeButtonText,
                   jobType === type && styles.jobTypeButtonTextSelected,
-                ]}
-              >
+                ]}>
                 {type}
               </Text>
             </TouchableOpacity>
@@ -401,8 +388,7 @@ function SignUpScreen() {
               <TouchableOpacity
                 style={styles.checkButton}
                 onPress={handleSendVerificationCode}
-                disabled={isLoading}
-              >
+                disabled={isLoading}>
                 {isLoading && !isCheckingNickname ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
@@ -427,7 +413,7 @@ function SignUpScreen() {
               <ActivityIndicator
                 size="large"
                 color="#3d5afe"
-                style={{ marginVertical: Platform.OS === "ios" ? 18 : 19 }}
+                style={{ marginVertical: Platform.OS === 'ios' ? 18 : 19 }}
               />
             ) : (
               <Button
@@ -442,8 +428,7 @@ function SignUpScreen() {
 
         <TouchableOpacity
           style={styles.linkButton}
-          onPress={() => navigation.navigate("SignIn")}
-        >
+          onPress={() => navigation.navigate('SignIn')}>
           <Text style={styles.linkText}>
             이미 회원가입 하셨나요? 로그인하기
           </Text>
@@ -454,72 +439,72 @@ function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, justifyContent: "center" },
+  scrollContainer: { flexGrow: 1, justifyContent: 'center' },
   container: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: 'center',
     padding: 20,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
   },
   title: {
     fontSize: 30,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
     marginBottom: 30,
-    color: "#1e3a5f",
+    color: '#1e3a5f',
   },
   input: {
     height: 50,
-    borderColor: "#ced4da",
+    borderColor: '#ced4da',
     borderWidth: 1,
     marginBottom: 12,
     paddingHorizontal: 15,
     borderRadius: 8,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     fontSize: 16,
-    color: "#000",
+    color: '#000',
   },
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
   inputField: {
     flex: 1,
     height: 50,
-    borderColor: "#ced4da",
+    borderColor: '#ced4da',
     borderWidth: 1,
     paddingHorizontal: 15,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     fontSize: 16,
-    color: "#000",
+    color: '#000',
     borderTopLeftRadius: 8,
     borderBottomLeftRadius: 8,
   },
   checkButton: {
     height: 50,
     paddingHorizontal: 12,
-    backgroundColor: "#6c757d",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#6c757d',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
     minWidth: 80,
   },
-  checkButtonText: { color: "#fff", fontWeight: "bold" },
+  checkButtonText: { color: '#fff', fontWeight: 'bold' },
   message: { marginTop: -7, marginBottom: 12, fontSize: 12, paddingLeft: 5 },
-  successMessage: { color: "green" },
-  errorMessage: { color: "red" },
+  successMessage: { color: 'green' },
+  errorMessage: { color: 'red' },
   label: {
     fontSize: 16,
     marginBottom: 8,
-    fontWeight: "600",
-    color: "#495057",
+    fontWeight: '600',
+    color: '#495057',
     marginTop: 5,
   },
   jobTypeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     marginBottom: 25,
     marginTop: 5,
   },
@@ -528,17 +513,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#adb5bd",
-    backgroundColor: "#e9ecef",
+    borderColor: '#adb5bd',
+    backgroundColor: '#e9ecef',
   },
   jobTypeButtonSelected: {
-    backgroundColor: "#3d5afe",
-    borderColor: "#3d5afe",
+    backgroundColor: '#3d5afe',
+    borderColor: '#3d5afe',
   },
-  jobTypeButtonText: { fontSize: 16, color: "#495057" },
-  jobTypeButtonTextSelected: { color: "white", fontWeight: "bold" },
-  linkButton: { marginTop: 20, alignItems: "center" },
-  linkText: { color: "#3d5afe", fontSize: 15, textDecorationLine: "underline" },
+  jobTypeButtonText: { fontSize: 16, color: '#495057' },
+  jobTypeButtonTextSelected: { color: 'white', fontWeight: 'bold' },
+  linkButton: { marginTop: 20, alignItems: 'center' },
+  linkText: { color: '#3d5afe', fontSize: 15, textDecorationLine: 'underline' },
 });
 
 export default SignUpScreen;

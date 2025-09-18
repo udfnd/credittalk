@@ -13,8 +13,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
-import { logPageView } from "../lib/pageViewLogger";
-import { useAuth } from "../context/AuthContext";
+import { logPageView } from '../lib/pageViewLogger';
+import { useAuth } from '../context/AuthContext';
 
 function NoticeListScreen() {
   const navigation = useNavigation();
@@ -71,17 +71,23 @@ function NoticeListScreen() {
           noticeId: item.id,
           noticeTitle: item.title,
         })
-      }
-    >
+      }>
       <View style={styles.noticeContent}>
         {item.image_urls && item.image_urls.length > 0 && (
-          <Image source={{ uri: item.image_urls[0] }} style={styles.thumbnail} />
+          <Image
+            source={{ uri: item.image_urls[0] }}
+            style={styles.thumbnail}
+          />
         )}
         <View style={styles.textContainer}>
-          <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.noticeTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
           <View style={styles.noticeMeta}>
             {item.author_name && (
-              <Text style={styles.noticeAuthor}>작성자: {item.author_name}</Text>
+              <Text style={styles.noticeAuthor}>
+                작성자: {item.author_name}
+              </Text>
             )}
             <Text style={styles.noticeDate}>조회 {item.views}</Text>
             <Text style={styles.noticeDate}>
@@ -117,7 +123,7 @@ function NoticeListScreen() {
     <FlatList
       data={notices}
       renderItem={renderItem}
-      keyExtractor={(item) => item.id.toString()}
+      keyExtractor={item => item.id.toString()}
       contentContainerStyle={styles.listContainer}
       ListEmptyComponent={
         !isLoading && (

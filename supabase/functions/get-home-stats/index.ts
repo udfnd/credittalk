@@ -1,7 +1,7 @@
 // supabase/functions/get-home-stats/index.ts
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders } from '../_shared/cors.ts';
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -13,29 +13,34 @@ function kstDayRange(now = new Date()) {
   const d = kstNow.getUTCDate();
 
   const startUtc = new Date(Date.UTC(y, m, d, 0, 0, 0, 0) - KST_OFFSET_MS);
-  const endUtc   = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - KST_OFFSET_MS);
+  const endUtc = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - KST_OFFSET_MS);
 
-  return { startUtcISO: startUtc.toISOString(), endUtcISO: endUtc.toISOString() };
+  return {
+    startUtcISO: startUtc.toISOString(),
+    endUtcISO: endUtc.toISOString(),
+  };
 }
 
 /** KST 기준 특정 날짜의 '자정 직전(=해당일 23:59:59.999 KST)'을 UTC ISO로 변환
  *  month는 Date.UTC와 동일하게 0-기반(0=1월)입니다. 예: 2025-08-30 → (2025, 7, 30)
  */
 function kstEndOfDayUtcISO(year: number, monthZeroBased: number, day: number) {
-  const utc = new Date(Date.UTC(year, monthZeroBased, day, 23, 59, 59, 999) - KST_OFFSET_MS);
+  const utc = new Date(
+    Date.UTC(year, monthZeroBased, day, 23, 59, 59, 999) - KST_OFFSET_MS,
+  );
   return utc.toISOString();
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+serve(async req => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } },
     );
 
     const { startUtcISO, endUtcISO } = kstDayRange();
@@ -62,36 +67,36 @@ serve(async (req) => {
       { count: totalScamCount },
     ] = await Promise.all([
       supabase
-        .from("search_logs")
-        .select("*", { count: "exact", head: true })
-        .eq("exact_match", true)
-        .gte("created_at", startUtcISO)
-        .lt("created_at", endUtcISO),
+        .from('search_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('exact_match', true)
+        .gte('created_at', startUtcISO)
+        .lt('created_at', endUtcISO),
 
       supabase
-        .from("search_logs")
-        .select("*", { count: "exact", head: true })
-        .lte("created_at", CUTOFF_END_UTC_ISO), // 👈 exact_match 필터 없음
+        .from('search_logs')
+        .select('*', { count: 'exact', head: true })
+        .lte('created_at', CUTOFF_END_UTC_ISO), // 👈 exact_match 필터 없음
 
       supabase
-        .from("search_logs")
-        .select("*", { count: "exact", head: true })
-        .gt("created_at", CUTOFF_END_UTC_ISO)   // 컷오프 '이후'
-        .eq("exact_match", true),
+        .from('search_logs')
+        .select('*', { count: 'exact', head: true })
+        .gt('created_at', CUTOFF_END_UTC_ISO) // 컷오프 '이후'
+        .eq('exact_match', true),
 
       supabase
-        .from("help_questions")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", startUtcISO)
-        .lt("created_at", endUtcISO),
+        .from('help_questions')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startUtcISO)
+        .lt('created_at', endUtcISO),
 
       supabase
-        .from("help_questions")
-        .select("*", { count: "exact", head: true }),
+        .from('help_questions')
+        .select('*', { count: 'exact', head: true }),
 
       supabase
-        .from("scammer_reports")
-        .select("*", { count: "exact", head: true }),
+        .from('scammer_reports')
+        .select('*', { count: 'exact', head: true }),
     ]);
 
     // 누적 사기 예방(하이브리드): [컷오프 이전 전체] + [컷오프 이후 exact만]
@@ -116,13 +121,13 @@ serve(async (req) => {
     };
 
     return new Response(JSON.stringify(payload), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
-    console.error("get-home-stats error:", error);
+    console.error('get-home-stats error:', error);
     return new Response(JSON.stringify({ error: (error as Error).message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
   }

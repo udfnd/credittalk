@@ -7,7 +7,11 @@ import 'react-native-url-polyfill/auto';
 
 import { AppRegistry, Linking } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
+import notifee, {
+  AndroidImportance,
+  AndroidStyle,
+  EventType,
+} from '@notifee/react-native';
 
 import App from './App';
 import { name as appName } from './app.json';
@@ -57,7 +61,9 @@ async function openLinkFromData(data) {
       // 유튜브 단축링크 재시도
       const yt = rewriteYoutubeShort(url);
       if (yt && yt !== url) {
-        try { await Linking.openURL(yt); } catch {}
+        try {
+          await Linking.openURL(yt);
+        } catch {}
       }
     }
   } catch {
@@ -81,11 +87,11 @@ if (!global.__PUSH_BG_BOUND__) {
   global.__PUSH_BG_BOUND__ = true;
 
   // (1) 백그라운드 수신(data-only 포함) → 우리가 직접 로컬 표시
-  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+  messaging().setBackgroundMessageHandler(async remoteMessage => {
     try {
       const d = remoteMessage?.data ?? {};
       const title = d.title || remoteMessage?.notification?.title || '알림';
-      const body  = d.body  || remoteMessage?.notification?.body  || '';
+      const body = d.body || remoteMessage?.notification?.body || '';
 
       await ensureChannel();
 
@@ -96,7 +102,10 @@ if (!global.__PUSH_BG_BOUND__) {
         android: {
           channelId: CHANNEL_ID,
           pressAction: { id: 'default' }, // 탭 이벤트 전달
-          style: body && body.length > 60 ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
+          style:
+            body && body.length > 60
+              ? { type: AndroidStyle.BIGTEXT, text: body }
+              : undefined,
         },
       });
     } catch {}
