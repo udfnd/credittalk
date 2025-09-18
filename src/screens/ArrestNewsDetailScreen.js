@@ -12,13 +12,13 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
-} from "react-native";
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
-import CommentsSection from "../components/CommentsSection";
+import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
-import ImageViewing from "react-native-image-viewing"; // ✅ 추가
+import ImageViewing from 'react-native-image-viewing'; // ✅ 추가
 
 const { width } = Dimensions.get('window');
 
@@ -46,21 +46,22 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     };
   }, []);
 
-  const sanitizeUrl = (raw) => {
-    if (!raw) return "";
-    return String(raw).trim()
-      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
-      .replace(/\s+/g, "");
+  const sanitizeUrl = raw => {
+    if (!raw) return '';
+    return String(raw)
+      .trim()
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .replace(/\s+/g, '');
   };
 
-  const handleLinkPress = async (rawUrl) => {
+  const handleLinkPress = async rawUrl => {
     const url = sanitizeUrl(rawUrl);
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) await Linking.openURL(url);
       else await Linking.openURL(url);
     } catch (e) {
-      Alert.alert("오류", `이 링크를 열 수 없습니다: ${e.message}`);
+      Alert.alert('오류', `이 링크를 열 수 없습니다: ${e.message}`);
     }
   };
 
@@ -70,7 +71,9 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select('id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views')
+        .select(
+          'id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views',
+        )
         .eq('id', newsId)
         .eq('is_published', true)
         .single();
@@ -96,10 +99,10 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   // ✅ 뷰어에 사용할 이미지 배열 (형식: [{ uri }])
   const viewerImages = useMemo(() => {
     if (!Array.isArray(news?.image_urls)) return [];
-    return news.image_urls.filter(Boolean).map((uri) => ({ uri }));
+    return news.image_urls.filter(Boolean).map(uri => ({ uri }));
   }, [news]);
 
-  const openViewerAt = useCallback((index) => {
+  const openViewerAt = useCallback(index => {
     setViewerIndex(index);
     setViewerVisible(true);
   }, []);
@@ -124,10 +127,12 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.imageScrollView}
-        pagingEnabled
-      >
+        pagingEnabled>
         {news.image_urls.map((url, index) => (
-          <TouchableOpacity key={index} onPress={() => openViewerAt(index)} activeOpacity={0.9}>
+          <TouchableOpacity
+            key={index}
+            onPress={() => openViewerAt(index)}
+            activeOpacity={0.9}>
             <Image
               source={{ uri: url }}
               style={styles.galleryImage}
@@ -169,7 +174,9 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="always">
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 8 }}
+        keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
           {news.is_pinned && (
             <View style={styles.pinnedContainer}>
@@ -179,8 +186,12 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           )}
           <Text style={styles.title}>{news.title}</Text>
           <View style={styles.metaContainer}>
-            <Text style={styles.author}>작성자: {news.author_name || '관리자'}</Text>
-            <Text style={styles.date}>게시일: {new Date(news.created_at).toLocaleDateString()}</Text>
+            <Text style={styles.author}>
+              작성자: {news.author_name || '관리자'}
+            </Text>
+            <Text style={styles.date}>
+              게시일: {new Date(news.created_at).toLocaleDateString()}
+            </Text>
             <Text style={styles.date}>조회수: {news.views || 0}</Text>
           </View>
         </View>
@@ -188,11 +199,15 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         {renderImages()}
 
         <View style={styles.contentContainer}>
-          <Text style={styles.content}>{news.content || '내용이 없습니다.'}</Text>
+          <Text style={styles.content}>
+            {news.content || '내용이 없습니다.'}
+          </Text>
         </View>
 
         {news.link_url && (
-          <TouchableOpacity style={styles.linkButton} onPress={() => handleLinkPress(news.link_url)}>
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => handleLinkPress(news.link_url)}>
             <Icon name="link-variant" size={20} color="#fff" />
             <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
           </TouchableOpacity>
@@ -210,7 +225,9 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         presentationStyle="fullScreen"
         HeaderComponent={() => (
           <View style={styles.viewerHeader}>
-            <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+            <TouchableOpacity
+              onPress={() => setViewerVisible(false)}
+              style={styles.viewerCloseBtn}>
               <Icon name="close" size={28} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -224,7 +241,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9f9f9' },
 
   centered: {
-    flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f9f9f9',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f9f9f9',
   },
 
   headerContainer: {
@@ -235,10 +256,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eeeeee',
   },
-  pinnedContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  pinnedText: { marginLeft: 6, fontSize: 14, fontWeight: 'bold', color: '#d35400' },
+  pinnedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pinnedText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#d35400',
+  },
 
-  title: { fontSize: 24, fontWeight: 'bold', color: '#2c3e50', marginBottom: 10 },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 10,
+  },
 
   metaContainer: { flexDirection: 'row', justifyContent: 'space-between' },
   author: { fontSize: 14, color: '#7f8c8d' },
@@ -246,36 +281,68 @@ const styles = StyleSheet.create({
 
   mainImage: { width, height: width * 0.65, marginBottom: 20 },
 
-  imageScrollView: { paddingHorizontal: 0, alignItems: 'center', marginBottom: 20 },
+  imageScrollView: {
+    paddingHorizontal: 0,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   galleryImage: { width, height: width * 0.8, backgroundColor: '#e0e0e0' },
 
-  contentContainer: { paddingHorizontal: 20, paddingBottom: 40, backgroundColor: '#ffffff', paddingTop: 20 },
+  contentContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    backgroundColor: '#ffffff',
+    paddingTop: 20,
+  },
   content: { fontSize: 16, lineHeight: 28, color: '#34495e' },
 
-  errorText: { marginTop: 10, fontSize: 16, color: '#e74c3c', textAlign: 'center' },
+  errorText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#e74c3c',
+    textAlign: 'center',
+  },
   emptyText: { fontSize: 16, color: '#7f8c8d' },
 
   retryButton: {
-    marginTop: 20, backgroundColor: '#3d5afe', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5,
+    marginTop: 20,
+    backgroundColor: '#3d5afe',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
   },
   retryButtonText: { color: 'white', fontSize: 16 },
 
   linkButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#3d5afe', paddingVertical: 14, borderRadius: 8, marginTop: 15,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3d5afe',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  linkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+  linkButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
 
   viewerHeader: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     paddingTop: 12,
     paddingHorizontal: 12,
-    flexDirection: "row",
-    justifyContent: "flex-end",
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   viewerCloseBtn: { padding: 8 },
 });
