@@ -37,17 +37,21 @@ export default function IncidentPhotoCreateScreen() {
       Alert.alert('알림', '사진은 최대 3장까지 등록할 수 있습니다.');
       return;
     }
-    launchImageLibrary({ mediaType: 'photo', selectionLimit: limit, quality: 0.7 }, res => {
-      if (res.didCancel) return;
-      if (res.errorCode) {
-        Alert.alert('오류', `사진 선택 오류: ${res.errorMessage}`);
-      } else if (res.assets) {
-        setPhotos(prev => [...prev, ...res.assets]);
-      }
-    });
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: limit, quality: 0.7 },
+      res => {
+        if (res.didCancel) return;
+        if (res.errorCode) {
+          Alert.alert('오류', `사진 선택 오류: ${res.errorMessage}`);
+        } else if (res.assets) {
+          setPhotos(prev => [...prev, ...res.assets]);
+        }
+      },
+    );
   };
 
-  const handleRemovePhoto = uri => setPhotos(prev => prev.filter(p => p.uri !== uri));
+  const handleRemovePhoto = uri =>
+    setPhotos(prev => prev.filter(p => p.uri !== uri));
 
   const getFilePath = async uri => {
     if (Platform.OS === 'android' && uri.startsWith('content://')) {
@@ -73,13 +77,15 @@ export default function IncidentPhotoCreateScreen() {
         upsert: false,
       });
 
-    if (uploadError) throw new Error(`사진 업로드 실패: ${uploadError.message}`);
+    if (uploadError)
+      throw new Error(`사진 업로드 실패: ${uploadError.message}`);
 
     const { data: urlData } = supabase.storage
       .from('post-images')
       .getPublicUrl(storagePath);
 
-    if (!urlData || !urlData.publicUrl) throw new Error('URL 생성에 실패했습니다.');
+    if (!urlData || !urlData.publicUrl)
+      throw new Error('URL 생성에 실패했습니다.');
 
     return urlData.publicUrl;
   };
@@ -111,7 +117,10 @@ export default function IncidentPhotoCreateScreen() {
       Alert.alert('작성 완료', '사진 자료가 성공적으로 등록되었습니다.');
       navigation.goBack();
     } catch (err) {
-      Alert.alert('작성 실패', err.message || '알 수 없는 오류가 발생했습니다.');
+      Alert.alert(
+        '작성 실패',
+        err.message || '알 수 없는 오류가 발생했습니다.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -149,13 +158,17 @@ export default function IncidentPhotoCreateScreen() {
         {photos.map(p => (
           <View key={p.uri} style={styles.photoWrapper}>
             <Image source={{ uri: p.uri }} style={styles.thumbnail} />
-            <TouchableOpacity style={styles.removeButton} onPress={() => handleRemovePhoto(p.uri)}>
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => handleRemovePhoto(p.uri)}>
               <Icon name="close-circle" size={24} color="#e74c3c" />
             </TouchableOpacity>
           </View>
         ))}
         {photos.length < 3 && (
-          <TouchableOpacity style={styles.addButton} onPress={handleChoosePhotos}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleChoosePhotos}>
             <Icon name="camera-plus" size={30} color="#868e96" />
             <Text style={styles.addButtonText}>사진 추가</Text>
           </TouchableOpacity>

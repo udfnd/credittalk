@@ -1,5 +1,5 @@
 // src/screens/NewCrimeCaseListScreen.js
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,12 @@ import {
   Alert,
   Image, // Image 컴포넌트 추가
   SafeAreaView, // SafeAreaView 추가
-} from "react-native";
-import { useNavigation, useIsFocused } from "@react-navigation/native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
-import { logPageView } from "../lib/pageViewLogger";
+} from 'react-native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
+import { logPageView } from '../lib/pageViewLogger';
 
 function NewCrimeCaseListScreen() {
   const navigation = useNavigation();
@@ -41,17 +41,17 @@ function NewCrimeCaseListScreen() {
     try {
       // NoticeListScreen과 유사한 컬럼들을 가져오도록 쿼리 수정
       const { data, error: fetchError } = await supabase
-        .from("new_crime_cases")
-        .select("id, created_at, title, image_urls, category, views, is_pinned") // title, image_urls, category, is_pinned 추가
-        .eq("is_published", true)
+        .from('new_crime_cases')
+        .select('id, created_at, title, image_urls, category, views, is_pinned') // title, image_urls, category, is_pinned 추가
+        .eq('is_published', true)
         .order('is_pinned', { ascending: false })
-        .order("created_at", { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
       setCases(data || []);
     } catch (err) {
-      console.error("Error in fetchCases:", err);
-      setError(err.message || "데이터를 불러오는데 실패했습니다.");
+      console.error('Error in fetchCases:', err);
+      setError(err.message || '데이터를 불러오는데 실패했습니다.');
       setCases([]);
     } finally {
       setIsLoading(false);
@@ -71,29 +71,26 @@ function NewCrimeCaseListScreen() {
 
   const handleCreateCase = () => {
     if (!user) {
-      Alert.alert("로그인 필요", "글을 작성하려면 로그인이 필요합니다.", [
-        { text: "로그인", onPress: () => navigation.navigate("SignIn") },
-        { text: "취소", style: "cancel" },
+      Alert.alert('로그인 필요', '글을 작성하려면 로그인이 필요합니다.', [
+        { text: '로그인', onPress: () => navigation.navigate('SignIn') },
+        { text: '취소', style: 'cancel' },
       ]);
       return;
     }
-    navigation.navigate("NewCrimeCaseCreate");
+    navigation.navigate('NewCrimeCaseCreate');
   };
 
   // --- 핵심 수정: renderItem 로직을 NoticeListScreen과 동일하게 변경 ---
   const renderItem = ({ item }) => {
     const thumbnailUrl =
-      item.image_urls && item.image_urls.length > 0
-        ? item.image_urls[0]
-        : null;
+      item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : null;
 
     return (
       <TouchableOpacity
         style={styles.noticeItem} // 스타일 이름 통일
         onPress={() =>
-          navigation.navigate("NewCrimeCaseDetail", { caseId: item.id })
-        }
-      >
+          navigation.navigate('NewCrimeCaseDetail', { caseId: item.id })
+        }>
         <View style={styles.noticeContent}>
           {/* 썸네일 이미지 또는 플레이스홀더 아이콘 표시 */}
           {thumbnailUrl ? (
@@ -106,7 +103,12 @@ function NewCrimeCaseListScreen() {
           <View style={styles.textContainer}>
             <View style={styles.titleContainer}>
               {item.is_pinned && (
-                <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
+                <Icon
+                  name="pin"
+                  size={16}
+                  color="#d35400"
+                  style={styles.pinIcon}
+                />
               )}
               <Text style={styles.noticeTitle} numberOfLines={2}>
                 {item.title}
@@ -154,7 +156,7 @@ function NewCrimeCaseListScreen() {
       <FlatList
         data={cases}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={item => item.id.toString()}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           !isLoading && (
@@ -168,12 +170,12 @@ function NewCrimeCaseListScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#3d5afe"]}
+            colors={['#3d5afe']}
           />
         }
       />
     );
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -190,12 +192,12 @@ function NewCrimeCaseListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f0f2f5",
+    backgroundColor: '#f0f2f5',
   },
   centered: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
   listContainer: {
@@ -263,35 +265,35 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 10,
     fontSize: 16,
-    color: "#e74c3c",
-    textAlign: "center",
+    color: '#e74c3c',
+    textAlign: 'center',
   },
   emptyText: {
     marginTop: 10,
     fontSize: 16,
-    color: "#7f8c8d",
+    color: '#7f8c8d',
   },
   fab: {
-    position: "absolute",
+    position: 'absolute',
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#3d5afe",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#3d5afe',
+    justifyContent: 'center',
+    alignItems: 'center',
     elevation: 8,
     right: 20,
     bottom: 60,
   },
   retryButton: {
     marginTop: 20,
-    backgroundColor: "#3d5afe",
+    backgroundColor: '#3d5afe',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 5,
   },
   retryButtonText: {
-    color: "white",
+    color: 'white',
     fontSize: 16,
   },
 });

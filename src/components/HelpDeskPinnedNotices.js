@@ -12,13 +12,12 @@ export default function HelpDeskPinnedNotices({ notices, onPressNotice }) {
         <Text style={styles.headerText}>공지사항</Text>
       </View>
 
-      {notices.map((n) => (
+      {notices.map(n => (
         <TouchableOpacity
           key={n.id}
           style={styles.notice}
           onPress={() => onPressNotice?.(n)}
-          activeOpacity={0.7}
-        >
+          activeOpacity={0.7}>
           <Text numberOfLines={1} style={styles.title}>
             {n.title}
           </Text>

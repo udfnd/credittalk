@@ -1,8 +1,14 @@
 // src/components/CommentsSection.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, Alert, ActivityIndicator,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -37,8 +43,7 @@ const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
             // ✅ onPress 대신 onPressIn 으로 즉시 처리 (키보드가 떠 있어도 동작)
             onPressIn={() => onAddReply(replyText)}
             disabled={disabled}
-            delayPressIn={0}
-          >
+            delayPressIn={0}>
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
@@ -46,10 +51,13 @@ const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
             )}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.replyActionButton, styles.cancelButton, disabled && { opacity: 0.6 }]}
+            style={[
+              styles.replyActionButton,
+              styles.cancelButton,
+              disabled && { opacity: 0.6 },
+            ]}
             onPress={onCancel}
-            disabled={disabled}
-          >
+            disabled={disabled}>
             <Text style={styles.replyActionButtonText}>취소</Text>
           </TouchableOpacity>
         </View>
@@ -59,14 +67,14 @@ const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
 };
 
 const CommentItem = ({
-                       comment,
-                       currentProfileId,
-                       onReplyPress,
-                       replyingToId,
-                       onReplySubmit,
-                       submittingReplyId,
-                       isReply = false,
-                     }) => {
+  comment,
+  currentProfileId,
+  onReplyPress,
+  replyingToId,
+  onReplySubmit,
+  submittingReplyId,
+  isReply = false,
+}) => {
   const handleDelete = async () => {
     Alert.alert(
       '댓글 삭제',
@@ -77,8 +85,12 @@ const CommentItem = ({
           text: '삭제',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.from('comments').delete().eq('id', comment.id);
-            if (error) Alert.alert('오류', '댓글 삭제에 실패했습니다: ' + error.message);
+            const { error } = await supabase
+              .from('comments')
+              .delete()
+              .eq('id', comment.id);
+            if (error)
+              Alert.alert('오류', '댓글 삭제에 실패했습니다: ' + error.message);
           },
         },
       ],
@@ -92,9 +104,13 @@ const CommentItem = ({
     <View style={styles.commentWrapper}>
       <View style={styles.commentContainer}>
         <View style={styles.commentHeader}>
-          <Text style={styles.commentAuthor}>{comment.users?.nickname || '탈퇴한 사용자'}</Text>
+          <Text style={styles.commentAuthor}>
+            {comment.users?.nickname || '탈퇴한 사용자'}
+          </Text>
           {comment.user_id === currentProfileId && (
-            <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
+            <TouchableOpacity
+              onPress={handleDelete}
+              style={styles.deleteButton}>
               <Icon name="close" size={16} color="#888" />
             </TouchableOpacity>
           )}
@@ -102,7 +118,10 @@ const CommentItem = ({
         <Text style={styles.commentContent}>{comment.content}</Text>
         <View style={styles.commentFooter}>
           <Text style={styles.commentDate}>
-            {formatDistanceToNow(parseISO(comment.created_at), { addSuffix: true, locale: ko })}
+            {formatDistanceToNow(parseISO(comment.created_at), {
+              addSuffix: true,
+              locale: ko,
+            })}
           </Text>
           {!isReply && (
             <TouchableOpacity onPress={() => onReplyPress(comment.id)}>
@@ -115,14 +134,14 @@ const CommentItem = ({
       {replyOpenForThis && (
         <ReplyInput
           loading={isSubmittingThisReply}
-          onAddReply={(replyText) => onReplySubmit(replyText, comment.id)}
+          onAddReply={replyText => onReplySubmit(replyText, comment.id)}
           onCancel={() => onReplyPress(null)}
         />
       )}
 
       {comment.replies && comment.replies.length > 0 && (
         <View style={styles.repliesContainer}>
-          {comment.replies.map((reply) => (
+          {comment.replies.map(reply => (
             <CommentItem
               key={reply.id}
               comment={reply}
@@ -171,11 +190,11 @@ const CommentsSection = ({ postId, boardType }) => {
       const byId = {};
       const roots = [];
 
-      (data || []).forEach((c) => {
+      (data || []).forEach(c => {
         c.replies = [];
         byId[c.id] = c;
       });
-      (data || []).forEach((c) => {
+      (data || []).forEach(c => {
         if (c.parent_comment_id && byId[c.parent_comment_id]) {
           byId[c.parent_comment_id].replies.push(c);
         } else {
@@ -200,7 +219,12 @@ const CommentsSection = ({ postId, boardType }) => {
       .channel(`comments-for-${boardType}-${postId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${postId}` },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'comments',
+          filter: `post_id=eq.${postId}`,
+        },
         () => fetchComments(),
       )
       .subscribe();
@@ -219,7 +243,8 @@ const CommentsSection = ({ postId, boardType }) => {
     if (!trimmed) return;
 
     // 중복 제출 가드
-    if (submittingRoot || submittingReplyId !== null || guardingRef.current) return;
+    if (submittingRoot || submittingReplyId !== null || guardingRef.current)
+      return;
     guardingRef.current = true;
     if (parentId) setSubmittingReplyId(parentId);
     else setSubmittingRoot(true);
@@ -271,7 +296,7 @@ const CommentsSection = ({ postId, boardType }) => {
       ) : (
         <FlatList
           data={comments}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
             <CommentItem
               comment={item}
@@ -282,8 +307,12 @@ const CommentsSection = ({ postId, boardType }) => {
               submittingReplyId={submittingReplyId}
             />
           )}
-          ListEmptyComponent={<Text style={styles.noCommentsText}>가장 먼저 댓글을 남겨보세요.</Text>}
-          keyboardShouldPersistTaps="always"   // ⭐️ 중요
+          ListEmptyComponent={
+            <Text style={styles.noCommentsText}>
+              가장 먼저 댓글을 남겨보세요.
+            </Text>
+          }
+          keyboardShouldPersistTaps="always" // ⭐️ 중요
           scrollEnabled={false}
           nestedScrollEnabled={false}
           removeClippedSubviews={false}
@@ -291,7 +320,9 @@ const CommentsSection = ({ postId, boardType }) => {
       )}
 
       {user ? (
-        <AvoidSoftInputView avoidOffset={insets.bottom} style={styles.footerAvoidWrapper}>
+        <AvoidSoftInputView
+          avoidOffset={insets.bottom}
+          style={styles.footerAvoidWrapper}>
           <View style={styles.footerInputBar} collapsable={false}>
             <TextInput
               style={[styles.input, submittingRoot && { opacity: 0.6 }]}
@@ -310,8 +341,7 @@ const CommentsSection = ({ postId, boardType }) => {
               // ✅ onPress 대신 onPressIn
               onPressIn={onPressSendRoot}
               disabled={submittingRoot}
-              delayPressIn={0}
-            >
+              delayPressIn={0}>
               {submittingRoot ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
@@ -322,7 +352,9 @@ const CommentsSection = ({ postId, boardType }) => {
         </AvoidSoftInputView>
       ) : (
         <View style={styles.loginPrompt}>
-          <Text style={styles.loginPromptText}>댓글을 작성하려면 로그인이 필요합니다.</Text>
+          <Text style={styles.loginPromptText}>
+            댓글을 작성하려면 로그인이 필요합니다.
+          </Text>
           <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
             <Text style={styles.loginButtonText}>로그인하기</Text>
           </TouchableOpacity>
@@ -350,25 +382,70 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
 
   commentWrapper: {},
-  commentContainer: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  commentContainer: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   commentAuthor: { fontWeight: 'bold', fontSize: 15, color: '#444' },
   commentContent: { fontSize: 14, lineHeight: 21, color: '#555' },
-  commentFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  commentFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
   commentDate: { fontSize: 12, color: '#999' },
   replyButtonText: { fontSize: 12, color: '#3d5afe', fontWeight: 'bold' },
   deleteButton: { padding: 5 },
-  repliesContainer: { marginLeft: 20, borderLeftWidth: 2, borderLeftColor: '#e9ecef', paddingLeft: 10 },
+  repliesContainer: {
+    marginLeft: 20,
+    borderLeftWidth: 2,
+    borderLeftColor: '#e9ecef',
+    paddingLeft: 10,
+  },
 
   // 대댓글 입력
-  replyInputContainer: { marginVertical: 10, marginLeft: 20, backgroundColor: '#f8f9fa', borderRadius: 8, padding: 10 },
-  replyInput: { padding: 10, fontSize: 14, minHeight: 60, textAlignVertical: 'top', color: '#333' },
-  replyButtonContainer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
-  replyActionButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, backgroundColor: '#3d5afe' },
+  replyInputContainer: {
+    marginVertical: 10,
+    marginLeft: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+  },
+  replyInput: {
+    padding: 10,
+    fontSize: 14,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    color: '#333',
+  },
+  replyButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+  },
+  replyActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    backgroundColor: '#3d5afe',
+  },
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
 
-  noCommentsText: { textAlign: 'center', color: '#aaa', marginVertical: 25, fontSize: 14 },
+  noCommentsText: {
+    textAlign: 'center',
+    color: '#aaa',
+    marginVertical: 25,
+    fontSize: 14,
+  },
 
   // 입력창
   footerAvoidWrapper: {},
@@ -393,7 +470,12 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     textAlignVertical: 'top',
   },
-  submitButton: { backgroundColor: '#3d5afe', padding: 10, borderRadius: 20, marginLeft: 8 },
+  submitButton: {
+    backgroundColor: '#3d5afe',
+    padding: 10,
+    borderRadius: 20,
+    marginLeft: 8,
+  },
 
   // 로그인 유도
   loginPrompt: {

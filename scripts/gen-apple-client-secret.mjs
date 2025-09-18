@@ -1,15 +1,28 @@
 // scripts/gen-apple-client-secret.mjs
+
+// --- FIX STARTS HERE ---
+// Node.js 환경에서 Web Crypto API를 사용할 수 있도록 polyfill을 추가합니다.
+// 이 코드를 jose 라이브러리보다 먼저 실행해야 합니다.
+import { webcrypto } from 'node:crypto';
+
+if (typeof globalThis.crypto === 'undefined') {
+  globalThis.crypto = webcrypto;
+}
+
+// --- FIX ENDS HERE ---
+
 import { SignJWT, importPKCS8 } from 'jose';
 
 // 환경변수에 보관하세요
-const TEAM_ID     = process.env.APPLE_TEAM_ID;        // ex) AB12CDEF34
-const KEY_ID      = process.env.APPLE_KEY_ID;         // ex) 1A2BC3D4EF
-const SERVICES_ID = process.env.APPLE_SERVICES_ID;    // ex) com.yourorg.credittalk.web  ← "웹용 client_id"
-const P8 = process.env.APPLE_PRIVATE_KEY_P8           // '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n'
-  ?.replace(/\\n/g, '\n');
+const TEAM_ID = process.env.APPLE_TEAM_ID; // ex) AB12CDEF34
+const KEY_ID = process.env.APPLE_KEY_ID; // ex) 1A2BC3D4EF
+const SERVICES_ID = process.env.APPLE_SERVICES_ID; // ex) com.yourorg.credittalk.web  ← "웹용 client_id"
+const P8 = process.env.APPLE_PRIVATE_KEY_P8?.replace(/\\n/g, '\n'); // '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n'
 
 if (!TEAM_ID || !KEY_ID || !SERVICES_ID || !P8) {
-  throw new Error('APPLE_* 환경변수를 모두 설정하세요 (TEAM_ID, KEY_ID, SERVICES_ID, PRIVATE_KEY_P8)');
+  throw new Error(
+    'APPLE_* 환경변수를 모두 설정하세요 (TEAM_ID, KEY_ID, SERVICES_ID, PRIVATE_KEY_P8)',
+  );
 }
 
 // Apple은 ES256(=P-256) 사용, exp는 최대 6개월까지 허용
@@ -25,9 +38,9 @@ const key = await importPKCS8(P8, alg);
 // JWT(payload는 표준 클레임)
 const jwt = await new SignJWT({})
   .setProtectedHeader({ alg, kid: KEY_ID })
-  .setIssuer(TEAM_ID)          // iss = Team ID
-  .setSubject(SERVICES_ID)     // sub = "클라이언트 ID" → **Services ID**
-  .setAudience(aud)            // aud = 고정
+  .setIssuer(TEAM_ID) // iss = Team ID
+  .setSubject(SERVICES_ID) // sub = "클라이언트 ID" → **Services ID**
+  .setAudience(aud) // aud = 고정
   .setIssuedAt(now)
   .setExpirationTime(exp)
   .sign(key);

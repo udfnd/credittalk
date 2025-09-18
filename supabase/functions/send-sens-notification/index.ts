@@ -16,7 +16,7 @@ interface SensRequestBody {
   }[];
 }
 
-serve(async (req) => {
+serve(async req => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -27,7 +27,9 @@ serve(async (req) => {
 
     const adminPhoneNumber = Deno.env.get('ADMIN_PHONE_NUMBER');
     if (!adminPhoneNumber) {
-      throw new Error("수신자인 관리자 전화번호(ADMIN_PHONE_NUMBER)가 Vault에 설정되지 않았습니다.");
+      throw new Error(
+        '수신자인 관리자 전화번호(ADMIN_PHONE_NUMBER)가 Vault에 설정되지 않았습니다.',
+      );
     }
 
     const serviceId = Deno.env.get('NCLOUD_SENS_SERVICE_ID');
@@ -36,7 +38,9 @@ serve(async (req) => {
     const fromNumber = Deno.env.get('SENS_CALLING_NUMBER');
 
     if (!serviceId || !accessKey || !secretKey || !fromNumber) {
-      throw new Error('SENS API 설정값이 Supabase Vault에 올바르게 설정되지 않았습니다.');
+      throw new Error(
+        'SENS API 설정값이 Supabase Vault에 올바르게 설정되지 않았습니다.',
+      );
     }
 
     const method = 'POST';
@@ -49,12 +53,18 @@ serve(async (req) => {
       new TextEncoder().encode(secretKey),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
-      ['sign']
+      ['sign'],
     );
 
     const message = `${method} ${uri}\n${timestamp}\n${accessKey}`;
-    const signature = await crypto.subtle.sign('HMAC', hmacKey, new TextEncoder().encode(message));
-    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      hmacKey,
+      new TextEncoder().encode(message),
+    );
+    const signatureBase64 = btoa(
+      String.fromCharCode(...new Uint8Array(signature)),
+    );
 
     const requestBody: SensRequestBody = {
       type: 'SMS',
@@ -86,11 +96,16 @@ serve(async (req) => {
       throw new Error(`SENS API 에러: ${JSON.stringify(responseData)}`);
     }
 
-    return new Response(JSON.stringify({ success: true, message: `관리자에게 알림이 성공적으로 발송되었습니다. (ID: ${responseData.requestId})` }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `관리자에게 알림이 성공적으로 발송되었습니다. (ID: ${responseData.requestId})`,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      },
+    );
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

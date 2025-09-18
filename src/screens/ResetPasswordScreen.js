@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,32 +7,32 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-} from "react-native";
-import { supabase } from "../lib/supabaseClient";
+} from 'react-native';
+import { supabase } from '../lib/supabaseClient';
 
 function ResetPasswordScreen() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleResetPassword = async () => {
     if (!email.trim()) {
-      Alert.alert("입력 오류", "이메일 주소를 입력해주세요.");
+      Alert.alert('입력 오류', '이메일 주소를 입력해주세요.');
       return;
     }
     setIsLoading(true);
     // 앱의 딥링크 스킴에 맞춰서 redirectTo를 설정해야 합니다.
     // 예: myapp://reset-password
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: "credittalk://update-password", // 앱의 딥링크 주소로 변경
+      redirectTo: 'credittalk://update-password', // 앱의 딥링크 주소로 변경
     });
     setIsLoading(false);
 
     if (error) {
-      Alert.alert("오류", error.message);
+      Alert.alert('오류', error.message);
     } else {
       Alert.alert(
-        "이메일 발송 완료",
-        "비밀번호 재설정 링크가 이메일로 발송되었습니다. 이메일을 확인해주세요.",
+        '이메일 발송 완료',
+        '비밀번호 재설정 링크가 이메일로 발송되었습니다. 이메일을 확인해주세요.',
       );
     }
   };
@@ -68,31 +68,31 @@ function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: 'center',
     padding: 20,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 14,
-    textAlign: "center",
-    color: "gray",
+    textAlign: 'center',
+    color: 'gray',
     marginBottom: 30,
     paddingHorizontal: 10,
   },
   input: {
     height: 50,
-    borderColor: "#ced4da",
+    borderColor: '#ced4da',
     borderWidth: 1,
     marginBottom: 20,
     paddingHorizontal: 15,
     borderRadius: 8,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     fontSize: 16,
   },
 });

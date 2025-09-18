@@ -38,7 +38,9 @@ function IncidentPhotoListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('incident_photos')
-        .select('id, title, created_at, image_urls, category, description, is_pinned, views')
+        .select(
+          'id, title, created_at, image_urls, category, description, is_pinned, views',
+        )
         .eq('is_published', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -88,13 +90,22 @@ function IncidentPhotoListScreen() {
           <View style={styles.textContainer}>
             <View style={styles.titleContainer}>
               {item.is_pinned && (
-                <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
+                <Icon
+                  name="pin"
+                  size={16}
+                  color="#d35400"
+                  style={styles.pinIcon}
+                />
               )}
-              <Text style={styles.noticeTitle} numberOfLines={2}>{item.title}</Text>
+              <Text style={styles.noticeTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
             </View>
             <View style={styles.noticeMeta}>
               {item.category && (
-                <Text style={styles.noticeAuthor} numberOfLines={1}>{item.category}</Text>
+                <Text style={styles.noticeAuthor} numberOfLines={1}>
+                  {item.category}
+                </Text>
               )}
               <Text style={styles.noticeDate}>조회 {item.views || 0}</Text>
               <Text style={styles.noticeDate}>
@@ -151,7 +162,7 @@ function IncidentPhotoListScreen() {
         }
       />
     );
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -206,12 +217,14 @@ const styles = StyleSheet.create({
   textContainer: {
     flex: 1,
   },
-  titleContainer: { // titleContainer 추가
+  titleContainer: {
+    // titleContainer 추가
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  pinIcon: { // pinIcon 추가
+  pinIcon: {
+    // pinIcon 추가
     marginRight: 6,
     marginTop: 2,
   },

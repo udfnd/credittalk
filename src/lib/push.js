@@ -1,6 +1,10 @@
 import { Platform, Alert, Linking } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance, AndroidStyle, EventType } from '@notifee/react-native';
+import notifee, {
+  AndroidImportance,
+  AndroidStyle,
+  EventType,
+} from '@notifee/react-native';
 import { supabase } from '../lib/supabaseClient';
 
 // 항상 HIGH로 설정된 알림 채널
@@ -28,7 +32,9 @@ async function requestPushPermission() {
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
       return enabled;
     } else {
-      try { await notifee.requestPermission(); } catch {}
+      try {
+        await notifee.requestPermission();
+      } catch {}
       return true;
     }
   } catch (e) {
@@ -38,21 +44,34 @@ async function requestPushPermission() {
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function isUuid(v) { return typeof v === 'string' && UUID_RE.test(v); }
-function isBigIntLike(v) {
-  return (typeof v === 'number' && Number.isInteger(v)) ||
-    (typeof v === 'string' && /^\d+$/.test(v));
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(v) {
+  return typeof v === 'string' && UUID_RE.test(v);
 }
-function toBigIntNumber(v) { return typeof v === 'number' ? v : Number(v); }
-function uniq(arr) { return Array.from(new Set(arr)); }
+function isBigIntLike(v) {
+  return (
+    (typeof v === 'number' && Number.isInteger(v)) ||
+    (typeof v === 'string' && /^\d+$/.test(v))
+  );
+}
+function toBigIntNumber(v) {
+  return typeof v === 'number' ? v : Number(v);
+}
+function uniq(arr) {
+  return Array.from(new Set(arr));
+}
 
 let scheduledRetry = false;
 function scheduleRetry(fn, delayMs = 3000) {
   if (scheduledRetry) return;
   scheduledRetry = true;
   setTimeout(async () => {
-    try { await fn(); } finally { scheduledRetry = false; }
+    try {
+      await fn();
+    } finally {
+      scheduledRetry = false;
+    }
   }, delayMs);
 }
 
@@ -76,7 +95,12 @@ async function upsertTokenWithCandidates({ candidates, token, appVersion }) {
       console.log('[FCM] upsert success with user_id =', candidate);
       return { ok: true, used: candidate };
     }
-    console.warn('[FCM] upsert failed with user_id =', candidate, '→', error?.message);
+    console.warn(
+      '[FCM] upsert failed with user_id =',
+      candidate,
+      '→',
+      error?.message,
+    );
   }
   return { ok: false };
 }
@@ -101,7 +125,9 @@ export async function registerPushToken(userIdOrAuthId, appVersion, opts = {}) {
     const candidates = uniq([
       isUuid(opts?.authUserId) ? opts.authUserId : undefined,
       isUuid(userIdOrAuthId) ? userIdOrAuthId : undefined,
-      isBigIntLike(opts?.appUserId) ? toBigIntNumber(opts.appUserId) : undefined,
+      isBigIntLike(opts?.appUserId)
+        ? toBigIntNumber(opts.appUserId)
+        : undefined,
       isBigIntLike(userIdOrAuthId) ? toBigIntNumber(userIdOrAuthId) : undefined,
     ]);
 
@@ -114,20 +140,35 @@ export async function registerPushToken(userIdOrAuthId, appVersion, opts = {}) {
       return;
     }
 
-    const res = await upsertTokenWithCandidates({ candidates, token, appVersion });
+    const res = await upsertTokenWithCandidates({
+      candidates,
+      token,
+      appVersion,
+    });
     if (!res.ok) {
-      console.warn('[FCM] upsert failed for all candidates; will retry later (RLS/type?).');
+      console.warn(
+        '[FCM] upsert failed for all candidates; will retry later (RLS/type?).',
+      );
       scheduleRetry(async () => {
         const latest = await messaging().getToken();
-        const r2 = await upsertTokenWithCandidates({ candidates, token: latest, appVersion });
+        const r2 = await upsertTokenWithCandidates({
+          candidates,
+          token: latest,
+          appVersion,
+        });
         if (!r2.ok) console.warn('[FCM] delayed retry also failed.');
       });
     }
 
-    messaging().onTokenRefresh(async (newToken) => {
+    messaging().onTokenRefresh(async newToken => {
       console.log('[FCM] token refreshed:', newToken);
-      const r2 = await upsertTokenWithCandidates({ candidates, token: newToken, appVersion });
-      if (!r2.ok) console.warn('[FCM] refresh upsert failed (check RLS / user_id type)');
+      const r2 = await upsertTokenWithCandidates({
+        candidates,
+        token: newToken,
+        appVersion,
+      });
+      if (!r2.ok)
+        console.warn('[FCM] refresh upsert failed (check RLS / user_id type)');
     });
   } catch (e) {
     console.warn('[FCM] registerPushToken error:', e?.message || e);
@@ -181,7 +222,9 @@ async function openExternalUrlBestEffort(url) {
   } catch {
     const yt = rewriteYoutubeShort(url);
     if (yt && yt !== url) {
-      try { await Linking.openURL(yt); } catch {}
+      try {
+        await Linking.openURL(yt);
+      } catch {}
     }
   }
 }
@@ -203,11 +246,17 @@ function openFromPayload(navigateTo, data = {}) {
     }
 
     // 2) 외부 링크 열기 (스킴 자동 보정)
-    const raw = typeof link_url === 'string' ? link_url : (typeof url === 'string' ? url : null);
+    const raw =
+      typeof link_url === 'string'
+        ? link_url
+        : typeof url === 'string'
+          ? url
+          : null;
     const normalized = normalizeExternalUrl(raw);
     if (normalized) {
-      openExternalUrlBestEffort(normalized)
-        .catch((e) => console.warn('[FCM] openURL error:', e?.message || e));
+      openExternalUrlBestEffort(normalized).catch(e =>
+        console.warn('[FCM] openURL error:', e?.message || e),
+      );
     }
   } catch (e) {
     console.warn('[FCM] openFromPayload error:', e?.message || e);
@@ -222,7 +271,7 @@ export async function wireMessageHandlers(navigateTo) {
   await ensureNotificationChannel();
 
   // 포그라운드 수신 → 로컬 표시
-  messaging().onMessage(async (remoteMessage) => {
+  messaging().onMessage(async remoteMessage => {
     try {
       const title = remoteMessage?.notification?.title || '알림';
       const body = remoteMessage?.notification?.body || '';
@@ -233,7 +282,10 @@ export async function wireMessageHandlers(navigateTo) {
         android: {
           channelId: CHANNEL_ID,
           pressAction: { id: 'default' },
-          style: body?.length > 60 ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
+          style:
+            body?.length > 60
+              ? { type: AndroidStyle.BIGTEXT, text: body }
+              : undefined,
         },
         // payload는 data에 그대로 유지
         data: remoteMessage.data,
@@ -256,7 +308,7 @@ export async function wireMessageHandlers(navigateTo) {
   });
 
   // FCM: 백그라운드 → 포그라운드 (notification payload 경로)
-  messaging().onNotificationOpenedApp((remoteMessage) => {
+  messaging().onNotificationOpenedApp(remoteMessage => {
     try {
       if (!remoteMessage) return;
       openFromPayload(navigateTo, remoteMessage.data || {});
@@ -266,24 +318,34 @@ export async function wireMessageHandlers(navigateTo) {
   });
 
   // FCM: 종료 상태에서 알림 탭 후 진입
-  messaging().getInitialNotification().then((remoteMessage) => {
-    try {
-      if (!remoteMessage) return;
-      openFromPayload(navigateTo, remoteMessage.data || {});
-    } catch (e) {
-      console.warn('[FCM] getInitialNotification error:', e?.message || e);
-    }
-  }).catch(() => {});
+  messaging()
+    .getInitialNotification()
+    .then(remoteMessage => {
+      try {
+        if (!remoteMessage) return;
+        openFromPayload(navigateTo, remoteMessage.data || {});
+      } catch (e) {
+        console.warn('[FCM] getInitialNotification error:', e?.message || e);
+      }
+    })
+    .catch(() => {});
 }
 
 /** 현재 기기 토큰 비활성화(선택) */
 export async function unregisterPushToken(token) {
   try {
     if (!token) {
-      try { token = await messaging().getToken(); } catch { token = undefined; }
+      try {
+        token = await messaging().getToken();
+      } catch {
+        token = undefined;
+      }
     }
     if (token) {
-      await supabase.from('device_push_tokens').update({ enabled: false }).eq('token', token);
+      await supabase
+        .from('device_push_tokens')
+        .update({ enabled: false })
+        .eq('token', token);
     }
   } catch (e) {
     console.warn('[FCM] unregisterPushToken error:', e?.message || e);

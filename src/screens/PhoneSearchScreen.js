@@ -4,10 +4,7 @@ import SearchBaseScreen, { SEARCH_TYPES } from './SearchBaseScreen'; // 경로 �
 
 function PhoneSearchScreen() {
   return (
-    <SearchBaseScreen
-      searchType={SEARCH_TYPES.PHONE}
-      title="사기 번호 검색"
-    />
+    <SearchBaseScreen searchType={SEARCH_TYPES.PHONE} title="사기 번호 검색" />
   );
 }
 
