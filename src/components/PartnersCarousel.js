@@ -23,7 +23,9 @@ function stripInvisible(raw) {
 function normalizeHttpUrl(raw) {
   const cleaned = stripInvisible(raw);
   if (!cleaned) return '';
-  const withScheme = /^[a-z][a-z0-9+\-.]*:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
+  const withScheme = /^[a-z][a-z0-9+\-.]*:\/\//i.test(cleaned)
+    ? cleaned
+    : `https://${cleaned}`;
   try {
     const u = new URL(withScheme);
     if (!['http:', 'https:'].includes(u.protocol)) return '';
@@ -36,7 +38,10 @@ function normalizeHttpUrl(raw) {
 async function openExternal(raw) {
   const primary = normalizeHttpUrl(raw);
   if (!primary) {
-    Alert.alert('링크가 없어요', '배너의 링크 URL이 비어 있거나 형식이 올바르지 않습니다.');
+    Alert.alert(
+      '링크가 없어요',
+      '배너의 링크 URL이 비어 있거나 형식이 올바르지 않습니다.',
+    );
     return;
   }
   try {
@@ -78,16 +83,21 @@ export default function PartnersCarousel() {
         setItems([]);
       } else {
         const filtered = (data || []).filter(
-          (b) => b.image_url && b.image_url.trim().length > 0
+          b => b.image_url && b.image_url.trim().length > 0,
         );
         setItems(filtered);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // 무한 루프용 복제 배열
-  const doubled = useMemo(() => (items.length ? [...items, ...items] : []), [items]);
+  const doubled = useMemo(
+    () => (items.length ? [...items, ...items] : []),
+    [items],
+  );
 
   // 자동 좌측 이동 (linear, 무한 반복)
   useEffect(() => {
@@ -127,17 +137,19 @@ export default function PartnersCarousel() {
       <View style={styles.scroller} pointerEvents="box-none">
         <Animated.View
           style={[styles.row, { transform: [{ translateX }] }]}
-          pointerEvents="box-none"
-        >
+          pointerEvents="box-none">
           {doubled.map((b, i) => (
             <Pressable
               key={`${b.id}-${i}`}
               onPress={() => openExternal(b.link_url)}
               style={{ marginRight: GAP }}
               android_ripple={{ color: '#e5e7eb' }}
-              hitSlop={8}
-            >
-              <Image source={{ uri: b.image_url }} style={styles.card} resizeMode="cover" />
+              hitSlop={8}>
+              <Image
+                source={{ uri: b.image_url }}
+                style={styles.card}
+                resizeMode="cover"
+              />
             </Pressable>
           ))}
         </Animated.View>

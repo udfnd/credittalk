@@ -19,13 +19,16 @@ const InfoRow = ({ icon, label, value, isBoolean = false }) => {
   if (isBoolean) {
     displayValue = value ? '예' : '아니오';
   }
-  if (value === null || typeof value === 'undefined' || value === '') return null;
+  if (value === null || typeof value === 'undefined' || value === '')
+    return null;
 
   return (
     <View style={styles.infoRow}>
       <Icon name={icon} size={16} style={styles.infoIcon} />
       <Text style={styles.infoLabel}>{label}: </Text>
-      <Text style={styles.infoValue} selectable>{displayValue}</Text>
+      <Text style={styles.infoValue} selectable>
+        {displayValue}
+      </Text>
     </View>
   );
 };
@@ -40,7 +43,9 @@ const UrlList = ({ icon, label, urls }) => {
         <Text style={styles.infoLabel}>{label}:</Text>
       </View>
       {urls.map((url, index) => (
-        <TouchableOpacity key={index} onPress={() => url && Linking.openURL(url)}>
+        <TouchableOpacity
+          key={index}
+          onPress={() => url && Linking.openURL(url)}>
           <Text style={styles.urlText}>{url}</Text>
         </TouchableOpacity>
       ))}
@@ -58,14 +63,16 @@ function MyReportsScreen({ navigation }) {
     setIsLoading(true);
     setError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('로그인이 필요합니다.');
       }
 
       // 이 함수가 백엔드에서 복호화를 완료한 데이터를 반환해야 합니다.
       const { data, error: functionError } = await supabase.functions.invoke(
-        'get-my-decrypted-reports'
+        'get-my-decrypted-reports',
       );
 
       if (functionError) throw functionError;
@@ -82,7 +89,7 @@ function MyReportsScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       fetchMyReports();
-    }, [fetchMyReports])
+    }, [fetchMyReports]),
   );
 
   const onRefresh = useCallback(() => {
@@ -99,25 +106,87 @@ function MyReportsScreen({ navigation }) {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>피해 정보</Text>
-        <InfoRow icon="alert-circle-outline" label="상세 범죄 유형" value={item.detailed_crime_type} />
-        <InfoRow icon="cash" label="피해 금액" value={item.damage_amount ? `${item.damage_amount.toLocaleString()}원` : '없음'} />
-        <InfoRow icon="tag-outline" label="거래 품목" value={item.damaged_item} />
-        <InfoRow icon="tag-heart-outline" label="거래 품목 카테고리" value={item.traded_item_category} />
-        <InfoRow icon="calendar-range" label="사건 발생일" value={item.incident_date ? new Date(item.incident_date).toLocaleDateString() : null} />
-        <InfoRow icon="map-marker" label="사건 발생 지역" value={item.incident_location} />
-        <InfoRow icon="comment-text-outline" label="피해자 상황" value={item.victim_circumstances} />
-        <InfoRow icon="comment-processing-outline" label="피해 경로" value={item.damage_path} />
-        <InfoRow icon="text-box-outline" label="추가 내용" value={item.description} />
-        <InfoRow icon="check-circle-outline" label="사기 미수" value={item.attempted_fraud} isBoolean />
+        <InfoRow
+          icon="alert-circle-outline"
+          label="상세 범죄 유형"
+          value={item.detailed_crime_type}
+        />
+        <InfoRow
+          icon="cash"
+          label="피해 금액"
+          value={
+            item.damage_amount
+              ? `${item.damage_amount.toLocaleString()}원`
+              : '없음'
+          }
+        />
+        <InfoRow
+          icon="tag-outline"
+          label="거래 품목"
+          value={item.damaged_item}
+        />
+        <InfoRow
+          icon="tag-heart-outline"
+          label="거래 품목 카테고리"
+          value={item.traded_item_category}
+        />
+        <InfoRow
+          icon="calendar-range"
+          label="사건 발생일"
+          value={
+            item.incident_date
+              ? new Date(item.incident_date).toLocaleDateString()
+              : null
+          }
+        />
+        <InfoRow
+          icon="map-marker"
+          label="사건 발생 지역"
+          value={item.incident_location}
+        />
+        <InfoRow
+          icon="comment-text-outline"
+          label="피해자 상황"
+          value={item.victim_circumstances}
+        />
+        <InfoRow
+          icon="comment-processing-outline"
+          label="피해 경로"
+          value={item.damage_path}
+        />
+        <InfoRow
+          icon="text-box-outline"
+          label="추가 내용"
+          value={item.description}
+        />
+        <InfoRow
+          icon="check-circle-outline"
+          label="사기 미수"
+          value={item.attempted_fraud}
+          isBoolean
+        />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>가해자 정보</Text>
         <InfoRow icon="account-question" label="닉네임" value={item.nickname} />
         <InfoRow icon="gender-male-female" label="성별" value={item.gender} />
-        <InfoRow icon="account-tie" label="사칭 인물" value={item.impersonated_person} />
-        <InfoRow icon="phone-hangup" label="사칭된 연락처" value={item.impersonated_phone_number} />
-        <InfoRow icon="account-search" label="가해자 특정 여부" value={item.perpetrator_identified} isBoolean />
+        <InfoRow
+          icon="account-tie"
+          label="사칭 인물"
+          value={item.impersonated_person}
+        />
+        <InfoRow
+          icon="phone-hangup"
+          label="사칭된 연락처"
+          value={item.impersonated_phone_number}
+        />
+        <InfoRow
+          icon="account-search"
+          label="가해자 특정 여부"
+          value={item.perpetrator_identified}
+          isBoolean
+        />
 
         {/* 전화번호 목록 */}
         {item.phone_numbers && item.phone_numbers.length > 0 && (
@@ -126,7 +195,11 @@ function MyReportsScreen({ navigation }) {
               <Icon name="phone" size={16} style={styles.infoIcon} />
               <Text style={styles.infoLabel}>가해자 연락처:</Text>
             </View>
-            {item.phone_numbers.map((pn, i) => <Text key={`pn-${i}`} style={styles.listItemText} selectable>{pn}</Text>)}
+            {item.phone_numbers.map((pn, i) => (
+              <Text key={`pn-${i}`} style={styles.listItemText} selectable>
+                {pn}
+              </Text>
+            ))}
           </View>
         )}
 
@@ -138,11 +211,13 @@ function MyReportsScreen({ navigation }) {
               <Text style={styles.infoLabel}>피해 계좌:</Text>
             </View>
             {item.damage_accounts.map((account, index) => (
-              <Text key={`account-${index}`} style={styles.listItemText} selectable>
+              <Text
+                key={`account-${index}`}
+                style={styles.listItemText}
+                selectable>
                 {account.isOtherMethod
                   ? '현금 전달'
-                  : `${account.bankName} / ${account.accountHolderName} / ${account.accountNumber}`
-                }
+                  : `${account.bankName} / ${account.accountHolderName} / ${account.accountNumber}`}
               </Text>
             ))}
           </View>
@@ -152,7 +227,11 @@ function MyReportsScreen({ navigation }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>증거 및 출처</Text>
         <InfoRow icon="web" label="사이트 이름" value={item.site_name} />
-        <InfoRow icon="source-fork" label="신고 출처" value={item.scam_report_source} />
+        <InfoRow
+          icon="source-fork"
+          label="신고 출처"
+          value={item.scam_report_source}
+        />
         <InfoRow icon="domain" label="회사 유형" value={item.company_type} />
       </View>
 
@@ -162,22 +241,41 @@ function MyReportsScreen({ navigation }) {
             <Icon name="shield-check" size={20} color="#1e88e5" />
             <Text style={styles.analysisTitle}>관리자 분석</Text>
           </View>
-          <InfoRow icon="chart-donut" label="분석 결과" value={item.analysis_result} />
+          <InfoRow
+            icon="chart-donut"
+            label="분석 결과"
+            value={item.analysis_result}
+          />
           <InfoRow icon="account-tie" label="담당자" value={item.analyzer_id} />
-          <InfoRow icon="calendar-check" label="분석일" value={item.analyzed_at ? new Date(item.analyzed_at).toLocaleString() : null} />
+          <InfoRow
+            icon="calendar-check"
+            label="분석일"
+            value={
+              item.analyzed_at
+                ? new Date(item.analyzed_at).toLocaleString()
+                : null
+            }
+          />
           <View style={styles.analysisMessageContainer}>
-            <Icon name="comment-quote-outline" size={16} style={styles.infoIcon} />
+            <Icon
+              name="comment-quote-outline"
+              size={16}
+              style={styles.infoIcon}
+            />
             <Text style={styles.infoLabel}>메시지: </Text>
             <Text style={styles.analysisMessage}>{item.analysis_message}</Text>
           </View>
         </View>
       )}
-
     </View>
   );
 
   if (isLoading && !refreshing) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#3d5afe" /></View>;
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#3d5afe" />
+      </View>
+    );
   }
 
   if (error) {
@@ -197,7 +295,7 @@ function MyReportsScreen({ navigation }) {
       <FlatList
         data={reports}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={item => item.id.toString()}
         ListEmptyComponent={
           !isLoading && (
             <View style={styles.centered}>
@@ -206,7 +304,9 @@ function MyReportsScreen({ navigation }) {
             </View>
           )
         }
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       />
     </View>
   );
@@ -214,7 +314,12 @@ function MyReportsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   itemContainer: {
     backgroundColor: '#ffffff',
     padding: 20,
@@ -227,17 +332,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  itemTitle: { fontSize: 20, fontWeight: 'bold', color: '#3d5afe', marginBottom: 4 },
+  itemTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#3d5afe',
+    marginBottom: 4,
+  },
   section: { marginTop: 16 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 5 },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 5,
+  },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   infoIcon: { marginRight: 10, color: '#555', marginTop: 3 },
   infoLabel: { fontSize: 15, fontWeight: 'bold', color: '#444' },
   infoValue: { fontSize: 15, color: '#666', flexShrink: 1 },
   listContainer: { marginTop: 4, paddingLeft: 10 },
-  listItemText: { fontSize: 15, color: '#666', marginLeft: 16, marginBottom: 4 },
-  urlText: { fontSize: 15, color: '#3498db', marginLeft: 16, marginBottom: 4, textDecorationLine: 'underline' },
-  dateText: { fontSize: 12, color: '#777', textAlign: 'right', marginBottom: 10 },
+  listItemText: {
+    fontSize: 15,
+    color: '#666',
+    marginLeft: 16,
+    marginBottom: 4,
+  },
+  urlText: {
+    fontSize: 15,
+    color: '#3498db',
+    marginLeft: 16,
+    marginBottom: 4,
+    textDecorationLine: 'underline',
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#777',
+    textAlign: 'right',
+    marginBottom: 10,
+  },
   analysisContainer: {
     marginTop: 20,
     backgroundColor: '#e3f2fd',
@@ -271,9 +405,20 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     lineHeight: 22,
   },
-  errorText: { marginTop: 10, fontSize: 16, color: '#e74c3c', textAlign: 'center' },
+  errorText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#e74c3c',
+    textAlign: 'center',
+  },
   emptyText: { marginTop: 10, fontSize: 16, color: '#7f8c8d' },
-  retryButton: { marginTop: 20, backgroundColor: '#3d5afe', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5 },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#3d5afe',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
   retryButtonText: { color: 'white', fontSize: 16 },
 });
 

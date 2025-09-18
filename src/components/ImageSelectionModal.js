@@ -1,5 +1,5 @@
 // src/components/ImageSelectionModal.js
-import React from "react";
+import React from 'react';
 import {
   Modal,
   View,
@@ -9,11 +9,11 @@ import {
   StyleSheet,
   Image,
   SafeAreaView,
-} from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
-  const handleSelect = (item) => {
+  const handleSelect = item => {
     onSelect(item.name);
     onClose();
   };
@@ -21,8 +21,7 @@ const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.itemContainer}
-      onPress={() => handleSelect(item)}
-    >
+      onPress={() => handleSelect(item)}>
       {item.source ? (
         <>
           <Image
@@ -64,19 +63,19 @@ const ImageSelectionModal = ({ visible, onClose, items, onSelect, title }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: '#fff',
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: '#eee',
   },
   title: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   listContainer: {
     padding: 10,
@@ -85,30 +84,30 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: 5,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: '#e0e0e0',
     borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 5,
     aspectRatio: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
   },
   image: {
-    width: "70%",
-    height: "70%",
+    width: '70%',
+    height: '70%',
     marginBottom: 5,
   },
   textItem: {
     fontSize: 12,
-    fontWeight: "500",
-    color: "#343a40",
-    textAlign: "center",
+    fontWeight: '500',
+    color: '#343a40',
+    textAlign: 'center',
   },
   textOnlyItem: {
     fontSize: 16,
-    fontWeight: "500",
-    color: "#343a40",
-    textAlign: "center",
+    fontWeight: '500',
+    color: '#343a40',
+    textAlign: 'center',
   },
 });
 

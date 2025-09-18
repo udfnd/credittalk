@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,69 +12,69 @@ import {
   TouchableOpacity,
   Image,
   Platform,
-} from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { launchImageLibrary } from "react-native-image-picker";
-import RNBlobUtil from "react-native-blob-util";
-import { Buffer } from "buffer";
-import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { launchImageLibrary } from 'react-native-image-picker';
+import RNBlobUtil from 'react-native-blob-util';
+import { Buffer } from 'buffer';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 export default function NewCrimeCaseCreateScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
 
-  const [title, setTitle] = useState("");
-  const [method, setMethod] = useState("");
-  const [category, setCategory] = useState(""); // <-- 1. 카테고리 state 추가
+  const [title, setTitle] = useState('');
+  const [method, setMethod] = useState('');
+  const [category, setCategory] = useState(''); // <-- 1. 카테고리 state 추가
   const [photos, setPhotos] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleChoosePhotos = () => {
     const limit = 3 - photos.length;
     if (limit <= 0) {
-      Alert.alert("알림", "사진은 최대 3장까지 등록할 수 있습니다.");
+      Alert.alert('알림', '사진은 최대 3장까지 등록할 수 있습니다.');
       return;
     }
     launchImageLibrary(
-      { mediaType: "photo", selectionLimit: limit, quality: 0.7 },
-      (res) => {
+      { mediaType: 'photo', selectionLimit: limit, quality: 0.7 },
+      res => {
         if (res.didCancel) return;
         if (res.errorCode) {
-          Alert.alert("오류", `사진 선택 오류: ${res.errorMessage}`);
+          Alert.alert('오류', `사진 선택 오류: ${res.errorMessage}`);
         } else if (res.assets) {
-          setPhotos((prev) => [...prev, ...res.assets]);
+          setPhotos(prev => [...prev, ...res.assets]);
         }
       },
     );
   };
 
-  const handleRemovePhoto = (uri) => {
-    setPhotos((prev) => prev.filter((p) => p.uri !== uri));
+  const handleRemovePhoto = uri => {
+    setPhotos(prev => prev.filter(p => p.uri !== uri));
   };
 
-  const getFilePath = async (uri) => {
-    if (Platform.OS === "android" && uri.startsWith("content://")) {
+  const getFilePath = async uri => {
+    if (Platform.OS === 'android' && uri.startsWith('content://')) {
       const stat = await RNBlobUtil.fs.stat(uri);
       return stat.path;
     }
-    if (uri.startsWith("file://")) {
-      return uri.replace("file://", "");
+    if (uri.startsWith('file://')) {
+      return uri.replace('file://', '');
     }
     return uri;
   };
 
-  const uploadToSupabase = async (photo) => {
+  const uploadToSupabase = async photo => {
     const path = await getFilePath(photo.uri);
-    const base64Data = await RNBlobUtil.fs.readFile(path, "base64");
-    const arrayBuffer = Buffer.from(base64Data, "base64");
-    const ext = photo.fileName?.split(".").pop() || "jpg";
+    const base64Data = await RNBlobUtil.fs.readFile(path, 'base64');
+    const arrayBuffer = Buffer.from(base64Data, 'base64');
+    const ext = photo.fileName?.split('.').pop() || 'jpg';
     const fileName = `${user.id}_${Date.now()}.${ext}`;
     const storagePath = `new-crime-cases/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("post-images")
+      .from('post-images')
       .upload(storagePath, arrayBuffer, {
         contentType: photo.type,
         upsert: false,
@@ -85,11 +85,11 @@ export default function NewCrimeCaseCreateScreen() {
     }
 
     const { data: urlData } = supabase.storage
-      .from("post-images")
+      .from('post-images')
       .getPublicUrl(storagePath);
 
     if (!urlData || !urlData.publicUrl) {
-      throw new Error("URL 생성에 실패했습니다.");
+      throw new Error('URL 생성에 실패했습니다.');
     }
 
     return urlData.publicUrl;
@@ -98,25 +98,23 @@ export default function NewCrimeCaseCreateScreen() {
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!title.trim()) {
-      Alert.alert("입력 오류", "제목을 입력해주세요.");
+      Alert.alert('입력 오류', '제목을 입력해주세요.');
       return;
     }
     if (!method.trim()) {
-      Alert.alert("입력 오류", "범죄 수법 및 내용을 입력해주세요.");
+      Alert.alert('입력 오류', '범죄 수법 및 내용을 입력해주세요.');
       return;
     }
     if (!user) {
-      Alert.alert("오류", "로그인 정보가 없습니다. 다시 로그인해주세요.");
+      Alert.alert('오류', '로그인 정보가 없습니다. 다시 로그인해주세요.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const imageUrls = await Promise.all(
-        photos.map((p) => uploadToSupabase(p)),
-      );
+      const imageUrls = await Promise.all(photos.map(p => uploadToSupabase(p)));
 
-      const { error } = await supabase.from("new_crime_cases").insert({
+      const { error } = await supabase.from('new_crime_cases').insert({
         title: title.trim(),
         method: method.trim(),
         category: category.trim() || null, // category 추가
@@ -125,12 +123,12 @@ export default function NewCrimeCaseCreateScreen() {
       });
       if (error) throw error;
 
-      Alert.alert("작성 완료", "사례가 성공적으로 등록되었습니다.");
+      Alert.alert('작성 완료', '사례가 성공적으로 등록되었습니다.');
       navigation.goBack();
     } catch (err) {
       Alert.alert(
-        "작성 실패",
-        err.message || "알 수 없는 오류가 발생했습니다.",
+        '작성 실패',
+        err.message || '알 수 없는 오류가 발생했습니다.',
       );
     } finally {
       setIsLoading(false);
@@ -171,13 +169,12 @@ export default function NewCrimeCaseCreateScreen() {
       />
       <Text style={styles.label}>사진 첨부 (최대 3장)</Text>
       <View style={styles.photoContainer}>
-        {photos.map((photo) => (
+        {photos.map(photo => (
           <View key={photo.uri} style={styles.photoWrapper}>
             <Image source={{ uri: photo.uri }} style={styles.thumbnail} />
             <TouchableOpacity
               style={styles.removeButton}
-              onPress={() => handleRemovePhoto(photo.uri)}
-            >
+              onPress={() => handleRemovePhoto(photo.uri)}>
               <Icon name="close-circle" size={24} color="#e74c3c" />
             </TouchableOpacity>
           </View>
@@ -185,8 +182,7 @@ export default function NewCrimeCaseCreateScreen() {
         {photos.length < 3 && (
           <TouchableOpacity
             style={styles.addButton}
-            onPress={handleChoosePhotos}
-          >
+            onPress={handleChoosePhotos}>
             <Icon name="camera-plus" size={30} color="#868e96" />
             <Text style={styles.addButtonText}>사진 추가</Text>
           </TouchableOpacity>
@@ -207,75 +203,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: '#f8f9fa',
   },
   pageTitle: {
     fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
+    fontWeight: 'bold',
+    textAlign: 'center',
     marginBottom: 25,
-    color: "#34495e",
+    color: '#34495e',
   },
   label: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#495057",
+    fontWeight: '600',
+    color: '#495057',
     marginBottom: 10,
     marginTop: 20,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ced4da",
+    borderColor: '#ced4da',
     paddingVertical: 12,
     paddingHorizontal: 15,
     borderRadius: 8,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     fontSize: 16,
-    color: "#212529",
+    color: '#212529',
   },
   textArea: {
     minHeight: 200,
-    textAlignVertical: "top",
+    textAlignVertical: 'top',
   },
   photoContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
   photoWrapper: {
-    position: "relative",
+    position: 'relative',
     width: 100,
     height: 100,
     marginRight: 10,
     marginBottom: 10,
   },
   thumbnail: {
-    width: "100%",
-    height: "100%",
+    width: '100%',
+    height: '100%',
     borderRadius: 8,
-    backgroundColor: "#e9ecef",
+    backgroundColor: '#e9ecef',
   },
   removeButton: {
-    position: "absolute",
+    position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: "white",
+    backgroundColor: 'white',
     borderRadius: 12,
   },
   addButton: {
     width: 100,
     height: 100,
     borderRadius: 8,
-    backgroundColor: "#e9ecef",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#e9ecef',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: "#ced4da",
-    borderStyle: "dashed",
+    borderColor: '#ced4da',
+    borderStyle: 'dashed',
   },
   addButtonText: {
     fontSize: 12,
-    color: "#868e96",
+    color: '#868e96',
     marginTop: 4,
   },
   buttonContainer: {

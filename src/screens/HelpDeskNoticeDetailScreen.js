@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 
 export default function HelpDeskNoticeDetailScreen({ route, navigation }) {
@@ -35,7 +42,9 @@ export default function HelpDeskNoticeDetailScreen({ route, navigation }) {
     }
   }, [noticeId, navigation]);
 
-  useEffect(() => { fetchNotice(); }, [fetchNotice]);
+  useEffect(() => {
+    fetchNotice();
+  }, [fetchNotice]);
 
   useEffect(() => {
     if (notice?.title) {
@@ -63,7 +72,9 @@ export default function HelpDeskNoticeDetailScreen({ route, navigation }) {
   const bodyLines = String(notice.body || '').split(/\r?\n/);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: 20 }}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ padding: 20 }}>
       <Text style={styles.title}>{notice.title}</Text>
       <Text style={styles.meta}>
         {new Date(notice.created_at).toLocaleString()}

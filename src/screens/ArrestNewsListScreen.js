@@ -37,7 +37,9 @@ function ArrestNewsListScreen() {
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select('id, title, created_at, author_name, image_urls, views, is_pinned')
+        .select(
+          'id, title, created_at, author_name, image_urls, views, is_pinned',
+        )
         .eq('is_published', true)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false });
@@ -81,20 +83,31 @@ function ArrestNewsListScreen() {
             <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
           ) : (
             <View style={[styles.thumbnail, styles.thumbnailPlaceholder]}>
-              <Icon name="newspaper-variant-outline" size={30} color="#bdc3c7" />
+              <Icon
+                name="newspaper-variant-outline"
+                size={30}
+                color="#bdc3c7"
+              />
             </View>
           )}
           <View style={styles.textContainer}>
             <View style={styles.titleContainer}>
               {item.is_pinned && (
-                <Icon name="pin" size={16} color="#d35400" style={styles.pinIcon} />
+                <Icon
+                  name="pin"
+                  size={16}
+                  color="#d35400"
+                  style={styles.pinIcon}
+                />
               )}
               <Text style={styles.noticeTitle} numberOfLines={2}>
                 {item.title}
               </Text>
             </View>
             <View style={styles.noticeMeta}>
-              <Text style={styles.noticeAuthor}>{item.author_name || '관리자'}</Text>
+              <Text style={styles.noticeAuthor}>
+                {item.author_name || '관리자'}
+              </Text>
               <Text style={styles.noticeDate}>조회 {item.views || 0}</Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
@@ -136,7 +149,11 @@ function ArrestNewsListScreen() {
         ListEmptyComponent={
           !isLoading && (
             <View style={styles.centered}>
-              <Icon name="newspaper-variant-outline" size={50} color="#bdc3c7" />
+              <Icon
+                name="newspaper-variant-outline"
+                size={50}
+                color="#bdc3c7"
+              />
               <Text style={styles.emptyText}>등록된 검거소식이 없습니다.</Text>
             </View>
           )

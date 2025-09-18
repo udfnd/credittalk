@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert
-} from "react-native";
-import { supabase } from "../lib/supabaseClient";
-import { useFocusEffect } from "@react-navigation/native";
-import { useAuth } from "../context/AuthContext";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { logPageView } from "../lib/pageViewLogger";
-import HelpDeskPinnedNotices from "../components/HelpDeskPinnedNotices";
+  Alert,
+} from 'react-native';
+import { supabase } from '../lib/supabaseClient';
+import { useFocusEffect } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { logPageView } from '../lib/pageViewLogger';
+import HelpDeskPinnedNotices from '../components/HelpDeskPinnedNotices';
 
 export default function HelpDeskListScreen({ navigation }) {
   const { user } = useAuth(); // 현재 로그인한 사용자 정보
@@ -32,12 +32,12 @@ export default function HelpDeskListScreen({ navigation }) {
 
   const fetchPinnedNotices = async () => {
     const { data, error } = await supabase
-      .from("help_desk_notices")
-      .select("id, title, body, pinned, pinned_at, pinned_until")
-      .eq("is_published", true)
-      .order("pinned", { ascending: false })
-      .order("pinned_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false })
+      .from('help_desk_notices')
+      .select('id, title, body, pinned, pinned_at, pinned_until')
+      .eq('is_published', true)
+      .order('pinned', { ascending: false })
+      .order('pinned_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
       .limit(3);
     if (!error) setNotices(data || []);
   };
@@ -51,13 +51,13 @@ export default function HelpDeskListScreen({ navigation }) {
     await fetchPinnedNotices();
 
     const { data: questionsData, error: questionsError } = await supabase
-      .from("help_questions")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .from('help_questions')
+      .select('*')
+      .order('created_at', { ascending: false });
 
     if (questionsError) {
-      console.error("Error fetching questions:", questionsError);
-      Alert.alert("오류", "문의 목록을 불러오는 데 실패했습니다.");
+      console.error('Error fetching questions:', questionsError);
+      Alert.alert('오류', '문의 목록을 불러오는 데 실패했습니다.');
       setLoading(false);
       return;
     }
@@ -77,9 +77,11 @@ export default function HelpDeskListScreen({ navigation }) {
       .in('source_help_question_id', questionIds);
 
     if (publicError) {
-      console.error("Error fetching public status:", publicError);
+      console.error('Error fetching public status:', publicError);
     } else {
-      const publicSet = new Set(publicCases.map(p => p.source_help_question_id));
+      const publicSet = new Set(
+        publicCases.map(p => p.source_help_question_id),
+      );
       setPublicIdSet(publicSet);
     }
 
@@ -91,16 +93,19 @@ export default function HelpDeskListScreen({ navigation }) {
     useCallback(() => {
       setLoading(true);
       fetchQuestionsAndPublicStatus();
-    }, [user])
+    }, [user]),
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([fetchPinnedNotices(), fetchQuestionsAndPublicStatus()]).finally(() => setRefreshing(false));
+    Promise.all([
+      fetchPinnedNotices(),
+      fetchQuestionsAndPublicStatus(),
+    ]).finally(() => setRefreshing(false));
   }, [user]);
 
-  const openNotice = (n) => {
-    navigation.navigate("HelpDeskNoticeDetail", { noticeId: n.id });
+  const openNotice = n => {
+    navigation.navigate('HelpDeskNoticeDetail', { noticeId: n.id });
   };
 
   const renderItem = ({ item }) => {
@@ -114,12 +119,27 @@ export default function HelpDeskListScreen({ navigation }) {
     // 상태에 따른 스타일과 텍스트를 결정하는 함수
     const getStatusInfo = () => {
       if (isPublic) {
-        return { text: "공개된 질문", style: styles.publicTag, icon: 'lock-open-variant-outline', color: '#228be6' };
+        return {
+          text: '공개된 질문',
+          style: styles.publicTag,
+          icon: 'lock-open-variant-outline',
+          color: '#228be6',
+        };
       }
       if (isMine) {
-        return { text: "내가 쓴 비공개 질문", style: styles.myPrivateTag, icon: 'lock-outline', color: '#845ef7' };
+        return {
+          text: '내가 쓴 비공개 질문',
+          style: styles.myPrivateTag,
+          icon: 'lock-outline',
+          color: '#845ef7',
+        };
       }
-      return { text: "비공개 질문", style: styles.privateTag, icon: 'lock-outline', color: '#868e96' };
+      return {
+        text: '비공개 질문',
+        style: styles.privateTag,
+        icon: 'lock-outline',
+        color: '#868e96',
+      };
     };
 
     const statusInfo = getStatusInfo();
@@ -129,12 +149,13 @@ export default function HelpDeskListScreen({ navigation }) {
         style={[
           styles.itemContainer,
           // [수정] 클릭 불가능한 항목에만 비활성화 스타일 적용
-          !isClickable && styles.disabledItem
+          !isClickable && styles.disabledItem,
         ]}
         // [수정] isClickable 변수에 따라 비활성화 여부 결정
         disabled={!isClickable}
-        onPress={() => navigation.navigate("HelpDeskDetail", { questionId: item.id })}
-      >
+        onPress={() =>
+          navigation.navigate('HelpDeskDetail', { questionId: item.id })
+        }>
         <View style={styles.itemHeader}>
           <Icon
             name={statusInfo.icon}
@@ -143,7 +164,7 @@ export default function HelpDeskListScreen({ navigation }) {
             style={styles.iconStyle}
           />
           <Text style={styles.itemTitle} numberOfLines={1}>
-            {item.case_summary || item.title || "상세 내용 없음"}
+            {item.case_summary || item.title || '상세 내용 없음'}
           </Text>
           <Text style={styles.itemDate}>
             {new Date(item.created_at).toLocaleDateString()}
@@ -153,8 +174,11 @@ export default function HelpDeskListScreen({ navigation }) {
           <Text style={[styles.statusTag, statusInfo.style]}>
             {statusInfo.text}
           </Text>
-          <Text style={item.is_answered ? styles.statusAnswered : styles.statusPending}>
-            {item.is_answered ? "답변 완료" : "답변 대기중"}
+          <Text
+            style={
+              item.is_answered ? styles.statusAnswered : styles.statusPending
+            }>
+            {item.is_answered ? '답변 완료' : '답변 대기중'}
           </Text>
         </View>
       </TouchableOpacity>
@@ -162,7 +186,11 @@ export default function HelpDeskListScreen({ navigation }) {
   };
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color="#3d5afe" /></View>;
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#3d5afe" />
+      </View>
+    );
   }
 
   if (!user) {
@@ -185,16 +213,22 @@ export default function HelpDeskListScreen({ navigation }) {
         <FlatList
           data={questions}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={item => item.id.toString()}
           contentContainerStyle={{ paddingBottom: 80 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={<HelpDeskPinnedNotices notices={notices} onPressNotice={openNotice} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListHeaderComponent={
+            <HelpDeskPinnedNotices
+              notices={notices}
+              onPressNotice={openNotice}
+            />
+          }
         />
       )}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate("HelpDeskCreate")}
-      >
+        onPress={() => navigation.navigate('HelpDeskCreate')}>
         <Icon name="pencil-plus" size={24} color="white" />
       </TouchableOpacity>
     </View>
@@ -202,24 +236,67 @@ export default function HelpDeskListScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8f9fa" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
-  emptyText: { fontSize: 18, fontWeight: "600", color: "#495057", marginTop: 15 },
-  itemContainer: { backgroundColor: "white", paddingVertical: 15, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: "#e9ecef" },
+  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#495057',
+    marginTop: 15,
+  },
+  itemContainer: {
+    backgroundColor: 'white',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
   disabledItem: {
     backgroundColor: '#f1f3f5',
-    opacity: 0.6
+    opacity: 0.6,
   },
-  itemHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  itemHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   iconStyle: { marginRight: 8 },
-  itemTitle: { fontSize: 16, fontWeight: "bold", color: "#343a40", flex: 1 },
-  itemDate: { fontSize: 12, color: "#868e96", marginLeft: 10 },
-  statusContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  statusTag: { fontSize: 12, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, overflow: 'hidden' },
+  itemTitle: { fontSize: 16, fontWeight: 'bold', color: '#343a40', flex: 1 },
+  itemDate: { fontSize: 12, color: '#868e96', marginLeft: 10 },
+  statusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  statusTag: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   publicTag: { backgroundColor: '#dbe4ff', color: '#3d5afe' },
   privateTag: { backgroundColor: '#e9ecef', color: '#868e96' },
   myPrivateTag: { backgroundColor: '#e5dbff', color: '#7048e8' }, // [추가] 내가 쓴 비공개 질문 스타일
-  statusAnswered: { fontSize: 14, color: "#3d5afe", fontWeight: '600' },
-  statusPending: { fontSize: 14, color: "#f03e3e", fontWeight: '600' },
-  fab: { position: "absolute", right: 20, bottom: 60, backgroundColor: "#3d5afe", width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center", elevation: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
+  statusAnswered: { fontSize: 14, color: '#3d5afe', fontWeight: '600' },
+  statusPending: { fontSize: 14, color: '#f03e3e', fontWeight: '600' },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 60,
+    backgroundColor: '#3d5afe',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
 });

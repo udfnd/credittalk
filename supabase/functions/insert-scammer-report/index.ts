@@ -1,9 +1,9 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import {
   createClient,
   SupabaseClient,
-} from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+} from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders } from '../_shared/cors.ts';
 
 interface DamageAccount {
   accountHolderName?: string | null;
@@ -50,8 +50,8 @@ async function encryptAndInsert(
   clientIp?: string,
 ) {
   const encrypt = async (value?: string | null): Promise<string | null> => {
-    if (!value || value.trim() === "") return null;
-    const { data, error } = await supabaseAdminClient.rpc("encrypt_secret", {
+    if (!value || value.trim() === '') return null;
+    const { data, error } = await supabaseAdminClient.rpc('encrypt_secret', {
       data: value,
     });
     if (error) {
@@ -67,31 +67,31 @@ async function encryptAndInsert(
   };
 
   const encryptedPhoneNumbers = reportData.phone_numbers
-    ? await Promise.all(reportData.phone_numbers.map((pn) => encrypt(pn)))
+    ? await Promise.all(reportData.phone_numbers.map(pn => encrypt(pn)))
     : null;
 
   const encryptedDamageAccounts =
     reportData.damage_accounts && reportData.damage_accounts.length > 0
       ? await Promise.all(
-        reportData.damage_accounts.map(async (acc) => {
-          if (acc.is_other_method) {
+          reportData.damage_accounts.map(async acc => {
+            if (acc.is_other_method) {
+              return {
+                is_other_method: true,
+                other_method_details: acc.other_method_details || null,
+                bankName: null,
+                accountHolderName: null,
+                accountNumber: null,
+              };
+            }
             return {
-              is_other_method: true,
-              other_method_details: acc.other_method_details || null,
-              bankName: null,
-              accountHolderName: null,
-              accountNumber: null,
+              is_other_method: false,
+              other_method_details: null,
+              bankName: acc.bankName || null,
+              accountHolderName: await encrypt(acc.accountHolderName),
+              accountNumber: await encrypt(acc.accountNumber),
             };
-          }
-          return {
-            is_other_method: false,
-            other_method_details: null,
-            bankName: acc.bankName || null,
-            accountHolderName: await encrypt(acc.accountHolderName),
-            accountNumber: await encrypt(acc.accountNumber),
-          };
-        }),
-      )
+          }),
+        )
       : null;
 
   const encryptedImpersonatedPhoneNumber = await encrypt(
@@ -99,7 +99,7 @@ async function encryptAndInsert(
   );
 
   const { error: insertError } = await supabaseAdminClient
-    .from("scammer_reports")
+    .from('scammer_reports')
     .insert({
       reporter_id: reporterId,
       damage_accounts: encryptedDamageAccounts,
@@ -134,32 +134,32 @@ async function encryptAndInsert(
     });
 
   if (insertError) {
-    console.error("DB Insert error:", insertError);
+    console.error('DB Insert error:', insertError);
     throw new Error(`Database insert failed: ${insertError.message}`);
   }
-  return { success: true, message: "Report submitted successfully." };
+  return { success: true, message: 'Report submitted successfully.' };
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const authorization = req.headers.get("Authorization");
+    const authorization = req.headers.get('Authorization');
     if (!authorization) {
       return new Response(
-        JSON.stringify({ error: "Forbidden: Missing Authorization header." }),
+        JSON.stringify({ error: 'Forbidden: Missing Authorization header.' }),
         {
           status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         },
       );
     }
 
     const userSupabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authorization } } },
     );
     const {
@@ -168,30 +168,30 @@ serve(async (req: Request) => {
     } = await userSupabaseClient.auth.getUser();
 
     if (userError || !user) {
-      console.error("User auth error:", userError?.message);
-      return new Response(JSON.stringify({ error: "Authentication failed." }), {
+      console.error('User auth error:', userError?.message);
+      return new Response(JSON.stringify({ error: 'Authentication failed.' }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (!req.body) {
       return new Response(
-        JSON.stringify({ error: "Invalid request: Missing request body." }),
+        JSON.stringify({ error: 'Invalid request: Missing request body.' }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         },
       );
     }
-    if (!req.headers.get("content-type")?.includes("application/json")) {
+    if (!req.headers.get('content-type')?.includes('application/json')) {
       return new Response(
         JSON.stringify({
-          error: "Invalid request: Content-Type must be application/json.",
+          error: 'Invalid request: Content-Type must be application/json.',
         }),
         {
           status: 415,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         },
       );
     }
@@ -199,47 +199,47 @@ serve(async (req: Request) => {
     const reportData: ReportData = await req.json();
 
     const requiredFields: (keyof ReportData)[] = [
-      "category",
-      "scam_report_source",
-      "company_type",
-      "gender",
+      'category',
+      'scam_report_source',
+      'company_type',
+      'gender',
     ];
     const missingFields = requiredFields.filter(
-      (field) =>
+      field =>
         reportData[field] === undefined ||
         reportData[field] === null ||
-        String(reportData[field]).trim() === ""
+        String(reportData[field]).trim() === '',
     );
 
     if (
       reportData.perpetrator_identified === undefined ||
       reportData.perpetrator_identified === null
     ) {
-      missingFields.push("perpetrator_identified");
+      missingFields.push('perpetrator_identified');
     }
     if (
       reportData.attempted_fraud === undefined ||
       reportData.attempted_fraud === null
     ) {
-      missingFields.push("attempted_fraud");
+      missingFields.push('attempted_fraud');
     }
 
     if (missingFields.length > 0) {
       return new Response(
         JSON.stringify({
-          error: `Invalid request: Missing required fields: ${missingFields.join(", ")}.`,
+          error: `Invalid request: Missing required fields: ${missingFields.join(', ')}.`,
         }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         },
       );
     }
 
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0].trim();
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim();
     const supabaseAdminClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { persistSession: false } },
     );
 
@@ -251,27 +251,27 @@ serve(async (req: Request) => {
     );
 
     return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error: any) {
-    console.error("Function Error:", error);
+    console.error('Function Error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     let status = 500;
     if (
-      errorMessage.includes("Invalid request") ||
-      errorMessage.includes("failed")
+      errorMessage.includes('Invalid request') ||
+      errorMessage.includes('failed')
     ) {
       status = 400;
     }
     if (
-      errorMessage.includes("Forbidden") ||
-      errorMessage.includes("Authentication")
+      errorMessage.includes('Forbidden') ||
+      errorMessage.includes('Authentication')
     ) {
       status = 401;
     }
     return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: status,
     });
   }
