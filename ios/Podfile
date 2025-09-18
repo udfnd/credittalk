@@ -1,59 +1,41 @@
-# ios/Podfile
+# React Native pods 스크립트 로드
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
-platform :ios, '15.6'
-prepare_react_native_project!
-
 pre_install do |installer|
-  # kakao-login은 static library 강제 (필요시 유지)
+  Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
   installer.pod_targets.each do |pod|
     if pod.name.start_with?('kakao-login')
-      def pod.build_type; Pod::BuildType.static_library end
+      def pod.build_type;
+        Pod::BuildType.static_library
+      end
     end
-  end
-
-  # 🔧 RN 내부 podspec들에 박힌 fast_float 6.1.4 → 8.0.0 일괄 치환
-  rn_dir = File.expand_path('../node_modules/react-native', __dir__)
-  Dir.glob(File.join(rn_dir, '**/*.podspec')).each do |spec_path|
-    next unless File.file?(spec_path)
-    txt = File.read(spec_path)
-    patched = txt.gsub(/(s\.dependency\s+["']fast_float["']\s*,\s*["'])6\.1\.4(["'])/i, '\18.0.0\2')
-    File.write(spec_path, patched) if patched != txt
-  end
-
-  # fast_float podspec 자체 버전도 8.0.0으로 고정
-  ff_path = File.join(rn_dir, 'third-party-podspecs/fast_float.podspec')
-  if File.exist?(ff_path)
-    txt = File.read(ff_path)
-    patched = txt.gsub(/s\.version\s*=\s*['"].*?['"]/, "s.version = '8.0.0'")
-    File.write(ff_path, patched) if patched != txt
   end
 end
 
+# 최소 iOS 버전: Hermes 요구사항 확인 후 설정
+platform :ios, '15.6'
+
+# Swift pod 및 React-jsc 종속 처리: 동적 프레임워크 + 모듈러 헤더 사용
+use_modular_headers!
+use_frameworks! :linkage => :dynamic
+
+prepare_react_native_project!
+
 target 'CreditTalk' do
+  # auto-link 설정 호출
   config = use_native_modules!
-
-  # FirebaseCoreInternal ↔ GoogleUtilities 정적+Swift 경고 방지 (최소 설정)
-  pod 'GoogleUtilities', :modular_headers => true
-
-  # 외부 SDK
   pod 'NidThirdPartyLogin'
   pod 'RNVectorIcons', :path => '../node_modules/react-native-vector-icons'
 
+  # React Native core pods 설치 (Hermes 활성화 여부 선택)
   use_react_native!(
     :path => config[:reactNativePath],
-    :hermes_enabled => true,
-    :new_arch_enabled => false
+    # app_path 옵션 제거하여 package.json 경로 자동 인식
+    hermes_enabled: false
   )
 end
 
 post_install do |installer|
+  # React Native 후처리 스크립트
   react_native_post_install(installer)
-
-  # 비모듈 포함 허용(브리징 헤더 경고 억제)
-  installer.pods_project.targets.each do |t|
-    t.build_configurations.each do |cfg|
-      cfg.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-    end
-  end
 end
