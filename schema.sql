@@ -640,6 +640,23 @@ $$;
 ALTER FUNCTION "public"."get_user_job_type"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."handle_new_post_notification"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  PERFORM net.http_post(
+    url:='https://<project_ref>.supabase.co/functions/v1/new-post-notification',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"}'::jsonb,
+    body:=jsonb_build_object('table', TG_TABLE_NAME, 'record', row_to_json(NEW))
+  );
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."handle_new_post_notification"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."handle_updated_at"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
@@ -2118,11 +2135,39 @@ CREATE OR REPLACE TRIGGER "on_incident_photos_updated" BEFORE UPDATE ON "public"
 
 
 
+CREATE OR REPLACE TRIGGER "on_new_arrest_news" AFTER INSERT ON "public"."arrest_news" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_post_notification"();
+
+
+
 CREATE OR REPLACE TRIGGER "on_new_chat_message_send_push" AFTER INSERT ON "public"."chat_messages" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_send_chat_push_notification"();
 
 
 
+CREATE OR REPLACE TRIGGER "on_new_comment_notification" AFTER INSERT ON "public"."comments" FOR EACH ROW EXECUTE FUNCTION "supabase_functions"."http_request"('https://<project_ref>.supabase.co/functions/v1/new-comment-notification', 'POST', '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"}', '{}', '1000');
+
+
+
+CREATE OR REPLACE TRIGGER "on_new_community_post" AFTER INSERT ON "public"."community_posts" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_post_notification"();
+
+
+
+CREATE OR REPLACE TRIGGER "on_new_crime_case" AFTER INSERT ON "public"."new_crime_cases" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_post_notification"();
+
+
+
+CREATE OR REPLACE TRIGGER "on_new_incident_photo" AFTER INSERT ON "public"."incident_photos" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_post_notification"();
+
+
+
 CREATE OR REPLACE TRIGGER "on_new_message_update_room_timestamp" AFTER INSERT ON "public"."chat_messages" FOR EACH ROW EXECUTE FUNCTION "public"."update_room_last_message_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "on_new_notice" AFTER INSERT ON "public"."notices" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_post_notification"();
+
+
+
+CREATE OR REPLACE TRIGGER "on_new_review" AFTER INSERT ON "public"."reviews" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_post_notification"();
 
 
 
@@ -2937,6 +2982,12 @@ GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."handle_new_post_notification"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_new_post_notification"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_new_post_notification"() TO "service_role";
 
 
 

@@ -1,6 +1,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
+import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef } from 'react';
 import {
   Platform,
@@ -22,6 +23,7 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 
 // 🔔 Push 유틸 추가
 import {
@@ -486,6 +488,30 @@ function App(): React.JSX.Element {
       }
     })();
   }, []);
+
+  // const navigation = useNavigation();
+  //
+  // useEffect(() => {
+  //   const responseListener =
+  //     Notifications.addNotificationResponseReceivedListener(response => {
+  //       const { screen, params } = response.notification.request.content.data;
+  //       if (screen) {
+  //         navigation.navigate(screen, params);
+  //       }
+  //     });
+  //
+  //   return () => {
+  //     Notifications.removeNotificationSubscription(responseListener);
+  //   };
+  // }, []);
+  //
+  // useEffect(() => {
+  //   registerForPushNotificationsAsync().then(token => {
+  //     if (token) {
+  //       savePushToken(token);
+  //     }
+  //   });
+  // }, []);
 
   return (
     <SafeAreaProvider>
