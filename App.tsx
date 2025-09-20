@@ -1,14 +1,15 @@
+// App.tsx
+
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef } from 'react';
 import {
-  Platform,
   View,
   StyleSheet,
   Text,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import {
   NavigationContainer,
@@ -23,18 +24,18 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import * as Notifications from 'expo-notifications';
 
-// 🔔 Push 유틸 추가
+// 🔔 Push 유틸 import 수정
 import {
-  ensureNotificationChannel,
   wireMessageHandlers,
-  registerPushToken,
-  openFromPayload, // ✅ 추가: push payload로 화면이동/외부링크 여는 헬퍼
+  openFromPayload,
+  updatePushTokenOnLogin,
+  setupTokenRefreshListener,
+  requestNotificationPermissionAndroid, // ✅ Android 권한 요청 함수 import
 } from './src/lib/push';
-import notifee from '@notifee/react-native'; // ✅ 추가: 종료상태에서 notifee로 띄운 알림을 탭하고 진입한 경우 처리
+import notifee from '@notifee/react-native';
 
-// Screens
+// Screens... (생략)
 import HomeScreen from './src/screens/HomeScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import UnifiedSearchScreen from './src/screens/UnifiedSearchScreen';
@@ -265,19 +266,18 @@ function MainTabs() {
 function AppNavigator() {
   const { user, profile, isLoading } = useAuth();
 
-  // ✅ 로그인 후 토큰 업서트
   useEffect(() => {
-    const run = async () => {
-      if (user?.id) {
-        await ensureNotificationChannel();
-        await registerPushToken(user.id, '26', {
-          authUserId: user.id,
-          appUserId: profile?.id,
-        });
-      }
-    };
-    run();
-  }, [user?.id, profile?.id]);
+    if (user?.id) {
+      // 로그인 시 즉시 토큰 업데이트
+      updatePushTokenOnLogin(user.id);
+
+      // 토큰 갱신 리스너 설정 (컴포넌트 unmount 시 자동 해제됨)
+      const unsubscribe = setupTokenRefreshListener(user.id);
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, [user?.id]); // user.id가 변경될 때만 실행
 
   if (isLoading) {
     return (
@@ -453,14 +453,11 @@ function AppNavigator() {
 }
 
 function App(): React.JSX.Element {
-  // 네비게이션 참조(알림 탭 시 화면 이동에 사용)
   const navRef = useRef<NavigationContainerRef<any>>(null);
 
-  // 알림 → 화면 이동 함수
   const navigateTo = (screen: string, params?: any) => {
     const nav = navRef.current;
-    if (!nav) return;
-    if (nav.isReady()) {
+    if (nav?.isReady()) {
       nav.navigate(screen as never, params as never);
     }
   };
@@ -475,43 +472,21 @@ function App(): React.JSX.Element {
     });
   }, []);
 
-  // 🔔 앱 시작 시: 채널 보장 + 알림 핸들러 연결(전역)
+  // ✅ 앱 시작 시 푸시 관련 초기 설정
   useEffect(() => {
-    ensureNotificationChannel(); // Android 채널(최초 1회, 중복 호출 무해)
-    wireMessageHandlers(navigateTo); // 푸시 데이터(screen/params 또는 link_url)을 처리
+    // Android 13+ 권한 요청
+    requestNotificationPermissionAndroid();
 
-    // ✅ 종료상태에서 notifee 알림을 탭하여 앱이 시작된 경우 처리
-    (async () => {
-      const initial = await notifee.getInitialNotification();
+    // 포그라운드/백그라운드/종료 상태 알림 핸들러 연결
+    wireMessageHandlers(navigateTo);
+
+    // 종료상태에서 notifee 알림을 탭하여 앱이 시작된 경우 처리
+    notifee.getInitialNotification().then(initial => {
       if (initial?.notification?.data) {
         openFromPayload(navigateTo, initial.notification.data);
       }
-    })();
+    });
   }, []);
-
-  // const navigation = useNavigation();
-  //
-  // useEffect(() => {
-  //   const responseListener =
-  //     Notifications.addNotificationResponseReceivedListener(response => {
-  //       const { screen, params } = response.notification.request.content.data;
-  //       if (screen) {
-  //         navigation.navigate(screen, params);
-  //       }
-  //     });
-  //
-  //   return () => {
-  //     Notifications.removeNotificationSubscription(responseListener);
-  //   };
-  // }, []);
-  //
-  // useEffect(() => {
-  //   registerForPushNotificationsAsync().then(token => {
-  //     if (token) {
-  //       savePushToken(token);
-  //     }
-  //   });
-  // }, []);
 
   return (
     <SafeAreaProvider>
