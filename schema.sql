@@ -83,6 +83,65 @@ CREATE TYPE "public"."search_result_with_stats" AS (
 
 ALTER TYPE "public"."search_result_with_stats" OWNER TO "postgres";
 
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."comments" (
+    "id" bigint NOT NULL,
+    "post_id" bigint NOT NULL,
+    "board_type" "text" NOT NULL,
+    "content" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "parent_comment_id" bigint,
+    "user_id" bigint,
+    CONSTRAINT "content_length_check" CHECK (("char_length"("content") > 0))
+);
+
+
+ALTER TABLE "public"."comments" OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."add_comment"("_post_id" bigint, "_board_type" "text", "_content" "text", "_parent_comment_id" bigint DEFAULT NULL::bigint) RETURNS "public"."comments"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+  v_auth_uid uuid := auth.uid();
+  v_user_id  bigint;
+  v_row      public.comments;
+begin
+  if v_auth_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  -- auth.users.id(UUID) -> public.users.id(BIGINT) 매핑
+  select u.id into v_user_id
+  from public.users u
+  where u.auth_user_id = v_auth_uid;
+
+  if v_user_id is null then
+    raise exception 'profile not found for auth uid %', v_auth_uid;
+  end if;
+
+  -- (선택) 내용 유효성 더블체크
+  if _content is null or length(trim(_content)) = 0 then
+    raise exception 'content empty';
+  end if;
+
+  insert into public.comments (post_id, board_type, content, parent_comment_id, user_id)
+  values (_post_id, _board_type, _content, _parent_comment_id, v_user_id)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."add_comment"("_post_id" bigint, "_board_type" "text", "_content" "text", "_parent_comment_id" bigint) OWNER TO "postgres";
+
 
 CREATE OR REPLACE FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") RETURNS "text"
     LANGUAGE "plpgsql" SECURITY DEFINER
@@ -251,10 +310,6 @@ $$;
 
 
 ALTER FUNCTION "public"."find_existing_dm_room"("user1_id" "uuid", "user2_id" "uuid") OWNER TO "postgres";
-
-SET default_tablespace = '';
-
-SET default_table_access_method = "heap";
 
 
 CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
@@ -619,37 +674,40 @@ $$;
 ALTER FUNCTION "public"."handle_user_login"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+CREATE OR REPLACE FUNCTION "public"."increment_view_count"("table_name_param" "text", "post_id_param" bigint) RETURNS "void"
+    LANGUAGE "plpgsql"
     AS $$
 BEGIN
-  UPDATE public.new_crime_cases
-  -- 'views' 컬럼의 값을 기존 값에서 1 더한 값으로 설정합니다.
-  -- 만약 views가 null이면, 0으로 취급하고 1을 더합니다.
-  SET views = COALESCE(views, 0) + 1
-  -- 함수로 전달받은 ID와 일치하는 사례를 찾습니다.
-  WHERE id = case_id_input;
+  EXECUTE format(
+    'UPDATE public.%I SET views = views + 1 WHERE id = %L',
+    table_name_param, -- %I: SQL 식별자(테이블, 컬럼명 등)로 안전하게 처리
+    post_id_param     -- %L: SQL 리터럴(값)으로 안전하게 처리
+  );
 END;
 $$;
 
 
-ALTER FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) OWNER TO "postgres";
+ALTER FUNCTION "public"."increment_view_count"("table_name_param" "text", "post_id_param" bigint) OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."increment_post_view"("post_id_input" bigint) RETURNS "void"
-    LANGUAGE "plpgsql" SECURITY DEFINER
+COMMENT ON FUNCTION "public"."increment_view_count"("table_name_param" "text", "post_id_param" bigint) IS '지정된 테이블의 특정 게시글 ID에 대한 조회수(views)를 1 증가시킵니다.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."is_admin"() RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public'
     AS $$
-BEGIN
-  UPDATE public.community_posts
-  -- 👇👇👇 [핵심] 이 'view_count'를 당신의 실제 조회수 컬럼 이름으로 바꾸세요! 👇👇👇
-  SET views = COALESCE(views, 0) + 1
-  -- 👆👆👆 [핵심] 예를 들어, 컬럼 이름이 'views'라면 SET views = COALESCE(views, 0) + 1 로 수정 👆👆👆
-  WHERE id = post_id_input;
-END;
+  select exists (
+    select 1
+    from public.users u
+    where u.auth_user_id = auth.uid()
+      and coalesce(u.is_admin, false) = true
+  );
 $$;
 
 
-ALTER FUNCTION "public"."increment_post_view"("post_id_input" bigint) OWNER TO "postgres";
+ALTER FUNCTION "public"."is_admin"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."is_admin"("user_uuid" "uuid") RETURNS boolean
@@ -782,42 +840,93 @@ $$;
 ALTER FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integer, "p_end_visible" integer, "p_mask_char" "text") OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "public"."search_reports"("search_term" "text") RETURNS SETOF "public"."search_result_with_stats"
+CREATE OR REPLACE FUNCTION "public"."search_reports"("search_term" "text") RETURNS TABLE("reports" "jsonb", "total_count" integer, "weekly_count" integer, "monthly_count" integer, "three_monthly_count" integer)
     LANGUAGE "plpgsql"
     AS $$
 DECLARE
-    search_pattern TEXT;
-    all_reports JSONB;
+  term_raw    text;
+  term_lower  text;
+  term_digits text;
+  all_reports jsonb;
 BEGIN
-    search_pattern := '%' || search_term || '%';
-    
-    SELECT COALESCE(jsonb_agg(r), '[]'::jsonb) INTO all_reports
-    FROM (
-        SELECT *
-        FROM public.decrypted_scammer_reports dr
-        WHERE
-            dr.impersonated_phone_number ILIKE search_pattern OR
-            dr.nickname ILIKE search_pattern OR
-            dr.description ILIKE search_pattern OR
-            dr.perpetrator_account ILIKE search_pattern OR
-            dr.perpetrator_id ILIKE search_pattern OR
-            EXISTS (SELECT 1 FROM jsonb_array_elements_text(dr.phone_numbers) AS phone WHERE phone ILIKE search_pattern) OR
-            EXISTS (SELECT 1 FROM jsonb_array_elements(dr.damage_accounts) AS o WHERE o->>'accountHolderName' ILIKE search_pattern OR o->>'accountNumber' ILIKE search_pattern OR o->>'bankName' ILIKE search_pattern)
-    ) r;
+  term_raw    := coalesce(trim(search_term), '');
+  term_lower  := lower(term_raw);
+  term_digits := regexp_replace(term_raw, '\D', '', 'g');
 
-    -- [핵심 수정 부분] COUNT(*)의 결과를 ::int로 형 변환하여 타입 불일치 문제를 해결합니다.
-    RETURN QUERY
-    SELECT
-        all_reports AS reports,
-        COALESCE(jsonb_array_length(all_reports), 0) AS total_count,
-        (SELECT COUNT(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz) WHERE x.created_at >= now() - interval '1 week') AS weekly_count,
-        (SELECT COUNT(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz) WHERE x.created_at >= now() - interval '1 month') AS monthly_count,
-        (SELECT COUNT(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz) WHERE x.created_at >= now() - interval '3 months') AS three_monthly_count;
+  SELECT coalesce(jsonb_agg(r), '[]'::jsonb) INTO all_reports
+  FROM (
+    SELECT *
+    FROM public.decrypted_scammer_reports dr
+    WHERE
+      (term_lower <> '' AND lower(coalesce(dr.nickname, '')) = term_lower)
+      OR
+      (term_digits <> '' AND (
+         regexp_replace(coalesce(dr.impersonated_phone_number, ''), '\D', '', 'g') = term_digits
+         OR EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(dr.phone_numbers) AS phone
+           WHERE regexp_replace(phone, '\D', '', 'g') = term_digits
+         )
+      ))
+      OR
+      (term_digits <> '' AND (
+         regexp_replace(coalesce(dr.perpetrator_account, ''), '\D', '', 'g') = term_digits
+         OR EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(dr.damage_accounts) AS o
+           WHERE regexp_replace(coalesce(o->>'accountNumber',''), '\D', '', 'g') = term_digits
+         )
+      ))
+  ) r;
+
+  RETURN QUERY
+  SELECT
+    all_reports AS reports,
+    coalesce(jsonb_array_length(all_reports), 0) AS total_count,
+    (SELECT count(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz)
+     WHERE x.created_at >= now() - interval '1 week'),
+    (SELECT count(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz)
+     WHERE x.created_at >= now() - interval '1 month'),
+    (SELECT count(*)::int FROM jsonb_to_recordset(all_reports) AS x(created_at timestamptz)
+     WHERE x.created_at >= now() - interval '3 months');
 END;
 $$;
 
 
 ALTER FUNCTION "public"."search_reports"("search_term" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."set_updated_at"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+
+
+ALTER FUNCTION "public"."set_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."trigger_send_chat_push_notification"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+begin
+  -- pg_net을 사용하여 Edge Function에 POST 요청
+  perform net.http_post(
+      url:='https://lmwtidqrmfclrbapmtdm.supabase.co/functions/v1/send-chat-push',
+      headers:='{
+        "Content-Type": "application/json",
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"
+      }'::jsonb,
+      body:=json_build_object('record', new)::jsonb
+  );
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."trigger_send_chat_push_notification"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_room_last_message_at"() RETURNS "trigger"
@@ -933,7 +1042,8 @@ CREATE TABLE IF NOT EXISTS "public"."arrest_news" (
     "is_pinned" boolean DEFAULT false,
     "pinned_at" timestamp with time zone,
     "image_urls" "text"[],
-    "category" "text"
+    "category" "text",
+    "views" bigint DEFAULT 0
 );
 
 
@@ -1139,22 +1249,6 @@ COMMENT ON COLUMN "public"."chat_rooms"."last_message_at" IS '채팅방의 마�
 
 
 
-CREATE TABLE IF NOT EXISTS "public"."comments" (
-    "id" bigint NOT NULL,
-    "post_id" bigint NOT NULL,
-    "board_type" "text" NOT NULL,
-    "content" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "parent_comment_id" bigint,
-    "user_id" bigint,
-    CONSTRAINT "content_length_check" CHECK (("char_length"("content") > 0))
-);
-
-
-ALTER TABLE "public"."comments" OWNER TO "postgres";
-
-
 ALTER TABLE "public"."comments" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME "public"."comments_id_seq"
     START WITH 1
@@ -1208,13 +1302,30 @@ CREATE OR REPLACE VIEW "public"."community_posts_with_author_profile" AS
     "p"."pinned_at",
     "p"."image_urls",
     "p"."link_url",
-    "u"."name" AS "author_name",
+    COALESCE("u"."nickname", "u"."name") AS "author_name",
     "p"."user_id" AS "author_auth_id"
    FROM ("public"."community_posts" "p"
      JOIN "public"."users" "u" ON (("p"."user_id" = "u"."auth_user_id")));
 
 
 ALTER TABLE "public"."community_posts_with_author_profile" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."device_push_tokens" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "token" "text" NOT NULL,
+    "platform" "text" NOT NULL,
+    "device_id" "text",
+    "app_version" "text",
+    "enabled" boolean DEFAULT true NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "last_seen" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "device_push_tokens_platform_check" CHECK (("platform" = ANY (ARRAY['ios'::"text", 'android'::"text", 'web'::"text"])))
+);
+
+
+ALTER TABLE "public"."device_push_tokens" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."help_answers" (
@@ -1241,6 +1352,38 @@ ALTER TABLE "public"."help_answers" ALTER COLUMN "id" ADD GENERATED BY DEFAULT A
     NO MAXVALUE
     CACHE 1
 );
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."help_desk_notices" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "author_id" "uuid",
+    "title" "text" NOT NULL,
+    "body" "text" NOT NULL,
+    "pinned" boolean DEFAULT false NOT NULL,
+    "pinned_at" timestamp with time zone,
+    "pinned_until" timestamp with time zone,
+    "is_published" boolean DEFAULT true NOT NULL
+);
+
+
+ALTER TABLE "public"."help_desk_notices" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."help_desk_notices_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "public"."help_desk_notices_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."help_desk_notices_id_seq" OWNED BY "public"."help_desk_notices"."id";
 
 
 
@@ -1338,7 +1481,8 @@ CREATE TABLE IF NOT EXISTS "public"."incident_photos" (
     "link_url" "text",
     "is_pinned" boolean DEFAULT false,
     "pinned_at" timestamp with time zone,
-    "image_urls" "text"[]
+    "image_urls" "text"[],
+    "views" bigint DEFAULT 0
 );
 
 
@@ -1368,12 +1512,17 @@ CREATE OR REPLACE VIEW "public"."incident_photos_with_author_profile" AS
     "p"."is_pinned",
     "p"."pinned_at",
     "p"."uploader_id",
-    "u"."name" AS "author_name"
+    "p"."views",
+    COALESCE("u"."nickname", "u"."name") AS "author_name"
    FROM ("public"."incident_photos" "p"
      LEFT JOIN "public"."users" "u" ON (("p"."uploader_id" = "u"."auth_user_id")));
 
 
 ALTER TABLE "public"."incident_photos_with_author_profile" OWNER TO "postgres";
+
+
+COMMENT ON VIEW "public"."incident_photos_with_author_profile" IS '사건 사진과 작성자 프로필 정보를 조인한 뷰 (조회수 포함)';
+
 
 
 CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
@@ -1520,6 +1669,35 @@ ALTER TABLE "public"."page_views" ALTER COLUMN "id" ADD GENERATED ALWAYS AS IDEN
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."partner_banners" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "title" "text",
+    "image_url" "text" NOT NULL,
+    "link_url" "text",
+    "sort" integer DEFAULT 0 NOT NULL,
+    "is_active" boolean DEFAULT true NOT NULL
+);
+
+
+ALTER TABLE "public"."partner_banners" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."partner_banners_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "public"."partner_banners_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."partner_banners_id_seq" OWNED BY "public"."partner_banners"."id";
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."phone_verifications" (
     "id" bigint NOT NULL,
     "phone" "text" NOT NULL,
@@ -1560,6 +1738,41 @@ ALTER TABLE "public"."phone_verifications" ALTER COLUMN "id" ADD GENERATED BY DE
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."push_jobs" (
+    "id" bigint NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "title" "text" NOT NULL,
+    "body" "text" NOT NULL,
+    "data" "jsonb",
+    "audience" "jsonb",
+    "target_user_ids" "uuid"[],
+    "dry_run" boolean DEFAULT false NOT NULL,
+    "scheduled_at" timestamp with time zone,
+    "status" "text" DEFAULT 'queued'::"text" NOT NULL,
+    "result" "jsonb",
+    CONSTRAINT "push_jobs_status_check" CHECK (("status" = ANY (ARRAY['queued'::"text", 'processing'::"text", 'done'::"text", 'failed'::"text"])))
+);
+
+
+ALTER TABLE "public"."push_jobs" OWNER TO "postgres";
+
+
+CREATE SEQUENCE IF NOT EXISTS "public"."push_jobs_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "public"."push_jobs_id_seq" OWNER TO "postgres";
+
+
+ALTER SEQUENCE "public"."push_jobs_id_seq" OWNED BY "public"."push_jobs"."id";
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."reviews" (
     "id" bigint NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -1573,6 +1786,7 @@ CREATE TABLE IF NOT EXISTS "public"."reviews" (
     "pinned_at" timestamp with time zone,
     "image_urls" "text"[],
     "category" "text",
+    "views" bigint DEFAULT 0,
     CONSTRAINT "reviews_rating_check" CHECK ((("rating" >= 1) AND ("rating" <= 5)))
 );
 
@@ -1601,7 +1815,8 @@ CREATE OR REPLACE VIEW "public"."reviews_with_author_profile" AS
     "r"."is_pinned",
     "r"."pinned_at",
     "r"."image_urls",
-    "u"."name" AS "author_name",
+    "r"."views",
+    COALESCE(NULLIF("u"."nickname", ''::"text"), "u"."name") AS "author_name",
     "r"."user_id" AS "author_auth_id"
    FROM ("public"."reviews" "r"
      JOIN "public"."users" "u" ON (("r"."user_id" = "u"."auth_user_id")));
@@ -1610,8 +1825,41 @@ CREATE OR REPLACE VIEW "public"."reviews_with_author_profile" AS
 ALTER TABLE "public"."reviews_with_author_profile" OWNER TO "postgres";
 
 
+COMMENT ON VIEW "public"."reviews_with_author_profile" IS '리뷰와 작성자 프로필 정보를 조인한 뷰 (조회수 포함)';
+
+
+
 ALTER TABLE "public"."scammer_reports" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME "public"."scammer_reports_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."search_logs" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "user_id" "uuid",
+    "search_term" "text",
+    "exact_match" boolean DEFAULT false NOT NULL,
+    "matched_by" "text",
+    CONSTRAINT "search_logs_matched_by_check" CHECK (("matched_by" = ANY (ARRAY['phone'::"text", 'account'::"text", 'nickname'::"text"])))
+);
+
+
+ALTER TABLE "public"."search_logs" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."search_logs" IS '홈 화면 사기 피해사례 검색 기록';
+
+
+
+ALTER TABLE "public"."search_logs" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."search_logs_id_seq"
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1656,6 +1904,18 @@ ALTER TABLE "public"."users" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENT
 
 
 
+ALTER TABLE ONLY "public"."help_desk_notices" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."help_desk_notices_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."partner_banners" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."partner_banners_id_seq"'::"regclass");
+
+
+
+ALTER TABLE ONLY "public"."push_jobs" ALTER COLUMN "id" SET DEFAULT "nextval"('"public"."push_jobs_id_seq"'::"regclass");
+
+
+
 ALTER TABLE ONLY "public"."arrest_news"
     ADD CONSTRAINT "arrest_news_pkey" PRIMARY KEY ("id");
 
@@ -1696,6 +1956,16 @@ ALTER TABLE ONLY "public"."community_posts"
 
 
 
+ALTER TABLE ONLY "public"."device_push_tokens"
+    ADD CONSTRAINT "device_push_tokens_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."device_push_tokens"
+    ADD CONSTRAINT "device_push_tokens_token_key" UNIQUE ("token");
+
+
+
 ALTER TABLE ONLY "public"."help_answers"
     ADD CONSTRAINT "help_answers_pkey" PRIMARY KEY ("id");
 
@@ -1703,6 +1973,11 @@ ALTER TABLE ONLY "public"."help_answers"
 
 ALTER TABLE ONLY "public"."help_answers"
     ADD CONSTRAINT "help_answers_question_id_key" UNIQUE ("question_id");
+
+
+
+ALTER TABLE ONLY "public"."help_desk_notices"
+    ADD CONSTRAINT "help_desk_notices_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1736,8 +2011,18 @@ ALTER TABLE ONLY "public"."page_views"
 
 
 
+ALTER TABLE ONLY "public"."partner_banners"
+    ADD CONSTRAINT "partner_banners_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."phone_verifications"
     ADD CONSTRAINT "phone_verifications_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."push_jobs"
+    ADD CONSTRAINT "push_jobs_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1748,6 +2033,11 @@ ALTER TABLE ONLY "public"."reviews"
 
 ALTER TABLE ONLY "public"."scammer_reports"
     ADD CONSTRAINT "scammer_reports_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."search_logs"
+    ADD CONSTRAINT "search_logs_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1788,6 +2078,22 @@ CREATE INDEX "idx_comments_user_id" ON "public"."comments" USING "btree" ("user_
 
 
 
+CREATE INDEX "idx_help_desk_notices_pinned" ON "public"."help_desk_notices" USING "btree" ("pinned", "pinned_at" DESC, "created_at" DESC);
+
+
+
+CREATE INDEX "idx_help_desk_notices_published" ON "public"."help_desk_notices" USING "btree" ("is_published");
+
+
+
+CREATE INDEX "idx_search_logs_exact_created" ON "public"."search_logs" USING "btree" ("exact_match", "created_at");
+
+
+
+CREATE INDEX "idx_users_auth_user_id" ON "public"."users" USING "btree" ("auth_user_id");
+
+
+
 CREATE OR REPLACE TRIGGER "handle_arrest_news_updated_at" BEFORE UPDATE ON "public"."arrest_news" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
 
 
@@ -1812,11 +2118,19 @@ CREATE OR REPLACE TRIGGER "on_incident_photos_updated" BEFORE UPDATE ON "public"
 
 
 
+CREATE OR REPLACE TRIGGER "on_new_chat_message_send_push" AFTER INSERT ON "public"."chat_messages" FOR EACH ROW EXECUTE FUNCTION "public"."trigger_send_chat_push_notification"();
+
+
+
 CREATE OR REPLACE TRIGGER "on_new_message_update_room_timestamp" AFTER INSERT ON "public"."chat_messages" FOR EACH ROW EXECUTE FUNCTION "public"."update_room_last_message_at"();
 
 
 
 CREATE OR REPLACE TRIGGER "on_reviews_updated" BEFORE UPDATE ON "public"."reviews" FOR EACH ROW EXECUTE FUNCTION "public"."handle_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_help_desk_notices_updated" BEFORE UPDATE ON "public"."help_desk_notices" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
 
 
 
@@ -1860,6 +2174,11 @@ ALTER TABLE ONLY "public"."community_posts"
 
 
 
+ALTER TABLE ONLY "public"."device_push_tokens"
+    ADD CONSTRAINT "device_push_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."help_answers"
     ADD CONSTRAINT "fk_admin" FOREIGN KEY ("admin_id") REFERENCES "public"."users"("auth_user_id") ON DELETE CASCADE;
 
@@ -1880,6 +2199,11 @@ ALTER TABLE ONLY "public"."help_questions"
 
 
 
+ALTER TABLE ONLY "public"."help_desk_notices"
+    ADD CONSTRAINT "help_desk_notices_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
 ALTER TABLE ONLY "public"."incident_photos"
     ADD CONSTRAINT "incident_photos_uploader_id_fkey" FOREIGN KEY ("uploader_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
@@ -1895,6 +2219,11 @@ ALTER TABLE ONLY "public"."page_views"
 
 
 
+ALTER TABLE ONLY "public"."push_jobs"
+    ADD CONSTRAINT "push_jobs_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
 ALTER TABLE ONLY "public"."reviews"
     ADD CONSTRAINT "reviews_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
 
@@ -1907,6 +2236,11 @@ ALTER TABLE ONLY "public"."scammer_reports"
 
 ALTER TABLE ONLY "public"."scammer_reports"
     ADD CONSTRAINT "scammer_reports_reporter_id_fkey" FOREIGN KEY ("reporter_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."search_logs"
+    ADD CONSTRAINT "search_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
@@ -1956,14 +2290,6 @@ CREATE POLICY "Allow all authenticated users to view all answers" ON "public"."h
 
 
 
-CREATE POLICY "Allow all users to view comments" ON "public"."comments" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "Allow authenticated users to insert comments" ON "public"."comments" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
-
-
-
 CREATE POLICY "Allow authenticated users to insert page_views" ON "public"."page_views" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
@@ -1980,15 +2306,31 @@ CREATE POLICY "Allow read based on job type for scammer_reports" ON "public"."sc
 
 
 
-CREATE POLICY "Allow users to delete their own comments" ON "public"."comments" FOR DELETE USING (("public"."get_current_user_id"() = "user_id"));
+CREATE POLICY "Allow update for authenticated users on arrest_news" ON "public"."arrest_news" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Allow update for authenticated users on community_posts" ON "public"."community_posts" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Allow update for authenticated users on incident_photos" ON "public"."incident_photos" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Allow update for authenticated users on new_crime_cases" ON "public"."new_crime_cases" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Allow update for authenticated users on notices" ON "public"."notices" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Allow update for authenticated users on reviews" ON "public"."reviews" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
 
 
 
 CREATE POLICY "Allow users to insert their own questions" ON "public"."help_questions" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Allow users to update their own comments" ON "public"."comments" FOR UPDATE USING (("public"."get_current_user_id"() = "user_id"));
 
 
 
@@ -2004,6 +2346,14 @@ CREATE POLICY "Authenticated users can create reviews." ON "public"."reviews" FO
 
 
 
+CREATE POLICY "Authenticated users can insert arrest news" ON "public"."arrest_news" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "Authenticated users can insert their own photos" ON "public"."incident_photos" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "uploader_id"));
+
+
+
 CREATE POLICY "Authenticated users can list other users for chat" ON "public"."users" FOR SELECT TO "authenticated" USING (true);
 
 
@@ -2012,13 +2362,29 @@ CREATE POLICY "Deny ALL access" ON "public"."phone_verifications" USING (false) 
 
 
 
+CREATE POLICY "Enable insert for authenticated users only" ON "public"."search_logs" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Enable read access for all authenticated users" ON "public"."help_questions" FOR SELECT TO "authenticated" USING (true);
+
+
+
+CREATE POLICY "Enable read access for all users" ON "public"."search_logs" FOR SELECT USING (true);
 
 
 
 CREATE POLICY "Enable select for users based on question ownership" ON "public"."help_answers" FOR SELECT USING ((EXISTS ( SELECT 1
    FROM "public"."help_questions"
   WHERE (("help_questions"."id" = "help_answers"."question_id") AND ("help_questions"."user_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "Public can read arrest news" ON "public"."arrest_news" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Public can read incident photos" ON "public"."incident_photos" FOR SELECT USING (true);
 
 
 
@@ -2142,13 +2508,79 @@ ALTER TABLE "public"."chat_rooms" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."comments" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "comments_delete_own" ON "public"."comments" FOR DELETE TO "authenticated" USING (("user_id" = ( SELECT "u"."id"
+   FROM "public"."users" "u"
+  WHERE ("u"."auth_user_id" = "auth"."uid"())
+ LIMIT 1)));
+
+
+
+CREATE POLICY "comments_insert_own" ON "public"."comments" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = ( SELECT "u"."id"
+   FROM "public"."users" "u"
+  WHERE ("u"."auth_user_id" = "auth"."uid"())
+ LIMIT 1)));
+
+
+
+CREATE POLICY "comments_select_all" ON "public"."comments" FOR SELECT TO "authenticated", "anon" USING (true);
+
+
+
+CREATE POLICY "comments_update_own" ON "public"."comments" FOR UPDATE TO "authenticated" USING (("user_id" = ( SELECT "u"."id"
+   FROM "public"."users" "u"
+  WHERE ("u"."auth_user_id" = "auth"."uid"())
+ LIMIT 1))) WITH CHECK (("user_id" = ( SELECT "u"."id"
+   FROM "public"."users" "u"
+  WHERE ("u"."auth_user_id" = "auth"."uid"())
+ LIMIT 1)));
+
+
+
 ALTER TABLE "public"."community_posts" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."device_push_tokens" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "device_tokens_delete" ON "public"."device_push_tokens" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "device_tokens_insert" ON "public"."device_push_tokens" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "device_tokens_update" ON "public"."device_push_tokens" FOR UPDATE USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "dpt insert own (uuid)" ON "public"."device_push_tokens" FOR INSERT WITH CHECK (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "dpt select own (uuid)" ON "public"."device_push_tokens" FOR SELECT USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "dpt update own (uuid)" ON "public"."device_push_tokens" FOR UPDATE USING (("user_id" = "auth"."uid"()));
+
 
 
 ALTER TABLE "public"."help_answers" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."help_desk_notices" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "help_desk_notices_read_published" ON "public"."help_desk_notices" FOR SELECT TO "authenticated", "anon" USING ((("is_published" = true) AND (("pinned_until" IS NULL) OR ("pinned_until" >= "now"()))));
+
+
+
 ALTER TABLE "public"."help_questions" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "help_questions_update_own_unanswered" ON "public"."help_questions" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND ("is_answered" = false))) WITH CHECK ((("user_id" = "auth"."uid"()) AND ("is_answered" = false)));
+
 
 
 ALTER TABLE "public"."incident_photos" ENABLE ROW LEVEL SECURITY;
@@ -2163,13 +2595,30 @@ ALTER TABLE "public"."notices" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."page_views" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."partner_banners" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "partner_banners_select_active" ON "public"."partner_banners" FOR SELECT TO "authenticated", "anon" USING (("is_active" = true));
+
+
+
 ALTER TABLE "public"."phone_verifications" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."push_jobs" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "push_jobs_admin_all" ON "public"."push_jobs" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
+
 
 
 ALTER TABLE "public"."reviews" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."scammer_reports" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."search_logs" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."user_login_logs" ENABLE ROW LEVEL SECURITY;
@@ -2382,6 +2831,19 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."comments" TO "anon";
+GRANT ALL ON TABLE "public"."comments" TO "authenticated";
+GRANT ALL ON TABLE "public"."comments" TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."add_comment"("_post_id" bigint, "_board_type" "text", "_content" "text", "_parent_comment_id" bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."add_comment"("_post_id" bigint, "_board_type" "text", "_content" "text", "_parent_comment_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."add_comment"("_post_id" bigint, "_board_type" "text", "_content" "text", "_parent_comment_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."add_comment"("_post_id" bigint, "_board_type" "text", "_content" "text", "_parent_comment_id" bigint) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") TO "anon";
 GRANT ALL ON FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."decrypt_secret"("encrypted_data" "bytea") TO "service_role";
@@ -2490,15 +2952,15 @@ GRANT ALL ON FUNCTION "public"."handle_user_login"() TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) TO "anon";
-GRANT ALL ON FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) TO "authenticated";
-GRANT ALL ON FUNCTION "public"."increment_new_crime_case_view"("case_id_input" bigint) TO "service_role";
+GRANT ALL ON FUNCTION "public"."increment_view_count"("table_name_param" "text", "post_id_param" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."increment_view_count"("table_name_param" "text", "post_id_param" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."increment_view_count"("table_name_param" "text", "post_id_param" bigint) TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."increment_post_view"("post_id_input" bigint) TO "anon";
-GRANT ALL ON FUNCTION "public"."increment_post_view"("post_id_input" bigint) TO "authenticated";
-GRANT ALL ON FUNCTION "public"."increment_post_view"("post_id_input" bigint) TO "service_role";
+GRANT ALL ON FUNCTION "public"."is_admin"() TO "anon";
+GRANT ALL ON FUNCTION "public"."is_admin"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."is_admin"() TO "service_role";
 
 
 
@@ -2541,6 +3003,18 @@ GRANT ALL ON FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible
 GRANT ALL ON FUNCTION "public"."search_reports"("search_term" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."search_reports"("search_term" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."search_reports"("search_term" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "anon";
+GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."trigger_send_chat_push_notification"() TO "anon";
+GRANT ALL ON FUNCTION "public"."trigger_send_chat_push_notification"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."trigger_send_chat_push_notification"() TO "service_role";
 
 
 
@@ -2659,12 +3133,6 @@ GRANT ALL ON TABLE "public"."chat_rooms" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."comments" TO "anon";
-GRANT ALL ON TABLE "public"."comments" TO "authenticated";
-GRANT ALL ON TABLE "public"."comments" TO "service_role";
-
-
-
 GRANT ALL ON SEQUENCE "public"."comments_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."comments_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."comments_id_seq" TO "service_role";
@@ -2689,6 +3157,12 @@ GRANT ALL ON TABLE "public"."community_posts_with_author_profile" TO "service_ro
 
 
 
+GRANT ALL ON TABLE "public"."device_push_tokens" TO "anon";
+GRANT ALL ON TABLE "public"."device_push_tokens" TO "authenticated";
+GRANT ALL ON TABLE "public"."device_push_tokens" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."help_answers" TO "anon";
 GRANT ALL ON TABLE "public"."help_answers" TO "authenticated";
 GRANT ALL ON TABLE "public"."help_answers" TO "service_role";
@@ -2698,6 +3172,18 @@ GRANT ALL ON TABLE "public"."help_answers" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."help_answers_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."help_answers_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."help_answers_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."help_desk_notices" TO "anon";
+GRANT ALL ON TABLE "public"."help_desk_notices" TO "authenticated";
+GRANT ALL ON TABLE "public"."help_desk_notices" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."help_desk_notices_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."help_desk_notices_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."help_desk_notices_id_seq" TO "service_role";
 
 
 
@@ -2779,6 +3265,18 @@ GRANT ALL ON SEQUENCE "public"."page_views_id_seq" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."partner_banners" TO "anon";
+GRANT ALL ON TABLE "public"."partner_banners" TO "authenticated";
+GRANT ALL ON TABLE "public"."partner_banners" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."partner_banners_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."partner_banners_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."partner_banners_id_seq" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."phone_verifications" TO "anon";
 GRANT ALL ON TABLE "public"."phone_verifications" TO "authenticated";
 GRANT ALL ON TABLE "public"."phone_verifications" TO "service_role";
@@ -2788,6 +3286,18 @@ GRANT ALL ON TABLE "public"."phone_verifications" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."phone_verifications_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."phone_verifications_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."phone_verifications_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."push_jobs" TO "anon";
+GRANT ALL ON TABLE "public"."push_jobs" TO "authenticated";
+GRANT ALL ON TABLE "public"."push_jobs" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."push_jobs_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."push_jobs_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."push_jobs_id_seq" TO "service_role";
 
 
 
@@ -2812,6 +3322,18 @@ GRANT ALL ON TABLE "public"."reviews_with_author_profile" TO "service_role";
 GRANT ALL ON SEQUENCE "public"."scammer_reports_id_seq" TO "anon";
 GRANT ALL ON SEQUENCE "public"."scammer_reports_id_seq" TO "authenticated";
 GRANT ALL ON SEQUENCE "public"."scammer_reports_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."search_logs" TO "anon";
+GRANT ALL ON TABLE "public"."search_logs" TO "authenticated";
+GRANT ALL ON TABLE "public"."search_logs" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."search_logs_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."search_logs_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."search_logs_id_seq" TO "service_role";
 
 
 
