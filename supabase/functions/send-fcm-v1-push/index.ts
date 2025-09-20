@@ -1,3 +1,5 @@
+// supabase/functions/send-fcm-v1-push/index.ts
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { create } from 'https://deno.land/x/djwt@v2.8/mod.ts';
 import { crypto } from 'https://deno.land/std@0.177.0/crypto/mod.ts';
@@ -93,7 +95,7 @@ Deno.serve(async req => {
 
   const allDeviceTokens = [];
 
-  // [핵심 수정] 사용자 ID 목록을 100명씩 나누어 처리하는 반복문
+  // 사용자 ID 목록을 100명씩 나누어 처리하는 반복문
   for (let i = 0; i < user_ids.length; i += CHUNK_SIZE) {
     const chunk = user_ids.slice(i, i + CHUNK_SIZE);
 
@@ -108,7 +110,6 @@ Deno.serve(async req => {
         `Error fetching push tokens for chunk ${i / CHUNK_SIZE}:`,
         error.message,
       );
-      // 한 청크가 실패해도 계속 진행
       continue;
     }
 
@@ -168,7 +169,7 @@ Deno.serve(async req => {
     console.log(
       'FCM Send Results:',
       JSON.stringify(fcmResults.slice(0, 5), null, 2),
-    ); // 너무 길어지지 않게 일부만 로깅
+    );
 
     if (deadTokens.length > 0) {
       await supabaseAdmin
