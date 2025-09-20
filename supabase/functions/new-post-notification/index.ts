@@ -1,3 +1,5 @@
+// supabase/functions/new-post-notification/index.ts
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // RLS를 확실히 우회하기 위한 Supabase 클라이언트 생성
@@ -41,12 +43,14 @@ Deno.serve(async req => {
     return new Response(null, { status: 200 });
   }
 
+  // 게시글 작성자가 관리자인지 확인
   const { data: authorProfile } = await supabaseAdmin
     .from('users')
     .select('is_admin')
     .eq('auth_user_id', post.user_id)
     .single();
 
+  // 관리자가 작성한 글일 경우에만 모든 사용자에게 알림 발송
   if (authorProfile && authorProfile.is_admin === true) {
     const { data: users } = await supabaseAdmin
       .from('users')
@@ -58,7 +62,7 @@ Deno.serve(async req => {
 
       const invocations = [];
 
-      // [핵심 수정] 사용자 ID 목록을 100명씩 나누어 invoke "명령"만 배열에 담습니다.
+      // 사용자 ID 목록을 100명씩 나누어 invoke
       for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
         const chunk = userIds.slice(i, i + CHUNK_SIZE);
 
@@ -76,9 +80,7 @@ Deno.serve(async req => {
         invocations.push(invokePromise);
       }
 
-      // [핵심 수정] 모든 invoke 명령을 await 없이 동시에 실행시킵니다.
-      // 이렇게 하면 이 함수는 즉시 종료되고, 호출된 함수들이 각자 알아서 작업을 완료합니다.
-      await Promise.all(invocations);
+      await Promise.allSettled(invocations);
       console.log(
         `Successfully invoked ${invocations.length} push notification jobs.`,
       );

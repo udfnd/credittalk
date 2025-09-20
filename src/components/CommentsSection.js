@@ -1,4 +1,5 @@
 // src/components/CommentsSection.js
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -19,35 +20,48 @@ import { useNavigation } from '@react-navigation/native';
 import { AvoidSoftInputView } from 'react-native-avoid-softinput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
-  const [replyText, setReplyText] = useState('');
+// --- 수정/대댓글 공용 입력 컴포넌트 ---
+const CommentInput = ({
+  initialContent = '',
+  placeholder,
+  onCancel,
+  onSubmit,
+  loading = false,
+  isEdit = false,
+}) => {
+  const [text, setText] = useState(initialContent);
   const disabled = loading;
 
   return (
     <AvoidSoftInputView avoidOffset={8}>
-      <View style={styles.replyInputContainer}>
+      <View
+        style={isEdit ? styles.editInputContainer : styles.replyInputContainer}>
         <TextInput
           style={[styles.replyInput, disabled && { opacity: 0.6 }]}
-          placeholder="대댓글을 입력하세요..."
+          placeholder={placeholder}
           placeholderTextColor="#999"
-          value={replyText}
-          onChangeText={setReplyText}
+          value={text}
+          onChangeText={setText}
           multiline
           autoFocus
           editable={!disabled}
-          // 중요: 키보드 그대로 둠 (여기서 Keyboard.dismiss 안 함)
         />
         <View style={styles.replyButtonContainer}>
           <TouchableOpacity
-            style={[styles.replyActionButton, disabled && { opacity: 0.6 }]}
-            // ✅ onPress 대신 onPressIn 으로 즉시 처리 (키보드가 떠 있어도 동작)
-            onPressIn={() => onAddReply(replyText)}
+            style={[
+              styles.replyActionButton,
+              styles.saveButton,
+              disabled && { opacity: 0.6 },
+            ]}
+            onPressIn={() => onSubmit(text)}
             disabled={disabled}
             delayPressIn={0}>
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.replyActionButtonText}>등록</Text>
+              <Text style={styles.replyActionButtonText}>
+                {isEdit ? '저장' : '등록'}
+              </Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -66,39 +80,30 @@ const ReplyInput = ({ onAddReply, onCancel, loading = false }) => {
   );
 };
 
+// --- 개별 댓글 아이템 컴포넌트 ---
 const CommentItem = ({
   comment,
-  currentProfileId,
+  profile,
+  // 함수 Props
   onReplyPress,
-  replyingToId,
+  onDelete,
+  onEditSubmit,
   onReplySubmit,
+  // 상태 Props
+  editingComment,
+  setEditingComment,
+  replyingToId,
   submittingReplyId,
-  isReply = false,
 }) => {
-  const handleDelete = async () => {
-    Alert.alert(
-      '댓글 삭제',
-      '정말로 이 댓글을 삭제하시겠습니까? 대댓글도 모두 삭제됩니다.',
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase
-              .from('comments')
-              .delete()
-              .eq('id', comment.id);
-            if (error)
-              Alert.alert('오류', '댓글 삭제에 실패했습니다: ' + error.message);
-          },
-        },
-      ],
-    );
-  };
+  const isAuthor = profile && comment.user_id === profile.id;
+  const isEditingThis = editingComment?.id === comment.id;
+  const isReplyingToThis = replyingToId === comment.id;
 
-  const replyOpenForThis = replyingToId === comment.id;
-  const isSubmittingThisReply = submittingReplyId === comment.id;
+  const handleEdit = async newContent => {
+    // onEditSubmit은 비동기일 수 있으므로 await
+    await onEditSubmit(comment.id, newContent);
+    setEditingComment(null); // 수정 완료 후 상태 초기화
+  };
 
   return (
     <View style={styles.commentWrapper}>
@@ -107,15 +112,34 @@ const CommentItem = ({
           <Text style={styles.commentAuthor}>
             {comment.users?.nickname || '탈퇴한 사용자'}
           </Text>
-          {comment.user_id === currentProfileId && (
-            <TouchableOpacity
-              onPress={handleDelete}
-              style={styles.deleteButton}>
-              <Icon name="close" size={16} color="#888" />
-            </TouchableOpacity>
-          )}
+          {isAuthor &&
+            !isEditingThis && ( // 수정 중일 때는 아이콘 숨김
+              <View style={styles.authorActions}>
+                <TouchableOpacity
+                  onPress={() => setEditingComment(comment)}
+                  style={{ marginRight: 10 }}>
+                  <Icon name="pencil" size={16} color="#888" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => onDelete(comment.id)}>
+                  <Icon name="delete-outline" size={16} color="#888" />
+                </TouchableOpacity>
+              </View>
+            )}
         </View>
-        <Text style={styles.commentContent}>{comment.content}</Text>
+
+        {isEditingThis ? (
+          <CommentInput
+            initialContent={editingComment.content}
+            placeholder="댓글 수정..."
+            onCancel={() => setEditingComment(null)}
+            onSubmit={handleEdit}
+            loading={submittingReplyId === comment.id} // 로딩 상태 재활용
+            isEdit
+          />
+        ) : (
+          <Text style={styles.commentContent}>{comment.content}</Text>
+        )}
+
         <View style={styles.commentFooter}>
           <Text style={styles.commentDate}>
             {formatDistanceToNow(parseISO(comment.created_at), {
@@ -123,19 +147,18 @@ const CommentItem = ({
               locale: ko,
             })}
           </Text>
-          {!isReply && (
-            <TouchableOpacity onPress={() => onReplyPress(comment.id)}>
-              <Text style={styles.replyButtonText}>답글 달기</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={() => onReplyPress(comment.id)}>
+            <Text style={styles.replyButtonText}>답글 달기</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {replyOpenForThis && (
-        <ReplyInput
-          loading={isSubmittingThisReply}
-          onAddReply={replyText => onReplySubmit(replyText, comment.id)}
+      {isReplyingToThis && (
+        <CommentInput
+          placeholder={`@${comment.users?.nickname || '...'}님에게 답글`}
           onCancel={() => onReplyPress(null)}
+          onSubmit={replyText => onReplySubmit(replyText, comment.id)}
+          loading={submittingReplyId === comment.id}
         />
       )}
 
@@ -145,12 +168,15 @@ const CommentItem = ({
             <CommentItem
               key={reply.id}
               comment={reply}
-              currentProfileId={currentProfileId}
+              profile={profile}
               onReplyPress={onReplyPress}
+              onDelete={onDelete}
+              onEditSubmit={onEditSubmit}
+              editingComment={editingComment}
+              setEditingComment={setEditingComment}
               replyingToId={replyingToId}
-              onReplySubmit={onReplySubmit}
               submittingReplyId={submittingReplyId}
-              isReply
+              onReplySubmit={onReplySubmit}
             />
           ))}
         </View>
@@ -159,6 +185,7 @@ const CommentItem = ({
   );
 };
 
+// --- 메인 컴포넌트 ---
 const CommentsSection = ({ postId, boardType }) => {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
@@ -167,20 +194,21 @@ const CommentsSection = ({ postId, boardType }) => {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // 수정/답글 상태
   const [replyingToId, setReplyingToId] = useState(null);
+  const [editingComment, setEditingComment] = useState(null); // 수정 중인 댓글 객체
 
   // 중복 제출 방지
   const [submittingRoot, setSubmittingRoot] = useState(false);
   const [submittingReplyId, setSubmittingReplyId] = useState(null);
-
-  // 드물게 첫 탭이 캔슬되는 단말용 2중 가드
   const guardingRef = useRef(false);
 
   const fetchComments = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('comments')
-        .select('*, users(nickname)')
+        .select('*, users(id, nickname)') // users 테이블의 id도 가져옵니다.
         .eq('post_id', postId)
         .eq('board_type', boardType)
         .order('created_at', { ascending: true });
@@ -201,11 +229,10 @@ const CommentsSection = ({ postId, boardType }) => {
           roots.push(c);
         }
       });
-
       setComments(roots);
     } catch (error) {
       console.error('Error fetching comments:', error.message);
-      Alert.alert('오류', '댓글을 불러오는 데 실패했습니다: ' + error.message);
+      Alert.alert('오류', '댓글을 불러오는 데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -225,24 +252,29 @@ const CommentsSection = ({ postId, boardType }) => {
           table: 'comments',
           filter: `post_id=eq.${postId}`,
         },
-        () => fetchComments(),
+        () => {
+          // 실시간 업데이트 시 수정/답글 상태가 풀리지 않도록 방지
+          if (!editingComment && !replyingToId) {
+            fetchComments();
+          }
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [postId, boardType, fetchComments]);
+  }, [postId, boardType, fetchComments, editingComment, replyingToId]);
 
   const handleAddComment = async (content, parentId = null) => {
     if (!user) {
-      Alert.alert('로그인 필요', '댓글을 작성하려면 로그인이 필요합니다.');
-      return;
+      return Alert.alert(
+        '로그인 필요',
+        '댓글을 작성하려면 로그인이 필요합니다.',
+      );
     }
     const trimmed = (content || '').trim();
     if (!trimmed) return;
-
-    // 중복 제출 가드
     if (submittingRoot || submittingReplyId !== null || guardingRef.current)
       return;
     guardingRef.current = true;
@@ -250,27 +282,21 @@ const CommentsSection = ({ postId, boardType }) => {
     else setSubmittingRoot(true);
 
     try {
-      // ❌ 여기서 Keyboard.dismiss() 호출하지 않음 (이벤트 캔슬 방지)
-      // ✅ RPC: user_id는 DB 함수가 auth.uid()로 매핑
       const { error } = await supabase.rpc('add_comment', {
         _post_id: postId,
         _board_type: boardType,
         _content: trimmed,
-        _parent_comment_id: parentId, // null 가능
+        _parent_comment_id: parentId,
       });
 
-      if (error) {
-        Alert.alert('오류', '댓글 등록에 실패했습니다: ' + error.message);
-        return;
-      }
+      if (error) throw error;
 
-      // 입력 초기화 & 즉시 새로고침
       if (parentId) setReplyingToId(null);
       else setNewComment('');
-      await fetchComments();
 
-      // (선택) 성공 후에만 키보드 닫기 원하면 아래 주석 해제
-      // Keyboard.dismiss();
+      await fetchComments(); // RPC 호출 후 즉시 UI 업데이트
+    } catch (error) {
+      Alert.alert('오류', '댓글 등록에 실패했습니다: ' + error.message);
     } finally {
       if (parentId) setSubmittingReplyId(null);
       else setSubmittingRoot(false);
@@ -278,11 +304,47 @@ const CommentsSection = ({ postId, boardType }) => {
     }
   };
 
-  // ✅ 버튼은 onPressIn에서 바로 전송
-  const onPressSendRoot = () => {
-    if (!submittingRoot) {
-      handleAddComment(newComment);
+  const handleUpdateComment = async (commentId, newContent) => {
+    const trimmed = (newContent || '').trim();
+    if (!trimmed) return;
+
+    setSubmittingReplyId(commentId); // 로딩 인디케이터를 위해 ID를 공유
+
+    const { error } = await supabase.rpc('update_comment', {
+      p_comment_id: commentId,
+      p_new_content: trimmed,
+    });
+
+    setSubmittingReplyId(null);
+    if (error) {
+      Alert.alert('오류', '댓글 수정에 실패했습니다: ' + error.message);
+    } else {
+      await fetchComments(); // 수정 성공 시 목록 새로고침
     }
+  };
+
+  const handleDeleteComment = commentId => {
+    Alert.alert(
+      '댓글 삭제',
+      '정말로 이 댓글을 삭제하시겠습니까? 대댓글도 모두 삭제됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.rpc('delete_comment', {
+              p_comment_id: commentId,
+            });
+            if (error) {
+              Alert.alert('오류', '댓글 삭제에 실패했습니다: ' + error.message);
+            } else {
+              await fetchComments(); // 삭제 성공 시 목록 새로고침
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -300,11 +362,15 @@ const CommentsSection = ({ postId, boardType }) => {
           renderItem={({ item }) => (
             <CommentItem
               comment={item}
-              currentProfileId={profile?.id}
+              profile={profile}
               onReplyPress={setReplyingToId}
+              onDelete={handleDeleteComment}
+              onEditSubmit={handleUpdateComment}
+              editingComment={editingComment}
+              setEditingComment={setEditingComment}
               replyingToId={replyingToId}
-              onReplySubmit={handleAddComment}
               submittingReplyId={submittingReplyId}
+              onReplySubmit={handleAddComment}
             />
           )}
           ListEmptyComponent={
@@ -312,10 +378,8 @@ const CommentsSection = ({ postId, boardType }) => {
               가장 먼저 댓글을 남겨보세요.
             </Text>
           }
-          keyboardShouldPersistTaps="always" // ⭐️ 중요
-          scrollEnabled={false}
-          nestedScrollEnabled={false}
-          removeClippedSubviews={false}
+          keyboardShouldPersistTaps="always"
+          scrollEnabled={false} // 👈 이 부분이 핵심입니다.
         />
       )}
 
@@ -331,15 +395,11 @@ const CommentsSection = ({ postId, boardType }) => {
               value={newComment}
               onChangeText={setNewComment}
               multiline
-              blurOnSubmit={false}
               editable={!submittingRoot}
-              // returnKeyType="send"  // 원하면 키보드 '보내기' 표시
-              // onSubmitEditing={() => handleAddComment(newComment)} // (안드로이드 multiline에서는 잘 안옴)
             />
             <TouchableOpacity
               style={[styles.submitButton, submittingRoot && { opacity: 0.7 }]}
-              // ✅ onPress 대신 onPressIn
-              onPressIn={onPressSendRoot}
+              onPressIn={() => handleAddComment(newComment)}
               disabled={submittingRoot}
               delayPressIn={0}>
               {submittingRoot ? (
@@ -365,7 +425,6 @@ const CommentsSection = ({ postId, boardType }) => {
 };
 
 const styles = StyleSheet.create({
-  // 섹션 컨테이너
   container: {
     padding: 15,
     marginTop: 10,
@@ -380,7 +439,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-
   commentWrapper: {},
   commentContainer: {
     paddingVertical: 15,
@@ -394,6 +452,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   commentAuthor: { fontWeight: 'bold', fontSize: 15, color: '#444' },
+  authorActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   commentContent: { fontSize: 14, lineHeight: 21, color: '#555' },
   commentFooter: {
     flexDirection: 'row',
@@ -403,18 +465,21 @@ const styles = StyleSheet.create({
   },
   commentDate: { fontSize: 12, color: '#999' },
   replyButtonText: { fontSize: 12, color: '#3d5afe', fontWeight: 'bold' },
-  deleteButton: { padding: 5 },
   repliesContainer: {
     marginLeft: 20,
     borderLeftWidth: 2,
     borderLeftColor: '#e9ecef',
     paddingLeft: 10,
   },
-
-  // 대댓글 입력
   replyInputContainer: {
     marginVertical: 10,
     marginLeft: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+  },
+  editInputContainer: {
+    marginVertical: 10,
     backgroundColor: '#f8f9fa',
     borderRadius: 8,
     padding: 10,
@@ -435,19 +500,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 15,
+  },
+  saveButton: {
     backgroundColor: '#3d5afe',
   },
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-
   noCommentsText: {
     textAlign: 'center',
     color: '#aaa',
     marginVertical: 25,
     fontSize: 14,
   },
-
-  // 입력창
   footerAvoidWrapper: {},
   footerInputBar: {
     flexDirection: 'row',
@@ -476,8 +540,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginLeft: 8,
   },
-
-  // 로그인 유도
   loginPrompt: {
     justifyContent: 'center',
     alignItems: 'center',
