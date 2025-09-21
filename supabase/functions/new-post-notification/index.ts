@@ -24,7 +24,6 @@ const SCREEN_MAP = {
   reviews: 'ReviewDetail',
 };
 
-// ✅ 각 테이블에 맞는 ID 파라미터 이름을 매핑하는 객체 추가
 const ID_PARAM_MAP = {
   community_posts: 'postId',
   arrest_news: 'newsId',
@@ -86,15 +85,17 @@ Deno.serve(async req => {
     if (users && users.length > 0) {
       const userIds = users.map(u => u.auth_user_id).filter(Boolean);
       const screen = SCREEN_MAP[table] || 'Home';
-
       const idParamKey = ID_PARAM_MAP[table] || 'id';
-
       const invocations = [];
 
       for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
         const chunk = userIds.slice(i, i + CHUNK_SIZE);
 
-        const params = { [idParamKey]: post.id };
+        // ✅ [수정] 데이터를 플랫한 구조로 변경하여 직관성을 높이고 클라이언트의 파싱 부담을 줄입니다.
+        const data = {
+          screen,
+          [idParamKey]: String(post.id), // FCM 표준에 맞게 ID를 문자열로 변환합니다.
+        };
 
         const invokePromise = supabaseAdmin.functions.invoke(
           'send-fcm-v1-push',
@@ -103,7 +104,7 @@ Deno.serve(async req => {
               user_ids: chunk,
               title: '새로운 글이 등록되었습니다',
               body: `${postTitle}`,
-              data: { screen, params: JSON.stringify(params) }, // 수정된 부분
+              data, // ✅ 수정된 데이터 객체를 사용합니다.
             },
           },
         );
