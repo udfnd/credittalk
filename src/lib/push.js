@@ -9,10 +9,8 @@ import notifee, {
 } from '@notifee/react-native';
 import { supabase } from '../lib/supabaseClient';
 
-// 항상 HIGH로 설정된 알림 채널
 export const CHANNEL_ID = 'push_default_v2';
 
-/** 안드로이드 알림 채널 생성(최초 1회, 이미 있으면 no-op) */
 export async function ensureNotificationChannel() {
   if (Platform.OS !== 'android') return;
   try {
@@ -27,11 +25,9 @@ export async function ensureNotificationChannel() {
   }
 }
 
-/** Android 13+ 알림 권한 요청 */
 export const requestNotificationPermissionAndroid = async () => {
   if (Platform.OS === 'android') {
     try {
-      // Android 13 (TIRAMISU) 이상 버전 대응
       const result = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
       );
@@ -46,10 +42,6 @@ export const requestNotificationPermissionAndroid = async () => {
   }
 };
 
-/**
- * 로그인 성공 후, 기기의 최신 FCM 토큰을 가져와 Supabase DB에 등록(재할당)합니다.
- * @param {string} userId - 현재 로그인한 사용자의 auth.users.id (UUID)
- */
 export const updatePushTokenOnLogin = async userId => {
   if (!userId) {
     console.error('[Push] User ID is missing, cannot update push token.');
@@ -57,7 +49,6 @@ export const updatePushTokenOnLogin = async userId => {
   }
 
   try {
-    // iOS에서는 토큰을 얻기 전 권한 요청이 선행되어야 함
     if (Platform.OS === 'ios') {
       const authStatus = await messaging().requestPermission();
       const enabled =
@@ -81,14 +72,12 @@ export const updatePushTokenOnLogin = async userId => {
 
     console.log('[Push] Fetched FCM Token:', fcmToken);
 
-    // ✅ RLS 문제를 해결하기 위해 upsert 대신 RPC 함수를 호출합니다.
     const { error } = await supabase.rpc('register_push_token', {
       fcm_token: fcmToken,
       p_platform: Platform.OS,
     });
 
     if (error) {
-      // RPC 함수가 DB에 없는 경우 개발자에게 친절한 에러 메시지를 표시합니다.
       if (error.code === '42883') {
         console.error(
           '[Push] RPC function "register_push_token" not found. Please create it in your Supabase project using the provided SQL script.',
@@ -110,18 +99,12 @@ export const updatePushTokenOnLogin = async userId => {
   }
 };
 
-/**
- * 앱 사용 중 FCM 토큰이 갱신될 때를 대비한 리스너입니다.
- * @param {string} userId - 현재 로그인한 사용자의 auth.users.id (UUID)
- * @returns {() => void} Unsubscribe 함수
- */
 export const setupTokenRefreshListener = userId => {
   if (!userId) return () => {};
 
   return messaging().onTokenRefresh(async newFcmToken => {
     console.log('[Push] FCM token has been refreshed:', newFcmToken);
 
-    // ✅ 토큰 갱신 시에도 RPC 함수를 사용하여 안전하게 등록합니다.
     const { error } = await supabase.rpc('register_push_token', {
       fcm_token: newFcmToken,
       p_platform: Platform.OS,
@@ -135,16 +118,6 @@ export const setupTokenRefreshListener = userId => {
     }
   });
 };
-
-// --- 이하 함수들은 기존 로직을 유지합니다 ---
-
-function safeParse(jsonish) {
-  try {
-    return typeof jsonish === 'string' ? JSON.parse(jsonish) : jsonish;
-  } catch {
-    return undefined;
-  }
-}
 
 async function openExternalUrlBestEffort(url) {
   if (!url) return;
@@ -162,10 +135,10 @@ async function openExternalUrlBestEffort(url) {
 
 export function openFromPayload(navigateTo, data = {}) {
   try {
-    const { screen, params, link_url, url } = data || {};
+    const { screen, link_url, url, ...params } = data || {};
+
     if (screen) {
-      const parsed = typeof params === 'string' ? safeParse(params) : params;
-      navigateTo?.(screen, parsed);
+      navigateTo?.(screen, params);
       return;
     }
     const externalUrl = link_url || url;
