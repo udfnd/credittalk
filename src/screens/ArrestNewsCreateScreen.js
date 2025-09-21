@@ -110,10 +110,11 @@ export default function ArrestNewsCreateScreen() {
       const { error: insertError } = await supabase.from('arrest_news').insert({
         title: title.trim(),
         content: content.trim() || null,
-        author_name: authorNameToSubmit, // 준비된 닉네임 사용
+        author_name: authorNameToSubmit,
         link_url: linkUrl.trim() || null,
         category: category.trim() || null,
         image_urls: imageUrls.length ? imageUrls : null,
+        user_id: user.id,
       });
       if (insertError) throw insertError;
 
