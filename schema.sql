@@ -1149,7 +1149,8 @@ CREATE TABLE IF NOT EXISTS "public"."arrest_news" (
     "pinned_at" timestamp with time zone,
     "image_urls" "text"[],
     "category" "text",
-    "views" bigint DEFAULT 0
+    "views" bigint DEFAULT 0,
+    "user_id" "uuid"
 );
 
 
@@ -2265,6 +2266,11 @@ CREATE OR REPLACE TRIGGER "on_reviews_updated" BEFORE UPDATE ON "public"."review
 
 
 CREATE OR REPLACE TRIGGER "trg_help_desk_notices_updated" BEFORE UPDATE ON "public"."help_desk_notices" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
+
+
+
+ALTER TABLE ONLY "public"."arrest_news"
+    ADD CONSTRAINT "arrest_news_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
