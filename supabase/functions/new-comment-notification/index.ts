@@ -19,19 +19,39 @@ const supabaseAdmin = createClient(
 );
 
 const BOARD_MAP = {
-  community_posts: { table: 'community_posts', screen: 'CommunityPostDetail' },
-  arrest_news: { table: 'arrest_news', screen: 'ArrestNewsDetail' },
-  incident_photos: { table: 'incident_photos', screen: 'IncidentPhotoDetail' },
-  new_crime_cases: { table: 'new_crime_cases', screen: 'NewCrimeCaseDetail' },
-  notices: { table: 'notices', screen: 'NoticeDetail' },
-  reviews: { table: 'reviews', screen: 'ReviewDetail' },
+  community_posts: {
+    table: 'community_posts',
+    screen: 'CommunityPostDetail',
+    authorCol: 'user_id',
+  },
+  arrest_news: {
+    table: 'arrest_news',
+    screen: 'ArrestNewsDetail',
+    authorCol: null,
+  }, // 작성자 ID 없음
+  incident_photos: {
+    table: 'incident_photos',
+    screen: 'IncidentPhotoDetail',
+    authorCol: 'uploader_id',
+  },
+  new_crime_cases: {
+    table: 'new_crime_cases',
+    screen: 'NewCrimeCaseDetail',
+    authorCol: 'user_id',
+  },
+  notices: { table: 'notices', screen: 'NoticeDetail', authorCol: null }, // 작성자 ID 없음
+  reviews: { table: 'reviews', screen: 'ReviewDetail', authorCol: 'user_id' },
 };
 
 async function sendPush(userIds, title, body, data) {
   if (!userIds || userIds.length === 0) return;
+  // 중복 및 null 값 제거
+  const uniqueUserIds = [...new Set(userIds.filter(id => id))];
+  if (uniqueUserIds.length === 0) return;
+
   try {
     await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
-      body: { user_ids: userIds, title, body, data },
+      body: { user_ids: uniqueUserIds, title, body, data },
     });
   } catch (error) {
     console.error('Failed to invoke send-fcm-v1-push:', error);
@@ -50,106 +70,70 @@ Deno.serve(async req => {
     return new Response('Invalid board type', { status: 400 });
   }
 
+  // 댓글 작성자 정보 조회
   const { data: commenter } = await supabaseAdmin
     .from('users')
-    .select('auth_user_id')
+    .select('auth_user_id, nickname')
     .eq('id', comment.user_id)
     .single();
   const commenterAuthId = commenter?.auth_user_id;
+  const commenterNickname = commenter?.nickname ?? '익명';
 
-  const { data: post } = await supabaseAdmin
-    .from(postTypeInfo.table)
-    .select('title, user_id') // `user_id`는 `author_auth_id`일 수 있습니다. 스키마에 따라 조정 필요.
-    .eq('id', comment.post_id)
-    .single();
+  const notificationData = {
+    screen: postTypeInfo.screen,
+    params: JSON.stringify({ id: comment.post_id }),
+  };
 
-  if (!post) {
-    return new Response('Post not found', { status: 404 });
-  }
+  // 1. 게시글 작성자에게 알림 전송
+  if (postTypeInfo.authorCol) {
+    const { data: post } = await supabaseAdmin
+      .from(postTypeInfo.table)
+      .select(`title, ${postTypeInfo.authorCol}`)
+      .eq('id', comment.post_id)
+      .single();
 
-  const postAuthorAuthId = post.user_id;
-  const notificationPromises = [];
-
-  // 1. 관리자에게 알림 전송
-  const adminNotification = async () => {
-    const { data: admins } = await supabaseAdmin
-      .from('users')
-      .select('auth_user_id')
-      .eq('is_admin', true);
-    if (admins) {
-      const adminIds = admins
-        .map(a => a.auth_user_id)
-        .filter(id => id && id !== commenterAuthId);
-      if (adminIds.length > 0) {
+    if (post) {
+      const postAuthorAuthId = post[postTypeInfo.authorCol];
+      // 본인이 본인 글에 댓글 달면 알림 X
+      if (postAuthorAuthId && postAuthorAuthId !== commenterAuthId) {
         await sendPush(
-          adminIds,
-          '새로운 댓글이 등록되었습니다.',
-          comment.content,
-          {
-            screen: postTypeInfo.screen,
-            params: JSON.stringify({ id: comment.post_id }),
-          },
+          [postAuthorAuthId],
+          `'${post.title}' 글에 새 댓글이 달렸습니다.`,
+          `${commenterNickname}: ${comment.content}`,
+          notificationData,
         );
       }
     }
-  };
-  notificationPromises.push(adminNotification());
+  }
 
-  // 2. 게시글 작성자에게 알림 전송
-  const postAuthorNotification = async () => {
-    // if (postAuthorAuthId && postAuthorAuthId !== commenterAuthId) {
-    await sendPush(
-      [postAuthorAuthId],
-      `'${post.title}' 글에 새 댓글이 달렸습니다.`,
-      comment.content,
-      {
-        screen: postTypeInfo.screen,
-        params: JSON.stringify({ id: comment.post_id }),
-      },
-    );
-    // }
-  };
-  notificationPromises.push(postAuthorNotification());
+  // 2. 대댓글일 경우, 원 댓글 작성자에게 알림 전송
+  if (comment.parent_comment_id) {
+    const { data: parentComment } = await supabaseAdmin
+      .from('comments')
+      .select('user_id')
+      .eq('id', comment.parent_comment_id)
+      .single();
 
-  // 3. 대댓글일 경우, 원 댓글 작성자에게 알림 전송
-  const parentCommentNotification = async () => {
-    if (comment.parent_comment_id) {
-      const { data: parentComment } = await supabaseAdmin
-        .from('comments')
-        .select('user_id')
-        .eq('id', comment.parent_comment_id)
+    if (parentComment?.user_id) {
+      const { data: parentCommenter } = await supabaseAdmin
+        .from('users')
+        .select('auth_user_id')
+        .eq('id', parentComment.user_id)
         .single();
 
-      if (parentComment && parentComment.user_id) {
-        const { data: parentCommenter } = await supabaseAdmin
-          .from('users')
-          .select('auth_user_id')
-          .eq('id', parentComment.user_id)
-          .single();
+      const parentCommenterAuthId = parentCommenter?.auth_user_id;
 
-        const parentCommenterAuthId = parentCommenter?.auth_user_id;
-
-        // if (
-        //   parentCommenterAuthId &&
-        //   parentCommenterAuthId !== commenterAuthId
-        // ) {
+      // 본인이 본인 댓글에 대댓글 달면 알림 X, 게시글 작성자에게는 이미 위에서 보냈으므로 중복 방지
+      if (parentCommenterAuthId && parentCommenterAuthId !== commenterAuthId) {
         await sendPush(
           [parentCommenterAuthId],
           '내 댓글에 새 답글이 달렸습니다.',
-          comment.content,
-          {
-            screen: postTypeInfo.screen,
-            params: JSON.stringify({ id: comment.post_id }),
-          },
+          `${commenterNickname}: ${comment.content}`,
+          notificationData,
         );
-        // }
       }
     }
-  };
-  notificationPromises.push(parentCommentNotification());
-
-  // 모든 알림 전송 작업을 동시에 실행하고 결과를 기다림
-  await Promise.allSettled(notificationPromises);
+  }
 
   return new Response(JSON.stringify({ message: 'OK' }), {
     headers: { 'Content-Type': 'application/json' },
