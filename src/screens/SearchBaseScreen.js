@@ -158,8 +158,6 @@ const HighlightedText = ({ text, highlight }) => {
   );
 };
 
-// --- (수정된 부분 1) ---
-// 통계 표시 컴포넌트 수정
 const SearchStatistics = ({ stats }) => {
   if (!stats) return null;
 
