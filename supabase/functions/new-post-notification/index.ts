@@ -39,40 +39,59 @@ Deno.serve(async req => {
     t => typeof t === 'string' && t.trim() !== '',
   );
 
-  if (!post || !post.user_id || !post.id) {
+  // 게시물이나 ID가 없으면 처리 중단
+  if (!post || !post.id) {
     return new Response(null, { status: 200 });
   }
 
-  // 게시글 작성자가 관리자인지 확인
-  const { data: authorProfile } = await supabaseAdmin
-    .from('users')
-    .select('is_admin')
-    .eq('auth_user_id', post.user_id)
-    .single();
+  // authorId를 user_id 또는 uploader_id에서 가져오기
+  const authorId = post.user_id || post.uploader_id;
+  let isAdminAuthor = false;
+
+  // notices, arrest_news 테이블은 작성자 정보가 없으므로 관리자가 작성한 것으로 간주
+  if (table === 'notices') {
+    isAdminAuthor = true;
+  } else if (authorId) {
+    const { data: authorProfile, error } = await supabaseAdmin
+      .from('users')
+      .select('is_admin')
+      .eq('auth_user_id', authorId)
+      .single();
+    if (error) {
+      console.error(`Error fetching author profile for ${authorId}:`, error);
+    }
+    if (authorProfile && authorProfile.is_admin === true) {
+      isAdminAuthor = true;
+    }
+  }
 
   // 관리자가 작성한 글일 경우에만 모든 사용자에게 알림 발송
-  if (authorProfile && authorProfile.is_admin === true) {
-    const { data: users } = await supabaseAdmin
+  if (isAdminAuthor) {
+    const { data: users, error: userError } = await supabaseAdmin
       .from('users')
       .select('auth_user_id');
+
+    if (userError) {
+      console.error('Error fetching users:', userError);
+      return new Response(JSON.stringify({ message: 'Error fetching users' }), {
+        status: 500,
+      });
+    }
 
     if (users && users.length > 0) {
       const userIds = users.map(u => u.auth_user_id).filter(Boolean);
       const screen = SCREEN_MAP[table] || 'Home';
-
       const invocations = [];
 
-      // 사용자 ID 목록을 100명씩 나누어 invoke
       for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
         const chunk = userIds.slice(i, i + CHUNK_SIZE);
-
         const invokePromise = supabaseAdmin.functions.invoke(
           'send-fcm-v1-push',
           {
             body: {
               user_ids: chunk,
-              title: '새 글이 등록되었습니다',
-              body: `제목: ${postTitle}`,
+              title: '새로운 글이 등록되었습니다',
+              body: `${postTitle}`,
               data: { screen, params: JSON.stringify({ id: post.id }) },
             },
           },
@@ -82,7 +101,7 @@ Deno.serve(async req => {
 
       await Promise.allSettled(invocations);
       console.log(
-        `Successfully invoked ${invocations.length} push notification jobs.`,
+        `Successfully invoked ${invocations.length} push notification jobs for table ${table}.`,
       );
     }
   }
