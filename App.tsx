@@ -12,7 +12,7 @@ import {
 import {
   NavigationContainer,
   useNavigationContainerRef,
-  NavigatorScreenParams, // 1. NavigatorScreenParams import
+  NavigatorScreenParams,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -23,8 +23,6 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-
-// 🔔 Push 유틸 import
 import {
   wireMessageHandlers,
   openFromPayload,
@@ -83,8 +81,6 @@ const linking = {
   },
 };
 
-// --- 타입 정의 ---
-
 export type CommunityStackParamList = {
   CommunityList: undefined;
   CommunityPostDetail: { postId: number; postTitle?: string };
@@ -99,7 +95,6 @@ export type HelpDeskStackParamList = {
   HelpDeskNoticeDetail: { noticeId: number; noticeTitle: string };
 };
 
-// 2. MainTabs 네비게이터의 파라미터 타입을 정의
 export type MainTabsParamList = {
   SearchTab: undefined;
   ChatTab: undefined;
@@ -147,7 +142,7 @@ export type RootStackParamList = {
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const CommunityNativeStack =
   createNativeStackNavigator<CommunityStackParamList>();
-const Tab = createBottomTabNavigator<MainTabsParamList>(); // 타입 적용
+const Tab = createBottomTabNavigator<MainTabsParamList>();
 const HelpDeskNativeStack =
   createNativeStackNavigator<HelpDeskStackParamList>();
 
@@ -464,7 +459,9 @@ function App(): React.JSX.Element {
   const navigateToScreen = useCallback(
     (screen: string, params?: any) => {
       if (navRef.isReady()) {
-        if (screen === 'CommunityPostDetail') {
+        // ✅ [수정] 중첩된 스크린과 일반 스크린 이동 로직을 통합하고 단순화합니다.
+        // 각 케이스에 맞는 ID를 숫자로 변환하여 타입 안정성을 보장합니다.
+        if (screen === 'CommunityPostDetail' && params?.postId) {
           navRef.navigate('MainApp', {
             screen: 'CommunityTab',
             params: {
@@ -474,8 +471,26 @@ function App(): React.JSX.Element {
               },
             },
           });
-        } else {
-          navRef.navigate(screen as never, params as never);
+        } else if (screen === 'HelpDeskDetail' && params?.questionId) {
+          navRef.navigate('MainApp', {
+            screen: 'HelpCenterTab',
+            params: {
+              screen: 'HelpDeskDetail',
+              params: {
+                questionId: Number(params.questionId),
+              },
+            },
+          });
+        } else if (screen) {
+          // ✅ [수정] 나머지 모든 스크린은 올바른 숫자 타입의 파라미터로 변환하여 전달합니다.
+          const numericParams = {};
+          if (params) {
+            Object.keys(params).forEach(key => {
+              const numValue = Number(params[key]);
+              numericParams[key] = isNaN(numValue) ? params[key] : numValue;
+            });
+          }
+          navRef.navigate(screen as never, numericParams as never);
         }
       }
     },
