@@ -1,9 +1,7 @@
-// App.tsx
-
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,7 +11,8 @@ import {
 } from 'react-native';
 import {
   NavigationContainer,
-  NavigationContainerRef,
+  useNavigationContainerRef,
+  NavigatorScreenParams, // 1. NavigatorScreenParams import
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -25,17 +24,17 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
-// 🔔 Push 유틸 import 수정
+// 🔔 Push 유틸 import
 import {
   wireMessageHandlers,
   openFromPayload,
   updatePushTokenOnLogin,
   setupTokenRefreshListener,
-  requestNotificationPermissionAndroid, // ✅ Android 권한 요청 함수 import
+  requestNotificationPermissionAndroid,
 } from './src/lib/push';
 import notifee from '@notifee/react-native';
 
-// Screens... (생략)
+// Screens
 import HomeScreen from './src/screens/HomeScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import UnifiedSearchScreen from './src/screens/UnifiedSearchScreen';
@@ -80,9 +79,16 @@ const linking = {
   config: {
     screens: {
       UpdatePassword: 'update-password',
-      // 필요 시 딥링크 맵을 더 추가하세요.
     },
   },
+};
+
+// --- 타입 정의 ---
+
+export type CommunityStackParamList = {
+  CommunityList: undefined;
+  CommunityPostDetail: { postId: number; postTitle?: string };
+  CommunityPostCreate: undefined;
 };
 
 export type HelpDeskStackParamList = {
@@ -93,8 +99,17 @@ export type HelpDeskStackParamList = {
   HelpDeskNoticeDetail: { noticeId: number; noticeTitle: string };
 };
 
+// 2. MainTabs 네비게이터의 파라미터 타입을 정의
+export type MainTabsParamList = {
+  SearchTab: undefined;
+  ChatTab: undefined;
+  CommunityTab: NavigatorScreenParams<CommunityStackParamList>;
+  MyTab: undefined;
+  HelpCenterTab: NavigatorScreenParams<HelpDeskStackParamList>;
+};
+
 export type RootStackParamList = {
-  MainApp: undefined;
+  MainApp: NavigatorScreenParams<MainTabsParamList>;
   Report: undefined;
   MyReports: undefined;
   UnifiedSearch: {
@@ -129,16 +144,10 @@ export type RootStackParamList = {
   DeleteAccount: undefined;
 };
 
-export type CommunityStackParamList = {
-  CommunityList: undefined;
-  CommunityPostDetail: { postId: number; postTitle: string };
-  CommunityPostCreate: undefined;
-};
-
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const CommunityNativeStack =
   createNativeStackNavigator<CommunityStackParamList>();
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<MainTabsParamList>(); // 타입 적용
 const HelpDeskNativeStack =
   createNativeStackNavigator<HelpDeskStackParamList>();
 
@@ -268,16 +277,13 @@ function AppNavigator() {
 
   useEffect(() => {
     if (user?.id) {
-      // 로그인 시 즉시 토큰 업데이트
       updatePushTokenOnLogin(user.id);
-
-      // 토큰 갱신 리스너 설정 (컴포넌트 unmount 시 자동 해제됨)
       const unsubscribe = setupTokenRefreshListener(user.id);
       return () => {
         unsubscribe();
       };
     }
-  }, [user?.id]); // user.id가 변경될 때만 실행
+  }, [user?.id]);
 
   if (isLoading) {
     return (
@@ -453,14 +459,28 @@ function AppNavigator() {
 }
 
 function App(): React.JSX.Element {
-  const navRef = useRef<NavigationContainerRef<any>>(null);
+  const navRef = useNavigationContainerRef<RootStackParamList>();
 
-  const navigateTo = (screen: string, params?: any) => {
-    const nav = navRef.current;
-    if (nav?.isReady()) {
-      nav.navigate(screen as never, params as never);
-    }
-  };
+  const navigateToScreen = useCallback(
+    (screen: string, params?: any) => {
+      if (navRef.isReady()) {
+        if (screen === 'CommunityPostDetail') {
+          navRef.navigate('MainApp', {
+            screen: 'CommunityTab',
+            params: {
+              screen: 'CommunityPostDetail',
+              params: {
+                postId: Number(params.postId),
+              },
+            },
+          });
+        } else {
+          navRef.navigate(screen as never, params as never);
+        }
+      }
+    },
+    [navRef],
+  );
 
   useEffect(() => {
     NaverLogin.initialize({
@@ -472,21 +492,15 @@ function App(): React.JSX.Element {
     });
   }, []);
 
-  // ✅ 앱 시작 시 푸시 관련 초기 설정
   useEffect(() => {
-    // Android 13+ 권한 요청
     requestNotificationPermissionAndroid();
-
-    // 포그라운드/백그라운드/종료 상태 알림 핸들러 연결
-    wireMessageHandlers(navigateTo);
-
-    // 종료상태에서 notifee 알림을 탭하여 앱이 시작된 경우 처리
+    wireMessageHandlers(navigateToScreen);
     notifee.getInitialNotification().then(initial => {
       if (initial?.notification?.data) {
-        openFromPayload(navigateTo, initial.notification.data);
+        openFromPayload(navigateToScreen, initial.notification.data);
       }
     });
-  }, []);
+  }, [navigateToScreen]);
 
   return (
     <SafeAreaProvider>
