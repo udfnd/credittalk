@@ -1,3 +1,5 @@
+// supabase/functions/new-post-notification/index.ts
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const supabaseAdmin = createClient(
@@ -20,6 +22,16 @@ const SCREEN_MAP = {
   new_crime_cases: 'NewCrimeCaseDetail',
   notices: 'NoticeDetail',
   reviews: 'ReviewDetail',
+};
+
+// ✅ 각 테이블에 맞는 ID 파라미터 이름을 매핑하는 객체 추가
+const ID_PARAM_MAP = {
+  community_posts: 'postId',
+  arrest_news: 'newsId',
+  incident_photos: 'photoId',
+  new_crime_cases: 'caseId',
+  notices: 'noticeId',
+  reviews: 'reviewId',
 };
 
 const CHUNK_SIZE = 100; // 한 번에 호출할 사용자 수
@@ -74,10 +86,16 @@ Deno.serve(async req => {
     if (users && users.length > 0) {
       const userIds = users.map(u => u.auth_user_id).filter(Boolean);
       const screen = SCREEN_MAP[table] || 'Home';
+
+      const idParamKey = ID_PARAM_MAP[table] || 'id';
+
       const invocations = [];
 
       for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
         const chunk = userIds.slice(i, i + CHUNK_SIZE);
+
+        const params = { [idParamKey]: post.id };
+
         const invokePromise = supabaseAdmin.functions.invoke(
           'send-fcm-v1-push',
           {
@@ -85,7 +103,7 @@ Deno.serve(async req => {
               user_ids: chunk,
               title: '새로운 글이 등록되었습니다',
               body: `${postTitle}`,
-              data: { screen, params: JSON.stringify({ postId: post.id }) }, // 'id' -> 'postId'로 변경
+              data: { screen, params: JSON.stringify(params) }, // 수정된 부분
             },
           },
         );

@@ -47,7 +47,7 @@ export const requestNotificationPermissionAndroid = async () => {
 };
 
 /**
- * 로그인 성공 후, 기기의 최신 FCM 토큰을 가져와 Supabase DB에 업데이트(upsert)합니다.
+ * 로그인 성공 후, 기기의 최신 FCM 토큰을 가져와 Supabase DB에 등록(재할당)합니다.
  * @param {string} userId - 현재 로그인한 사용자의 auth.users.id (UUID)
  */
 export const updatePushTokenOnLogin = async userId => {
@@ -65,7 +65,6 @@ export const updatePushTokenOnLogin = async userId => {
         authStatus === messaging.AuthorizationStatus.PROVISIONAL;
       if (!enabled) {
         console.log('[Push] iOS notification permission not enabled.');
-        // 사용자에게 설정으로 이동하여 권한을 켜도록 안내할 수 있습니다.
         Alert.alert(
           '알림 권한이 꺼져 있어요',
           '설정에서 알림을 허용해 주세요.',
@@ -82,25 +81,27 @@ export const updatePushTokenOnLogin = async userId => {
 
     console.log('[Push] Fetched FCM Token:', fcmToken);
 
-    const { error } = await supabase.from('device_push_tokens').upsert(
-      {
-        user_id: userId,
-        token: fcmToken,
-        platform: Platform.OS,
-        enabled: true,
-        last_seen: new Date().toISOString(),
-      },
-      {
-        onConflict: 'token', // 토큰이 이미 존재하면 다른 필드를 업데이트합니다. (user_id 포함)
-      },
-    );
+    // ✅ RLS 문제를 해결하기 위해 upsert 대신 RPC 함수를 호출합니다.
+    const { error } = await supabase.rpc('register_push_token', {
+      fcm_token: fcmToken,
+      p_platform: Platform.OS,
+    });
 
     if (error) {
-      console.error('[Push] Error upserting push token:', error.message);
+      // RPC 함수가 DB에 없는 경우 개발자에게 친절한 에러 메시지를 표시합니다.
+      if (error.code === '42883') {
+        console.error(
+          '[Push] RPC function "register_push_token" not found. Please create it in your Supabase project using the provided SQL script.',
+        );
+      }
+      console.error(
+        '[Push] Error calling register_push_token RPC:',
+        error.message,
+      );
       throw error;
     }
 
-    console.log('[Push] Successfully upserted push token for user:', userId);
+    console.log('[Push] Successfully registered push token for user:', userId);
   } catch (error) {
     console.error(
       '[Push] A critical error occurred in updatePushTokenOnLogin:',
@@ -111,7 +112,6 @@ export const updatePushTokenOnLogin = async userId => {
 
 /**
  * 앱 사용 중 FCM 토큰이 갱신될 때를 대비한 리스너입니다.
- * 로그인된 사용자에 대해 한 번만 설정하면 됩니다.
  * @param {string} userId - 현재 로그인한 사용자의 auth.users.id (UUID)
  * @returns {() => void} Unsubscribe 함수
  */
@@ -120,21 +120,19 @@ export const setupTokenRefreshListener = userId => {
 
   return messaging().onTokenRefresh(async newFcmToken => {
     console.log('[Push] FCM token has been refreshed:', newFcmToken);
-    await supabase
-      .from('device_push_tokens')
-      .upsert(
-        {
-          user_id: userId,
-          token: newFcmToken,
-          platform: Platform.OS,
-          enabled: true,
-          last_seen: new Date().toISOString(),
-        },
-        { onConflict: 'token' },
-      )
-      .catch(err =>
-        console.error('[Push] Failed to upsert refreshed token:', err),
+
+    // ✅ 토큰 갱신 시에도 RPC 함수를 사용하여 안전하게 등록합니다.
+    const { error } = await supabase.rpc('register_push_token', {
+      fcm_token: newFcmToken,
+      p_platform: Platform.OS,
+    });
+
+    if (error) {
+      console.error(
+        '[Push] Failed to register refreshed token via RPC:',
+        error,
       );
+    }
   });
 };
 
