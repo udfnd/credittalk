@@ -229,6 +229,42 @@ $$;
 ALTER FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[]) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."delete_comment"("p_comment_id" bigint) RETURNS "record"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_user_id bigint;
+  v_deleted_comment record;
+BEGIN
+  -- 현재 로그인한 사용자의 public.users.id를 조회합니다.
+  SELECT u.id INTO v_user_id
+  FROM public.users u
+  WHERE u.auth_user_id = v_auth_uid;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'User not found.';
+  END IF;
+
+  -- 댓글을 삭제합니다.
+  -- RLS 정책(comments_delete_own)이 적용되어 본인 댓글만 삭제 가능합니다.
+  -- parent_comment_id의 ON DELETE CASCADE 제약 조건에 의해 대댓글도 함께 삭제됩니다.
+  DELETE FROM public.comments
+  WHERE id = p_comment_id AND user_id = v_user_id
+  RETURNING id, content INTO v_deleted_comment;
+
+  IF v_deleted_comment IS NULL THEN
+    RAISE EXCEPTION 'Comment not found or you do not have permission to delete it.';
+  END IF;
+
+  RETURN v_deleted_comment;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."delete_comment"("p_comment_id" bigint) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."encrypt_secret"("data" "text") RETURNS "bytea"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -640,12 +676,29 @@ $$;
 ALTER FUNCTION "public"."get_user_job_type"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."handle_new_comment_notification"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  PERFORM net.http_post(
+    url:='https://lmwtidqrmfclrbapmtdm.supabase.co/functions/v1/new-comment-notification',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"}'::jsonb,
+    body:=jsonb_build_object('record', row_to_json(NEW))
+  );
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."handle_new_comment_notification"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."handle_new_post_notification"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
   PERFORM net.http_post(
-    url:='https://<project_ref>.supabase.co/functions/v1/new-post-notification',
+    url:='https://lmwtidqrmfclrbapmtdm.supabase.co/functions/v1/new-post-notification',
     headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"}'::jsonb,
     body:=jsonb_build_object('table', TG_TABLE_NAME, 'record', row_to_json(NEW))
   );
@@ -944,6 +997,42 @@ $$;
 
 
 ALTER FUNCTION "public"."trigger_send_chat_push_notification"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_comment"("p_comment_id" bigint, "p_new_content" "text") RETURNS "public"."comments"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_user_id bigint;
+  v_updated_comment public.comments;
+BEGIN
+  -- 현재 로그인한 사용자의 public.users.id를 조회합니다.
+  SELECT u.id INTO v_user_id
+  FROM public.users u
+  WHERE u.auth_user_id = v_auth_uid;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'User not found.';
+  END IF;
+
+  -- 댓글을 수정하고 결과를 반환합니다.
+  -- RLS 정책(comments_update_own)이 여기서 적용되어 본인 댓글만 수정 가능하게 합니다.
+  UPDATE public.comments
+  SET content = p_new_content, updated_at = now()
+  WHERE id = p_comment_id AND user_id = v_user_id
+  RETURNING * INTO v_updated_comment;
+
+  IF v_updated_comment IS NULL THEN
+    RAISE EXCEPTION 'Comment not found or you do not have permission to edit it.';
+  END IF;
+
+  RETURN v_updated_comment;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_comment"("p_comment_id" bigint, "p_new_content" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."update_room_last_message_at"() RETURNS "trigger"
@@ -2143,7 +2232,7 @@ CREATE OR REPLACE TRIGGER "on_new_chat_message_send_push" AFTER INSERT ON "publi
 
 
 
-CREATE OR REPLACE TRIGGER "on_new_comment_notification" AFTER INSERT ON "public"."comments" FOR EACH ROW EXECUTE FUNCTION "supabase_functions"."http_request"('https://<project_ref>.supabase.co/functions/v1/new-comment-notification', 'POST', '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzM4MTM4OSwiZXhwIjoyMDU4OTU3Mzg5fQ.aYfmDA2VkC-i4tLAyMT-_Yy8I6iu0eqnwr9-5sYCCVc"}', '{}', '1000');
+CREATE OR REPLACE TRIGGER "on_new_comment_notification" AFTER INSERT ON "public"."comments" FOR EACH ROW EXECUTE FUNCTION "public"."handle_new_comment_notification"();
 
 
 
@@ -2316,6 +2405,10 @@ CREATE POLICY "Admins can view all user profiles" ON "public"."users" FOR SELECT
 
 
 CREATE POLICY "Allow admin to read all login logs" ON "public"."user_login_logs" FOR SELECT TO "service_role" USING (true);
+
+
+
+CREATE POLICY "Allow admin to read all push tokens" ON "public"."device_push_tokens" FOR SELECT TO "service_role" USING (true);
 
 
 
@@ -2901,6 +2994,12 @@ GRANT ALL ON FUNCTION "public"."decrypt_secret_array"("encrypted_array" "bytea"[
 
 
 
+GRANT ALL ON FUNCTION "public"."delete_comment"("p_comment_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."delete_comment"("p_comment_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."delete_comment"("p_comment_id" bigint) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "service_role";
@@ -2985,6 +3084,12 @@ GRANT ALL ON FUNCTION "public"."get_user_job_type"() TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."handle_new_comment_notification"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_new_comment_notification"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_new_comment_notification"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."handle_new_post_notification"() TO "anon";
 GRANT ALL ON FUNCTION "public"."handle_new_post_notification"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."handle_new_post_notification"() TO "service_role";
@@ -3066,6 +3171,12 @@ GRANT ALL ON FUNCTION "public"."set_updated_at"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."trigger_send_chat_push_notification"() TO "anon";
 GRANT ALL ON FUNCTION "public"."trigger_send_chat_push_notification"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."trigger_send_chat_push_notification"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_comment"("p_comment_id" bigint, "p_new_content" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."update_comment"("p_comment_id" bigint, "p_new_content" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_comment"("p_comment_id" bigint, "p_new_content" "text") TO "service_role";
 
 
 
