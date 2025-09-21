@@ -1,8 +1,5 @@
-// supabase/functions/new-post-notification/index.ts
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// RLS를 확실히 우회하기 위한 Supabase 클라이언트 생성
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -39,16 +36,13 @@ Deno.serve(async req => {
     t => typeof t === 'string' && t.trim() !== '',
   );
 
-  // 게시물이나 ID가 없으면 처리 중단
   if (!post || !post.id) {
     return new Response(null, { status: 200 });
   }
 
-  // authorId를 user_id 또는 uploader_id에서 가져오기
   const authorId = post.user_id || post.uploader_id;
   let isAdminAuthor = false;
 
-  // notices, arrest_news 테이블은 작성자 정보가 없으므로 관리자가 작성한 것으로 간주
   if (table === 'notices') {
     isAdminAuthor = true;
   } else if (authorId) {
@@ -65,7 +59,6 @@ Deno.serve(async req => {
     }
   }
 
-  // 관리자가 작성한 글일 경우에만 모든 사용자에게 알림 발송
   if (isAdminAuthor) {
     const { data: users, error: userError } = await supabaseAdmin
       .from('users')
@@ -92,7 +85,7 @@ Deno.serve(async req => {
               user_ids: chunk,
               title: '새로운 글이 등록되었습니다',
               body: `${postTitle}`,
-              data: { screen, params: JSON.stringify({ id: post.id }) },
+              data: { screen, params: JSON.stringify({ postId: post.id }) }, // 'id' -> 'postId'로 변경
             },
           },
         );
