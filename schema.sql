@@ -910,6 +910,31 @@ $$;
 ALTER FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integer, "p_end_visible" integer, "p_mask_char" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."register_push_token"("fcm_token" "text", "p_platform" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  current_user_id UUID := auth.uid();
+BEGIN
+  -- 함수를 호출한 사용자가 인증되지 않았다면 에러를 발생시킵니다.
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'User must be authenticated to register a push token.';
+  END IF;
+
+  -- 이 토큰이 다른 사용자에게 할당되어 있을 수 있으므로, 먼저 기존 기록을 모두 삭제합니다.
+  -- 기기(토큰)의 소유권이 이전되는 정상적인 시나리오입니다.
+  DELETE FROM public.device_push_tokens WHERE token = fcm_token;
+
+  -- 현재 인증된 사용자로 새로운 토큰 정보를 삽입합니다.
+  INSERT INTO public.device_push_tokens(user_id, token, platform, enabled, last_seen)
+  VALUES (current_user_id, fcm_token, p_platform, true, now());
+END;
+$$;
+
+
+ALTER FUNCTION "public"."register_push_token"("fcm_token" "text", "p_platform" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."search_reports"("search_term" "text") RETURNS TABLE("reports" "jsonb", "total_count" integer, "weekly_count" integer, "monthly_count" integer, "three_monthly_count" integer)
     LANGUAGE "plpgsql"
     AS $$
@@ -3159,6 +3184,12 @@ GRANT ALL ON FUNCTION "public"."mask_phone_number"("p_phone_number" "text") TO "
 GRANT ALL ON FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integer, "p_end_visible" integer, "p_mask_char" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integer, "p_end_visible" integer, "p_mask_char" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."mask_string"("p_string" "text", "p_start_visible" integer, "p_end_visible" integer, "p_mask_char" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."register_push_token"("fcm_token" "text", "p_platform" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."register_push_token"("fcm_token" "text", "p_platform" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."register_push_token"("fcm_token" "text", "p_platform" "text") TO "service_role";
 
 
 

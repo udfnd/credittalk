@@ -3,48 +3,46 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
-// RLS를 우회하기 위한 Admin 클라이언트
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
-// board_type에 따라 실제 테이블 정보와 화면 이름을 매핑합니다.
 const BOARD_TYPE_MAP = {
   arrest_news: {
     postTable: 'arrest_news',
     postTitleColumn: 'title',
     postAuthorColumn: 'user_id',
     screen: 'ArrestNewsDetail',
-    idParamName: 'newsId', // ✅ ID 파라미터 이름 추가
+    idParamName: 'newsId',
   },
   community_posts: {
     postTable: 'community_posts',
     postTitleColumn: 'title',
     postAuthorColumn: 'user_id',
     screen: 'CommunityPostDetail',
-    idParamName: 'postId', // ✅ ID 파라미터 이름 추가
+    idParamName: 'postId',
   },
   reviews: {
     postTable: 'reviews',
     postTitleColumn: 'title',
     postAuthorColumn: 'user_id',
     screen: 'ReviewDetail',
-    idParamName: 'reviewId', // ✅ ID 파라미터 이름 추가
+    idParamName: 'reviewId',
   },
   incident_photos: {
     postTable: 'incident_photos',
     postTitleColumn: 'title',
     postAuthorColumn: 'uploader_id',
     screen: 'IncidentPhotoDetail',
-    idParamName: 'photoId', // ✅ ID 파라미터 이름 추가
+    idParamName: 'photoId',
   },
   new_crime_cases: {
     postTable: 'new_crime_cases',
     postTitleColumn: 'title',
     postAuthorColumn: 'user_id',
     screen: 'NewCrimeCaseDetail',
-    idParamName: 'caseId', // ✅ ID 파라미터 이름 추가
+    idParamName: 'caseId',
   },
 };
 
@@ -61,10 +59,8 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ message }), { status: 400 });
     }
 
-    // Set để 중복 알림 방지
     const notifiedUserUuids = new Set<string>();
 
-    // 1. 게시물 정보 조회
     const { data: post, error: postError } = await supabaseAdmin
       .from(mapping.postTable)
       .select(`${mapping.postAuthorColumn}, ${mapping.postTitleColumn}`)
@@ -76,7 +72,6 @@ serve(async (req: Request) => {
     const postAuthorUuid = post[mapping.postAuthorColumn];
     const postTitle = post[mapping.postTitleColumn];
 
-    // 2. 댓글 작성자 닉네임 조회
     const { data: commentAuthor, error: commentAuthorError } =
       await supabaseAdmin
         .from('users')
@@ -88,21 +83,16 @@ serve(async (req: Request) => {
     const commentAuthorNickname = commentAuthor?.nickname || '익명';
     const commentAuthorUuid = commentAuthor?.auth_user_id;
 
-    // 자기 자신에게는 알림을 보내지 않도록 추가
     if (commentAuthorUuid) {
       notifiedUserUuids.add(commentAuthorUuid);
     }
 
-    // ✅ 동적으로 파라미터 객체 생성
-    const params = { [mapping.idParamName]: comment.post_id };
     const notificationData = {
       screen: mapping.screen,
-      params: JSON.stringify(params),
+      params: { [mapping.idParamName]: comment.post_id },
     };
 
-    // 3. 게시물 작성자에게 알림 보내기
-    // 게시물 작성자와 댓글 작성자가 다른 경우에만 알림 전송
-    if (postAuthorUuid !== commentAuthorUuid) {
+    if (postAuthorUuid) {
       await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
         body: {
           user_ids: [postAuthorUuid],
@@ -114,7 +104,6 @@ serve(async (req: Request) => {
       notifiedUserUuids.add(postAuthorUuid);
     }
 
-    // 4. 답글인 경우, 부모 댓글 작성자에게 알림 보내기
     if (comment.parent_comment_id) {
       const { data: parentComment, error: parentCommentError } =
         await supabaseAdmin
@@ -138,21 +127,21 @@ serve(async (req: Request) => {
         console.error(
           `Could not find parent author for numeric id: ${parentCommentAuthorNumericId}`,
         );
-      } else if (parentAuthor.auth_user_id !== commentAuthorUuid) {
-        // 부모 댓글 작성자와 답글 작성자가 다른 경우
-        await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
-          body: {
-            user_ids: [parentAuthor.auth_user_id],
-            title: '새로운 답글 알림',
-            body: `${commentAuthorNickname}님이 회원님의 댓글에 답글을 남겼습니다.`,
-            data: notificationData,
-          },
-        });
-        notifiedUserUuids.add(parentAuthor.auth_user_id);
+      } else {
+        if (!notifiedUserUuids.has(parentAuthor.auth_user_id)) {
+          await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
+            body: {
+              user_ids: [parentAuthor.auth_user_id],
+              title: '새로운 답글 알림',
+              body: `${commentAuthorNickname}님이 회원님의 댓글에 답글을 남겼습니다.`,
+              data: notificationData,
+            },
+          });
+          notifiedUserUuids.add(parentAuthor.auth_user_id);
+        }
       }
     }
 
-    // ✅ 5. 모든 관리자에게 알림 보내기
     const { data: admins, error: adminError } = await supabaseAdmin
       .from('users')
       .select('auth_user_id')

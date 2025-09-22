@@ -127,17 +127,32 @@ async function openExternalUrlBestEffort(url) {
 function pickTitleBody(remote) {
   const d = remote?.data || {};
   const n = remote?.notification || {};
+
+  // AdminJS에서 보낸 data.params 구조를 파싱
+  let parsedParams = {};
+  if (d.params && typeof d.params === 'string') {
+    try {
+      parsedParams = JSON.parse(d.params);
+    } catch (e) {
+      console.warn('[Push] Failed to parse data.params:', e);
+    }
+  } else if (d.params && typeof d.params === 'object') {
+    parsedParams = d.params;
+  }
+
   return {
     title: d.title || n.title || '알림',
     body: d.body || n.body || '',
-    data: d,
+    data: {
+      ...d,
+      ...parsedParams, // screen, postId 등을 data 최상위로 올림
+    },
   };
 }
 
 /** 푸시 페이로드 → 네비게이션 or 외부 링크 */
 export function openFromPayload(navigateTo, data = {}) {
   try {
-    // 보안: 허용 스크린만 이동하도록 화이트리스트 (필요 시 확장)
     const ALLOWED_SCREENS = new Set([
       'CommunityPostDetail',
       'ArrestNewsDetail',
@@ -145,20 +160,18 @@ export function openFromPayload(navigateTo, data = {}) {
       'NewCrimeCaseDetail',
       'NoticeDetail',
       'ReviewDetail',
-      // 필요 시 추가
     ]);
 
     const { screen, link_url, url, ...params } = data || {};
 
+    // Edge Function에서 보낸 data.data.params 구조 처리
+    const finalParams =
+      params.params && typeof params.params === 'object'
+        ? params.params
+        : params;
+
     if (screen && ALLOWED_SCREENS.has(screen)) {
-      // 숫자 문자열은 숫자로 변환
-      const casted = {};
-      Object.keys(params || {}).forEach(k => {
-        const v = params[k];
-        const num = Number(v);
-        casted[k] = Number.isFinite(num) && String(num) === String(v) ? num : v;
-      });
-      navigateTo?.(screen, casted);
+      navigateTo?.(screen, finalParams);
       return;
     }
 
@@ -182,7 +195,6 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       data,
       android: {
         channelId: CHANNEL_ID,
-        // Android 12+ trampoline 제한 회피: 메인 액티비티 직접 실행
         pressAction: { id: 'default', launchActivity: 'default' },
         style: body ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
       },
@@ -205,7 +217,7 @@ export async function wireMessageHandlers(navigateTo) {
         data,
         android: {
           channelId: CHANNEL_ID,
-          pressAction: { id: 'default', launchActivity: 'default' },
+          pressAction: { id: 'default' },
           style: body ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
         },
       });
@@ -214,25 +226,19 @@ export async function wireMessageHandlers(navigateTo) {
     }
   });
 
-  // 앱이 켜져 있을 때 Notifee 알림 탭
+  // ✅ Notifee 포그라운드 이벤트 (알림 탭)
   notifee.onForegroundEvent(({ type, detail }) => {
-    if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+    if (type === EventType.PRESS) {
       openFromPayload(navigateTo, detail?.notification?.data || {});
     }
   });
 
-  // 백그라운드 → 포그라운드로 열릴 때 (FCM 기본 탭 경로)
-  messaging().onNotificationOpenedApp(remoteMessage => {
-    if (remoteMessage) {
-      openFromPayload(navigateTo, remoteMessage.data || {});
+  // ✅ Notifee 백그라운드 이벤트 (알림 탭)
+  notifee.onBackgroundEvent(async ({ type, detail }) => {
+    if (type === EventType.PRESS) {
+      openFromPayload(navigateTo, detail?.notification?.data || {});
     }
   });
-
-  // 콜드 스타트(알림 탭으로 시작한 경우)
-  const init = await messaging().getInitialNotification();
-  if (init?.data) {
-    openFromPayload(navigateTo, init.data);
-  }
 }
 
 /** 토큰 해제 */
