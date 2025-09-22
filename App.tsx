@@ -1,3 +1,5 @@
+// App.tsx
+
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
@@ -23,16 +25,18 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import notifee from '@notifee/react-native';
+
 import {
   wireMessageHandlers,
   openFromPayload,
   updatePushTokenOnLogin,
   setupTokenRefreshListener,
   requestNotificationPermissionAndroid,
+  ensureNotificationChannel,
 } from './src/lib/push';
-import notifee from '@notifee/react-native';
 
-// Screens
+// Screens (생략 없이 원문 그대로)
 import HomeScreen from './src/screens/HomeScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import UnifiedSearchScreen from './src/screens/UnifiedSearchScreen';
@@ -81,6 +85,7 @@ const linking = {
   },
 };
 
+// 네비 타입들 (당신이 보낸 선언 유지)
 export type CommunityStackParamList = {
   CommunityList: undefined;
   CommunityPostDetail: { postId: number; postTitle?: string };
@@ -205,24 +210,22 @@ function HelpDeskStack() {
 
 function MainTabs() {
   const insets = useSafeAreaInsets();
-
   return (
     <Tab.Navigator
       id={undefined}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName = '';
-          if (route.name === 'SearchTab') {
+          if (route.name === 'SearchTab')
             iconName = focused ? 'magnify' : 'magnify';
-          } else if (route.name === 'ChatTab') {
+          else if (route.name === 'ChatTab')
             iconName = focused ? 'chat-processing' : 'chat-processing-outline';
-          } else if (route.name === 'CommunityTab') {
+          else if (route.name === 'CommunityTab')
             iconName = focused ? 'forum' : 'forum-outline';
-          } else if (route.name === 'MyTab') {
+          else if (route.name === 'MyTab')
             iconName = focused ? 'account-circle' : 'account-circle-outline';
-          } else if (route.name === 'HelpCenterTab') {
+          else if (route.name === 'HelpCenterTab')
             iconName = focused ? 'help-circle' : 'help-circle-outline';
-          }
           return <Icon name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#3d5afe',
@@ -274,9 +277,7 @@ function AppNavigator() {
     if (user?.id) {
       updatePushTokenOnLogin(user.id);
       const unsubscribe = setupTokenRefreshListener(user.id);
-      return () => {
-        unsubscribe();
-      };
+      return () => unsubscribe();
     }
   }, [user?.id]);
 
@@ -456,47 +457,46 @@ function AppNavigator() {
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
 
+  // 네비게이션 함수: 탭/초기 알림에서 호출
   const navigateToScreen = useCallback(
     (screen: string, params?: any) => {
-      if (navRef.isReady()) {
-        // ✅ [수정] 중첩된 스크린과 일반 스크린 이동 로직을 통합하고 단순화합니다.
-        // 각 케이스에 맞는 ID를 숫자로 변환하여 타입 안정성을 보장합니다.
-        if (screen === 'CommunityPostDetail' && params?.postId) {
-          navRef.navigate('MainApp', {
-            screen: 'CommunityTab',
-            params: {
-              screen: 'CommunityPostDetail',
-              params: {
-                postId: Number(params.postId),
-              },
-            },
-          });
-        } else if (screen === 'HelpDeskDetail' && params?.questionId) {
-          navRef.navigate('MainApp', {
-            screen: 'HelpCenterTab',
-            params: {
-              screen: 'HelpDeskDetail',
-              params: {
-                questionId: Number(params.questionId),
-              },
-            },
-          });
-        } else if (screen) {
-          // ✅ [수정] 나머지 모든 스크린은 올바른 숫자 타입의 파라미터로 변환하여 전달합니다.
-          const numericParams = {};
-          if (params) {
-            Object.keys(params).forEach(key => {
-              const numValue = Number(params[key]);
-              numericParams[key] = isNaN(numValue) ? params[key] : numValue;
-            });
-          }
-          navRef.navigate(screen as never, numericParams as never);
-        }
+      if (!navRef.isReady()) return;
+
+      // 커뮤니티/헬프센터 중첩 네비 (당신 코드를 보강하여 숫자 캐스팅 안정성 유지)
+      if (screen === 'CommunityPostDetail' && params?.postId) {
+        navRef.navigate('MainApp', {
+          screen: 'CommunityTab',
+          params: {
+            screen: 'CommunityPostDetail',
+            params: { postId: Number(params.postId) },
+          },
+        });
+        return;
       }
+      if (screen === 'HelpDeskDetail' && params?.questionId) {
+        navRef.navigate('MainApp', {
+          screen: 'HelpCenterTab',
+          params: {
+            screen: 'HelpDeskDetail',
+            params: { questionId: Number(params.questionId) },
+          },
+        });
+        return;
+      }
+
+      // 일반 라우팅: 숫자 문자열은 숫자로 변환
+      const casted = {};
+      Object.keys(params || {}).forEach(k => {
+        const v = params[k];
+        const num = Number(v);
+        casted[k] = Number.isFinite(num) && String(num) === String(v) ? num : v;
+      });
+      navRef.navigate(screen as never, casted as never);
     },
     [navRef],
   );
 
+  // 서드파티 초기화
   useEffect(() => {
     NaverLogin.initialize({
       appName: '크레딧톡',
@@ -507,14 +507,19 @@ function App(): React.JSX.Element {
     });
   }, []);
 
+  // 푸시/알림 와이어링
   useEffect(() => {
-    requestNotificationPermissionAndroid();
-    wireMessageHandlers(navigateToScreen);
-    notifee.getInitialNotification().then(initial => {
+    (async () => {
+      await requestNotificationPermissionAndroid();
+      await ensureNotificationChannel(); // Android 채널 선생성
+      await wireMessageHandlers(navigateToScreen);
+
+      // 콜드 스타트: Notifee 초기 알림 우선 확인(네이티브 탭 → JS 진입)
+      const initial = await notifee.getInitialNotification();
       if (initial?.notification?.data) {
         openFromPayload(navigateToScreen, initial.notification.data);
       }
-    });
+    })();
   }, [navigateToScreen]);
 
   return (
