@@ -1,9 +1,4 @@
 // supabase/functions/new-post-notification/index.ts
-// --------------------------------------------------
-// 새 글 등록 시, 각 사용자에게 FCM data-only 페이로드를 보내기 위한 Edge Function
-// - 반드시 "data-only"로 전송 (notification 객체 금지)
-// - Android: priority=high / iOS: content-available=1 은 send-fcm-v1-push에서 적용
-// --------------------------------------------------
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -20,7 +15,6 @@ const supabaseAdmin = createClient(
   },
 );
 
-// 앱 내 라우팅 스크린 매핑
 const SCREEN_MAP: Record<string, string> = {
   community_posts: 'CommunityPostDetail',
   arrest_news: 'ArrestNewsDetail',
@@ -39,27 +33,24 @@ const ID_PARAM_MAP: Record<string, string> = {
   reviews: 'reviewId',
 };
 
-const CHUNK_SIZE = 100; // 한 번에 전송할 대상 수
+const CHUNK_SIZE = 100;
 
 Deno.serve(async req => {
   try {
     const { table, record: post } = await req.json();
 
     if (!post || !post.id) {
-      // 무해한 종료
       return new Response(JSON.stringify({ message: 'No-op' }), {
         headers: { 'Content-Type': 'application/json' },
         status: 200,
       });
     }
 
-    // 제목 후보
     const postTitle =
       [post.title, post.subject, post.case_name, '제목 없음'].find(
         (t: unknown) => typeof t === 'string' && (t as string).trim() !== '',
       ) ?? '제목 없음';
 
-    // 작성자 관리자 여부 확인 (공지/관리자 글은 전체 전송)
     const authorId = post.user_id || post.uploader_id;
     let isAdminAuthor = false;
 
@@ -76,7 +67,6 @@ Deno.serve(async req => {
     }
 
     if (!isAdminAuthor) {
-      // 현재 정책: 관리자/공지글만 전체 푸시
       return new Response(
         JSON.stringify({ message: 'Skip (non-admin author)' }),
         {
@@ -116,23 +106,25 @@ Deno.serve(async req => {
     for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
       const chunk = userIds.slice(i, i + CHUNK_SIZE);
 
-      // ✅ data-only 페이로드 (클라이언트가 로컬 알림 생성/탭 처리/라우팅)
       const data = {
-        type: 'new_post',
-        screen, // e.g., "ArrestNewsDetail"
-        [idParamKey]: String(post.id), // FCM data는 문자열 권장
-        title: '새로운 글이 등록되었습니다', // 표시용 - 클라이언트에서 사용
-        body: `${postTitle}`, // 표시용 - 클라이언트에서 사용
+        title: '새로운 글이 등록되었습니다',
+        body: `${postTitle}`,
+        // AdminJS와 동일한 포맷으로 수정
+        data: {
+          screen: screen,
+          params: {
+            [idParamKey]: post.id,
+          },
+        },
       };
 
       invocations.push(
         supabaseAdmin.functions.invoke('send-fcm-v1-push', {
           body: {
             user_ids: chunk,
-            // ✨ 반드시 data-only 로 전송하도록 send-fcm-v1-push 구현 필요
-            // (Android priority=high / iOS content-available=1 설정)
-            data,
-            meta: { kind: 'data_only' },
+            title: data.title,
+            body: data.body,
+            data: data.data,
           },
         }),
       );
