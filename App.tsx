@@ -457,12 +457,21 @@ function AppNavigator() {
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
 
-  // 네비게이션 함수: 탭/초기 알림에서 호출
   const navigateToScreen = useCallback(
     (screen: string, params?: any) => {
       if (!navRef.isReady()) return;
 
-      // 커뮤니티/헬프센터 중첩 네비 (당신 코드를 보강하여 숫자 캐스팅 안정성 유지)
+      const castAndNavigate = (targetScreen, targetParams) => {
+        const casted = {};
+        Object.keys(targetParams || {}).forEach(k => {
+          const v = targetParams[k];
+          const num = Number(v);
+          casted[k] =
+            Number.isFinite(num) && String(num) === String(v) ? num : v;
+        });
+        navRef.navigate(targetScreen as never, casted as never);
+      };
+
       if (screen === 'CommunityPostDetail' && params?.postId) {
         navRef.navigate('MainApp', {
           screen: 'CommunityTab',
@@ -471,9 +480,7 @@ function App(): React.JSX.Element {
             params: { postId: Number(params.postId) },
           },
         });
-        return;
-      }
-      if (screen === 'HelpDeskDetail' && params?.questionId) {
+      } else if (screen === 'HelpDeskDetail' && params?.questionId) {
         navRef.navigate('MainApp', {
           screen: 'HelpCenterTab',
           params: {
@@ -481,22 +488,13 @@ function App(): React.JSX.Element {
             params: { questionId: Number(params.questionId) },
           },
         });
-        return;
+      } else {
+        castAndNavigate(screen, params);
       }
-
-      // 일반 라우팅: 숫자 문자열은 숫자로 변환
-      const casted = {};
-      Object.keys(params || {}).forEach(k => {
-        const v = params[k];
-        const num = Number(v);
-        casted[k] = Number.isFinite(num) && String(num) === String(v) ? num : v;
-      });
-      navRef.navigate(screen as never, casted as never);
     },
     [navRef],
   );
 
-  // 서드파티 초기화
   useEffect(() => {
     NaverLogin.initialize({
       appName: '크레딧톡',
@@ -507,17 +505,21 @@ function App(): React.JSX.Element {
     });
   }, []);
 
-  // 푸시/알림 와이어링
   useEffect(() => {
     (async () => {
       await requestNotificationPermissionAndroid();
-      await ensureNotificationChannel(); // Android 채널 선생성
+      await ensureNotificationChannel();
+
+      // ✅ Notifee를 통한 이벤트 핸들링으로 일원화
       await wireMessageHandlers(navigateToScreen);
 
-      // 콜드 스타트: Notifee 초기 알림 우선 확인(네이티브 탭 → JS 진입)
-      const initial = await notifee.getInitialNotification();
-      if (initial?.notification?.data) {
-        openFromPayload(navigateToScreen, initial.notification.data);
+      // ✅ 앱 시작 시 Notifee의 초기 알림만 확인
+      const initialNotifee = await notifee.getInitialNotification();
+      if (initialNotifee) {
+        openFromPayload(
+          navigateToScreen,
+          initialNotifee.notification?.data || {},
+        );
       }
     })();
   }, [navigateToScreen]);

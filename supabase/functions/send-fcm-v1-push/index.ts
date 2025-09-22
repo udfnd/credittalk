@@ -8,9 +8,8 @@ const SERVICE_ACCOUNT = JSON.parse(
   Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON')!,
 );
 const ANDROID_CHANNEL_ID = 'push_default_v2';
-const CHUNK_SIZE = 100; // 한 번에 조회할 사용자 수 (100명씩 나누어 처리)
+const CHUNK_SIZE = 100;
 
-// RLS를 확실히 우회하기 위한 Supabase 클라이언트 생성
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -85,23 +84,22 @@ function normalizeDataPayload(
 }
 
 Deno.serve(async req => {
-  const { user_ids, title, body, data } = await req.json();
+  const { user_ids, title, body, data, notification } = await req.json();
 
-  if (!user_ids || user_ids.length === 0 || !title || !body) {
-    return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+  if (!user_ids || !user_ids.length) {
+    return new Response(JSON.stringify({ error: 'Missing user_ids' }), {
       status: 400,
     });
   }
 
-  const allDeviceTokens = [];
+  const allDeviceTokens: { token: string; platform: string }[] = [];
 
-  // 사용자 ID 목록을 100명씩 나누어 처리하는 반복문
   for (let i = 0; i < user_ids.length; i += CHUNK_SIZE) {
     const chunk = user_ids.slice(i, i + CHUNK_SIZE);
 
     const { data: deviceTokensChunk, error } = await supabaseAdmin
       .from('device_push_tokens')
-      .select('token')
+      .select('token, platform')
       .in('user_id', chunk)
       .eq('enabled', true);
 
@@ -133,26 +131,41 @@ Deno.serve(async req => {
     const deadTokens: string[] = [];
     const fcmResults = [];
 
-    for (const { token } of allDeviceTokens) {
-      const message = {
-        message: {
-          token,
-          notification: { title, body },
-          data: normalizeDataPayload(data),
-          android: {
-            priority: 'HIGH' as const,
-            notification: { channel_id: ANDROID_CHANNEL_ID },
+    const isDataOnly = !notification && !title && !body;
+
+    for (const { token, platform } of allDeviceTokens) {
+      const messagePayload: any = {
+        token,
+        data: normalizeDataPayload(data),
+        android: {
+          priority: 'HIGH' as const,
+        },
+        apns: {
+          payload: {
+            aps: {
+              'content-available': 1,
+            },
           },
         },
       };
+
+      if (!isDataOnly) {
+        messagePayload.notification = { title, body };
+        messagePayload.android.notification = {
+          channel_id: ANDROID_CHANNEL_ID,
+        };
+        delete messagePayload.apns.payload.aps['content-available'];
+      }
+
       const res = await fetch(FCM_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(message),
+        body: JSON.stringify({ message: messagePayload }),
       });
+
       const resultBody = await res.json();
       fcmResults.push({ token, status: res.status, body: resultBody });
       if (!res.ok) {
@@ -167,7 +180,7 @@ Deno.serve(async req => {
     }
 
     console.log(
-      'FCM Send Results:',
+      'FCM Send Results (first 5):',
       JSON.stringify(fcmResults.slice(0, 5), null, 2),
     );
 
@@ -183,6 +196,7 @@ Deno.serve(async req => {
         success: true,
         total_tokens_found: allDeviceTokens.length,
         results_count: fcmResults.length,
+        dead_tokens_count: deadTokens.length,
       }),
       { headers: { 'Content-Type': 'application/json' } },
     );
