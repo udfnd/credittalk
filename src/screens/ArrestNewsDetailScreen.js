@@ -20,6 +20,7 @@ import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
+import { useAuth } from '../context/AuthContext'; // useAuth hook 추가
 
 const { width } = Dimensions.get('window');
 
@@ -28,16 +29,110 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   const [news, setNews] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { user } = useAuth(); // 현재 사용자 정보
   useIncrementView('arrest_news', newsId);
 
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
+  const isAuthor = useMemo(() => {
+    if (!user || !news) return false;
+    return user.id === news.user_id;
+  }, [user, news]);
+
+  const fetchNewsDetail = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('arrest_news')
+        .select(
+          'id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views, user_id',
+        )
+        .eq('id', newsId)
+        .eq('is_published', true)
+        .single();
+
+      if (fetchError) {
+        if (fetchError.code === 'PGRST116') {
+          throw new Error('소식을 찾을 수 없거나 접근 권한이 없습니다.');
+        }
+        throw fetchError;
+      }
+      setNews(data);
+    } catch (err) {
+      setError(err.message || '소식 상세 정보를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [newsId]);
+
   useEffect(() => {
-    if (newsTitle) {
+    fetchNewsDetail();
+  }, [fetchNewsDetail]);
+
+  // 수정 로직 추가
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchNewsDetail();
+    });
+
+    return unsubscribe;
+  }, [navigation, fetchNewsDetail]);
+
+  useEffect(() => {
+    if (news) {
+      navigation.setOptions({
+        title: news.title,
+        headerRight: () =>
+          isAuthor ? (
+            <View style={{ flexDirection: 'row' }}>
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{ marginRight: 15 }}>
+                <Icon name="pencil" size={24} color="#3d5afe" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete}>
+                <Icon name="delete" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ) : null,
+      });
+    } else if (newsTitle) {
       navigation.setOptions({ title: newsTitle });
     }
-  }, [newsTitle, navigation]);
+  });
+
+  const handleEdit = () => {
+    navigation.navigate('ArrestNewsEdit', { newsId: news.id });
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      '삭제 확인',
+      '정말로 이 게시글을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error: deleteError } = await supabase
+                .from('arrest_news')
+                .delete()
+                .eq('id', news.id);
+              if (deleteError) throw deleteError;
+              Alert.alert('삭제 완료', '게시글이 삭제되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              Alert.alert('삭제 실패', err.message);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
@@ -65,37 +160,6 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     }
   };
 
-  const fetchNewsDetail = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('arrest_news')
-        .select(
-          'id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views',
-        )
-        .eq('id', newsId)
-        .eq('is_published', true)
-        .single();
-
-      if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          throw new Error('소식을 찾을 수 없거나 접근 권한이 없습니다.');
-        }
-        throw fetchError;
-      }
-      setNews(data);
-    } catch (err) {
-      setError(err.message || '소식 상세 정보를 불러오는데 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [newsId]);
-
-  useEffect(() => {
-    fetchNewsDetail();
-  }, [fetchNewsDetail]);
-
   const viewerImages = useMemo(() => {
     if (!Array.isArray(news?.image_urls)) return [];
     return news.image_urls.filter(Boolean).map(uri => ({ uri }));
@@ -106,7 +170,6 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     setViewerVisible(true);
   }, []);
 
-  // ✅ 이미지 렌더링 로직 수정
   const renderImages = () => {
     if (!Array.isArray(news?.image_urls) || news.image_urls.length === 0) {
       return null;
