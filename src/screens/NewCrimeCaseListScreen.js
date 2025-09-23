@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-  Image, // Image 컴포넌트 추가
-  SafeAreaView, // SafeAreaView 추가
+  Image,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -39,13 +39,10 @@ function NewCrimeCaseListScreen() {
     setError(null);
 
     try {
-      // NoticeListScreen과 유사한 컬럼들을 가져오도록 쿼리 수정
-      const { data, error: fetchError } = await supabase
-        .from('new_crime_cases')
-        .select('id, created_at, title, image_urls, category, views, is_pinned') // title, image_urls, category, is_pinned 추가
-        .eq('is_published', true)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      // RPC call to the new SQL function
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_new_crime_cases_with_comment_info',
+      );
 
       if (fetchError) throw fetchError;
       setCases(data || []);
@@ -67,7 +64,8 @@ function NewCrimeCaseListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-  }, []);
+    fetchCases();
+  }, [fetchCases]);
 
   const handleCreateCase = () => {
     if (!user) {
@@ -80,19 +78,17 @@ function NewCrimeCaseListScreen() {
     navigation.navigate('NewCrimeCaseCreate');
   };
 
-  // --- 핵심 수정: renderItem 로직을 NoticeListScreen과 동일하게 변경 ---
   const renderItem = ({ item }) => {
     const thumbnailUrl =
       item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : null;
 
     return (
       <TouchableOpacity
-        style={styles.noticeItem} // 스타일 이름 통일
+        style={styles.noticeItem}
         onPress={() =>
           navigation.navigate('NewCrimeCaseDetail', { caseId: item.id })
         }>
         <View style={styles.noticeContent}>
-          {/* 썸네일 이미지 또는 플레이스홀더 아이콘 표시 */}
           {thumbnailUrl ? (
             <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
           ) : (
@@ -113,10 +109,20 @@ function NewCrimeCaseListScreen() {
               <Text style={styles.noticeTitle} numberOfLines={2}>
                 {item.title}
               </Text>
+              {item.has_new_comment && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              )}
             </View>
             <View style={styles.noticeMeta}>
               <Text style={styles.noticeAuthor} numberOfLines={1}>
                 {item.category || '기타 사례'}
+              </Text>
+            </View>
+            <View style={styles.noticeMeta}>
+              <Text style={styles.noticeDate} numberOfLines={1}>
+                댓글 {item.comment_count || 0}
               </Text>
               <Text style={styles.noticeDate} numberOfLines={1}>
                 조회 {item.views || 0}
@@ -233,12 +239,11 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 8,
   },
   pinIcon: {
     marginRight: 6,
-    marginTop: 2,
   },
   noticeTitle: {
     fontSize: 16,
@@ -246,17 +251,29 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
     flex: 1,
   },
+  newBadge: {
+    backgroundColor: '#E74C3C',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  newBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   noticeMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
-    gap: 8,
   },
   noticeAuthor: {
     fontSize: 12,
     color: '#7f8c8d',
-    flex: 1, // 카테고리 이름이 길어질 경우를 대비
+    flexShrink: 1,
+    marginRight: 'auto',
   },
   noticeDate: {
     fontSize: 12,

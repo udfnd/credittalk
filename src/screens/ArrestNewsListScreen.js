@@ -1,3 +1,5 @@
+// src/screens/ArrestNewsListScreen.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -8,7 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
-  SafeAreaView, // SafeAreaView 추가
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -35,14 +37,10 @@ function ArrestNewsListScreen() {
     if (!refreshing) setIsLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
-        .from('arrest_news')
-        .select(
-          'id, title, created_at, author_name, image_urls, views, is_pinned',
-        )
-        .eq('is_published', true)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      // RPC call to the new SQL function
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_arrest_news_with_comment_info',
+      );
 
       if (fetchError) throw fetchError;
       setNews(data || []);
@@ -63,7 +61,8 @@ function ArrestNewsListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-  }, []);
+    fetchNews();
+  }, [fetchNews]);
 
   const renderItem = ({ item }) => {
     const thumbnailUrl =
@@ -103,12 +102,20 @@ function ArrestNewsListScreen() {
               <Text style={styles.noticeTitle} numberOfLines={2}>
                 {item.title}
               </Text>
+              {item.has_new_comment && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              )}
             </View>
             <View style={styles.noticeMeta}>
               <Text style={styles.noticeAuthor}>
                 {item.author_name || '관리자'}
               </Text>
               <Text style={styles.noticeDate}>조회 {item.views || 0}</Text>
+              <Text style={styles.noticeDate}>
+                댓글 {item.comment_count || 0}
+              </Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
               </Text>
@@ -227,18 +234,29 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center', // Align items vertically
     marginBottom: 8,
   },
   pinIcon: {
     marginRight: 6,
-    marginTop: 2,
   },
   noticeTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
-    flex: 1,
+    flex: 1, // Allow title to take up available space
+  },
+  newBadge: {
+    backgroundColor: '#E74C3C',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  newBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   noticeMeta: {
     flexDirection: 'row',
@@ -276,7 +294,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
   },
-  // FAB 스타일 추가
   fab: {
     position: 'absolute',
     width: 60,
