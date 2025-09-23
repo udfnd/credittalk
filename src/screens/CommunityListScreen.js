@@ -1,3 +1,5 @@
+// src/screens/CommunityListScreen.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -38,13 +40,10 @@ function CommunityListScreen() {
     }
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
-        .from('community_posts_with_author_profile')
-        .select(
-          'id, title, created_at, author_auth_id, views, author_name, image_urls',
-        ) // image_urls added
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      // RPC call to the new SQL function
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_community_posts_with_comment_info',
+      );
 
       if (fetchError) throw fetchError;
       setPosts(data || []);
@@ -66,7 +65,8 @@ function CommunityListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-  }, []);
+    fetchPosts();
+  }, [fetchPosts]);
 
   const handleCreatePost = () => {
     if (!user) {
@@ -79,7 +79,6 @@ function CommunityListScreen() {
     navigation.navigate('CommunityPostCreate');
   };
 
-  // [CORE MODIFICATION] renderItem layout changed to match NoticeListScreen
   const renderItem = ({ item }) => {
     const thumbnailUrl =
       item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : null;
@@ -102,17 +101,27 @@ function CommunityListScreen() {
             </View>
           )}
           <View style={styles.textContainer}>
-            <Text style={styles.noticeTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
+            <View style={styles.titleContainer}>
+              <Text style={styles.noticeTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+              {item.has_new_comment && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.noticeMeta}>
-              <Text style={styles.noticeAuthor} numberOfLines={1}>
+              <Text style={styles.noticeMetaText} numberOfLines={1}>
                 {item.author_name || '익명'}
               </Text>
-              <Text style={styles.noticeDate}>
+              <Text style={styles.noticeMetaText}>
+                댓글 {item.comment_count || 0}
+              </Text>
+              <Text style={styles.noticeMetaText}>조회 {item.views || 0}</Text>
+              <Text style={styles.noticeMetaText}>
                 {new Date(item.created_at).toLocaleDateString()}
               </Text>
-              <Text style={styles.noticeViews}>조회 {item.views || 0}</Text>
             </View>
           </View>
         </View>
@@ -174,7 +183,6 @@ function CommunityListScreen() {
   );
 }
 
-// [CORE MODIFICATION] Styles updated to match NoticeListScreen
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -217,31 +225,40 @@ const styles = StyleSheet.create({
   textContainer: {
     flex: 1,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
   noticeTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2c3e50',
-    marginBottom: 8,
+    flex: 1,
+  },
+  newBadge: {
+    backgroundColor: '#E74C3C',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+    marginTop: 2,
+  },
+  newBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   noticeMeta: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
   },
-  noticeAuthor: {
+  noticeMetaText: {
     fontSize: 12,
     color: '#7f8c8d',
-    flexShrink: 1, // Allow author name to shrink if needed
-    marginRight: 8,
-  },
-  noticeDate: {
-    fontSize: 12,
-    color: '#95a5a6',
-    marginRight: 8,
-  },
-  noticeViews: {
-    fontSize: 12,
-    color: '#95a5a6',
+    flexShrink: 1,
   },
   errorText: {
     marginTop: 10,

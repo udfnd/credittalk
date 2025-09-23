@@ -1,3 +1,5 @@
+// src/screens/IncidentPhotoListScreen.js
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -8,7 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
-  SafeAreaView, // SafeAreaView 추가
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -36,14 +38,10 @@ function IncidentPhotoListScreen() {
     if (!refreshing) setIsLoading(true);
     setError(null);
     try {
-      const { data, error: fetchError } = await supabase
-        .from('incident_photos')
-        .select(
-          'id, title, created_at, image_urls, category, description, is_pinned, views',
-        )
-        .eq('is_published', true)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      // RPC call to the new SQL function
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_incident_photos_with_comment_info',
+      );
 
       if (fetchError) throw fetchError;
       setPhotos(data || []);
@@ -64,7 +62,8 @@ function IncidentPhotoListScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-  }, []);
+    fetchPhotos();
+  }, [fetchPhotos]);
 
   const renderItem = ({ item }) => {
     const thumbnailUrl =
@@ -100,6 +99,11 @@ function IncidentPhotoListScreen() {
               <Text style={styles.noticeTitle} numberOfLines={2}>
                 {item.title}
               </Text>
+              {item.has_new_comment && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              )}
             </View>
             <View style={styles.noticeMeta}>
               {item.category && (
@@ -107,6 +111,11 @@ function IncidentPhotoListScreen() {
                   {item.category}
                 </Text>
               )}
+            </View>
+            <View style={styles.noticeMeta}>
+              <Text style={styles.noticeDate}>
+                댓글 {item.comment_count || 0}
+              </Text>
               <Text style={styles.noticeDate}>조회 {item.views || 0}</Text>
               <Text style={styles.noticeDate}>
                 {new Date(item.created_at).toLocaleDateString()}
@@ -218,15 +227,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   titleContainer: {
-    // titleContainer 추가
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 8,
   },
   pinIcon: {
-    // pinIcon 추가
     marginRight: 6,
-    marginTop: 2,
   },
   noticeTitle: {
     fontSize: 16,
@@ -234,17 +240,29 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
     flex: 1,
   },
+  newBadge: {
+    backgroundColor: '#E74C3C',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  newBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   noticeMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 16,
     alignItems: 'center',
     marginTop: 4,
   },
   noticeAuthor: {
     fontSize: 12,
     color: '#7f8c8d',
-    flex: 1,
+    flexShrink: 1,
+    marginRight: 'auto',
   },
   noticeDate: {
     fontSize: 12,
