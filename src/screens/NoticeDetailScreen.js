@@ -1,4 +1,3 @@
-// src/screens/NoticeDetailScreen.js
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
@@ -13,7 +12,7 @@ import {
   Linking,
   ScrollView,
 } from 'react-native';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -21,7 +20,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
-import ImageViewing from 'react-native-image-viewing'; // ✅ 추가
+import ImageViewing from 'react-native-image-viewing';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const contentPadding = 20;
@@ -29,41 +29,103 @@ const imageWidth = width - contentPadding * 2;
 
 const NoticeDetailScreen = () => {
   const route = useRoute();
+  const navigation = useNavigation();
   const { noticeId } = route.params;
+  const { profile } = useAuth(); // is_admin을 확인하기 위해 profile 사용
+
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // ✅ 뷰어 상태
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
   useIncrementView('notices', noticeId);
 
-  useEffect(() => {
-    const fetchNoticeDetails = async () => {
-      if (!noticeId) {
-        Alert.alert('오류', '게시글 정보를 가져올 수 없습니다.');
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('notices')
-          .select('*, link_url, image_urls')
-          .eq('id', noticeId)
-          .single();
-        if (error) throw error;
-        setNotice(data);
-      } catch (error) {
-        console.error('Error fetching notice:', error);
-        Alert.alert('오류', '공지사항을 불러오는 중 문제가 발생했습니다.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchNoticeDetails();
+  // is_admin 값을 확인
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  const fetchNoticeDetails = useCallback(async () => {
+    if (!noticeId) {
+      Alert.alert('오류', '게시글 정보를 가져올 수 없습니다.');
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('notices')
+        .select('*')
+        .eq('id', noticeId)
+        .single();
+      if (error) throw error;
+      setNotice(data);
+    } catch (error) {
+      console.error('Error fetching notice:', error);
+      Alert.alert('오류', '공지사항을 불러오는 중 문제가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
   }, [noticeId]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchNoticeDetails();
+    });
+    return unsubscribe;
+  }, [navigation, fetchNoticeDetails]);
+
+  useEffect(() => {
+    if (notice) {
+      navigation.setOptions({
+        title: notice.title,
+        headerRight: () =>
+          isAdmin ? (
+            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{ marginRight: 20 }}>
+                <Icon name="pencil" size={24} color="#3d5afe" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete}>
+                <Icon name="delete" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ) : null,
+      });
+    }
+  }, [notice, navigation, isAdmin]);
+
+  const handleEdit = () => {
+    navigation.navigate('NoticeEdit', { noticeId: notice.id });
+  };
+
+  const handleDelete = () => {
+    Alert.alert('삭제 확인', '정말로 이 공지사항을 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setLoading(true);
+          try {
+            const { error } = await supabase
+              .from('notices')
+              .delete()
+              .eq('id', notice.id);
+
+            if (error) throw error;
+            Alert.alert('삭제 완료', '공지사항이 삭제되었습니다.');
+            navigation.goBack();
+          } catch (err) {
+            console.error('Delete Error:', err);
+            Alert.alert(
+              '삭제 실패',
+              err.message || '삭제 중 문제가 발생했습니다.',
+            );
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
@@ -83,9 +145,7 @@ const NoticeDetailScreen = () => {
   const handleLinkPress = async rawUrl => {
     const url = sanitizeUrl(rawUrl);
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) await Linking.openURL(url);
-      else await Linking.openURL(url);
+      await Linking.openURL(url);
     } catch (e) {
       Alert.alert('오류', `이 링크를 열 수 없습니다: ${e.message}`);
     }
@@ -141,8 +201,7 @@ const NoticeDetailScreen = () => {
                 <TouchableOpacity
                   key={index}
                   activeOpacity={0.9}
-                  onPress={() => openViewerAt(index)} // ✅ 이미지 탭 → 뷰어 오픈
-                >
+                  onPress={() => openViewerAt(index)}>
                   <Image
                     source={{ uri: url }}
                     style={styles.image}
@@ -222,7 +281,6 @@ const styles = StyleSheet.create({
   date: { fontSize: 14, color: '#868E96', marginBottom: 20 },
   separator: { height: 1, backgroundColor: '#E9ECEF', marginBottom: 25 },
   content: { fontSize: 16, lineHeight: 28, color: '#495057', marginBottom: 20 },
-
   imageGallery: { marginTop: 10, marginBottom: 20 },
   image: {
     width: imageWidth,
@@ -230,7 +288,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
   },
-
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -251,7 +308,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-
   viewerHeader: {
     position: 'absolute',
     top: 0,

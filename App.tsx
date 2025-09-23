@@ -45,24 +45,31 @@ import SignUpScreen from './src/screens/SignUpScreen';
 import SignInScreen from './src/screens/SignInScreen';
 import NoticeListScreen from './src/screens/NoticeListScreen';
 import NoticeDetailScreen from './src/screens/NoticeDetailScreen';
+import NoticeEditScreen from './src/screens/NoticeEditScreen';
 import ArrestNewsListScreen from './src/screens/ArrestNewsListScreen';
 import ArrestNewsCreateScreen from './src/screens/ArrestNewsCreateScreen';
 import ArrestNewsDetailScreen from './src/screens/ArrestNewsDetailScreen';
+import ArrestNewsEditScreen from './src/screens/ArrestNewsEditScreen'; // 추가
 import ChatListScreen from './src/screens/ChatListScreen';
 import ChatMessageScreen from './src/screens/ChatMessageScreen';
 import NewChatScreen from './src/screens/NewChatScreen';
 import CommunityListScreen from './src/screens/CommunityListScreen';
 import CommunityPostDetailScreen from './src/screens/CommunityPostDetailScreen';
 import CommunityPostCreateScreen from './src/screens/CommunityPostCreateScreen';
+import CommunityPostEditScreen from './src/screens/CommunityPostEditScreen';
 import ReviewListScreen from './src/screens/ReviewListScreen';
 import ReviewDetailScreen from './src/screens/ReviewDetailScreen';
+import ReviewEditScreen from './src/screens/ReviewEditScreen';
 import ReviewCreateScreen from './src/screens/ReviewCreateScreen';
 import IncidentPhotoListScreen from './src/screens/IncidentPhotoListScreen';
 import IncidentPhotoCreateScreen from './src/screens/IncidentPhotoCreateScreen';
 import IncidentPhotoDetailScreen from './src/screens/IncidentPhotoDetailScreen';
+import IncidentPhotoEditScreen from './src/screens/IncidentPhotoEditScreen';
 import MyReportsScreen from './src/screens/MyReportsScreen';
 import NewCrimeCaseListScreen from './src/screens/NewCrimeCaseListScreen';
 import NewCrimeCaseCreateScreen from './src/screens/NewCrimeCaseCreateScreen';
+import NewCrimeCaseDetailScreen from './src/screens/NewCrimeCaseDetailScreen';
+import NewCrimeCaseEditScreen from './src/screens/NewCrimeCaseEditScreen';
 import VoiceAnalysisScreen from './src/screens/VoiceAnalysisScreen';
 import FindEmailScreen from './src/screens/FindEmailScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
@@ -73,7 +80,6 @@ import HelpDeskDetailScreen from './src/screens/HelpDeskDetailScreen';
 import HelpDeskEditScreen from './src/screens/HelpDeskEditScreen';
 import HelpDeskNoticeDetailScreen from './src/screens/HelpDeskNoticeDetailScreen';
 import AdditionalInfoScreen from './src/screens/AdditionalInfoScreen';
-import NewCrimeCaseDetailScreen from './src/screens/NewCrimeCaseDetailScreen';
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen';
 
 const linking = {
@@ -90,6 +96,7 @@ export type CommunityStackParamList = {
   CommunityList: undefined;
   CommunityPostDetail: { postId: number; postTitle?: string };
   CommunityPostCreate: undefined;
+  CommunityPostEdit: { postId: number };
 };
 
 export type HelpDeskStackParamList = {
@@ -119,9 +126,11 @@ export type RootStackParamList = {
   };
   NoticeList: undefined;
   NoticeDetail: { noticeId: number; noticeTitle: string };
+  NoticeEdit: { noticeId: number };
   ArrestNewsList: undefined;
   ArrestNewsCreate: undefined;
   ArrestNewsDetail: { newsId: number; newsTitle: string };
+  ArrestNewsEdit: { newsId: number }; // 추가
   ChatList: undefined;
   ChatMessageScreen: { roomId: string; roomName: string };
   NewChatScreen: undefined;
@@ -130,11 +139,14 @@ export type RootStackParamList = {
   ReviewList: undefined;
   ReviewDetail: { reviewId: number; reviewTitle: string };
   ReviewCreate: undefined;
+  ReviewEdit: { reviewId: number };
   IncidentPhotoList: undefined;
   IncidentPhotoCreate: undefined;
   IncidentPhotoDetail: { photoId: number; photoTitle: string };
+  IncidentPhotoEdit: { photoId: number };
   NewCrimeCaseList: undefined;
   NewCrimeCaseDetail: { caseId: number };
+  NewCrimeCaseEdit: { caseId: number };
   NewCrimeCaseCreate: undefined;
   VoiceAnalysis: undefined;
   FindEmail: undefined;
@@ -169,6 +181,11 @@ function CommunityStack() {
         name="CommunityPostCreate"
         component={CommunityPostCreateScreen}
         options={{ title: '새 글 작성' }}
+      />
+      <CommunityNativeStack.Screen
+        name="CommunityPostEdit"
+        component={CommunityPostEditScreen}
+        options={{ title: '글 수정' }}
       />
     </CommunityNativeStack.Navigator>
   );
@@ -348,6 +365,11 @@ function AppNavigator() {
             options={{ title: '신종범죄 사례 상세' }}
           />
           <RootStack.Screen
+            name="NewCrimeCaseEdit"
+            component={NewCrimeCaseEditScreen}
+            options={{ title: '신종범죄 사례 수정' }}
+          />
+          <RootStack.Screen
             name="NewCrimeCaseCreate"
             component={NewCrimeCaseCreateScreen}
             options={{ title: '사례 등록' }}
@@ -377,6 +399,11 @@ function AppNavigator() {
             component={NoticeDetailScreen}
           />
           <RootStack.Screen
+            name="NoticeEdit"
+            component={NoticeEditScreen}
+            options={{ title: '공지사항 수정' }}
+          />
+          <RootStack.Screen
             name="ArrestNewsList"
             component={ArrestNewsListScreen}
             options={{ title: '검거소식' }}
@@ -387,9 +414,13 @@ function AppNavigator() {
             options={{ title: '검거소식 작성' }}
           />
           <RootStack.Screen
+            name="ArrestNewsEdit"
+            component={ArrestNewsEditScreen}
+            options={{ title: '검거소식 수정' }}
+          />
+          <RootStack.Screen
             name="ArrestNewsDetail"
             component={ArrestNewsDetailScreen}
-            options={({ route }) => ({ title: route.params.newsTitle })}
           />
           <RootStack.Screen
             name="ReviewList"
@@ -399,6 +430,11 @@ function AppNavigator() {
           <RootStack.Screen
             name="ReviewDetail"
             component={ReviewDetailScreen}
+          />
+          <RootStack.Screen
+            name="ReviewEdit"
+            component={ReviewEditScreen}
+            options={{ title: '후기 수정' }}
           />
           <RootStack.Screen
             name="ReviewCreate"
@@ -418,6 +454,11 @@ function AppNavigator() {
           <RootStack.Screen
             name="IncidentPhotoDetail"
             component={IncidentPhotoDetailScreen}
+          />
+          <RootStack.Screen
+            name="IncidentPhotoEdit"
+            component={IncidentPhotoEditScreen}
+            options={{ title: '사진자료 수정' }}
           />
           <RootStack.Screen
             name="ChatList"
