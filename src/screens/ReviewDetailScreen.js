@@ -1,4 +1,3 @@
-// src/screens/ReviewDetailScreen.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -18,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
-import ImageViewing from 'react-native-image-viewing'; // ✅ 추가
+import ImageViewing from 'react-native-image-viewing';
 
 const { width } = Dimensions.get('window');
 
@@ -50,36 +49,20 @@ function ReviewDetailScreen({ route }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  // ✅ 뷰어 상태
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  useEffect(() => {
-    if (reviewTitle) {
-      navigation.setOptions({ title: reviewTitle });
-    }
-  }, [reviewTitle, navigation]);
+  const isAuthor = useMemo(() => {
+    if (!user || !review) return false;
+    return user.id === review.author_auth_id;
+  }, [user, review]);
 
   const fetchReviewDetail = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('reviews_with_author_profile')
-        .select(
-          `
-          id,
-          title,
-          content,
-          created_at,
-          author_auth_id,
-          rating,
-          author_name,
-          image_urls,
-          views
-        `,
-        )
+        .select('*')
         .eq('id', reviewId)
         .eq('is_published', true)
         .single();
@@ -94,14 +77,40 @@ function ReviewDetailScreen({ route }) {
   }, [reviewId]);
 
   useEffect(() => {
-    fetchReviewDetail();
-  }, [fetchReviewDetail]);
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchReviewDetail();
+    });
+    return unsubscribe;
+  }, [navigation, fetchReviewDetail]);
+
+  useEffect(() => {
+    if (review) {
+      navigation.setOptions({
+        title: review.title,
+        headerRight: () =>
+          isAuthor ? (
+            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{ marginRight: 20 }}>
+                <Icon name="pencil" size={24} color="#3d5afe" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDeleteReview}>
+                <Icon name="delete" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ) : null,
+      });
+    } else if (reviewTitle) {
+      navigation.setOptions({ title: reviewTitle });
+    }
+  }, [review, reviewTitle, navigation, isAuthor]);
+
+  const handleEdit = () => {
+    navigation.navigate('ReviewEdit', { reviewId: review.id });
+  };
 
   const handleDeleteReview = async () => {
-    if (review?.author_auth_id !== user?.id) {
-      Alert.alert('권한 없음', '자신의 후기만 삭제할 수 있습니다.');
-      return;
-    }
     Alert.alert('후기 삭제', '정말로 이 후기를 삭제하시겠습니까?', [
       { text: '취소', style: 'cancel' },
       {
@@ -112,33 +121,30 @@ function ReviewDetailScreen({ route }) {
           try {
             if (review.image_urls && review.image_urls.length > 0) {
               const filePaths = review.image_urls
-                .map(url => {
-                  const parts = url.split('/reviews-images/');
-                  return parts[1] || null;
-                })
+                .map(url => url.split('/post-images/')[1])
                 .filter(Boolean);
 
               if (filePaths.length > 0) {
-                const { error: storageError } = await supabase.storage
-                  .from('reviews-images')
-                  .remove(filePaths);
-                if (storageError) {
-                  console.warn('Storage 이미지 삭제 실패:', storageError);
-                }
+                await supabase.storage.from('post-images').remove(filePaths);
               }
             }
 
             const { error: deleteError } = await supabase
               .from('reviews')
               .delete()
-              .eq('id', reviewId);
+              .eq('id', reviewId)
+              .eq('user_id', user.id); // RLS를 위한 조건 추가
 
             if (deleteError) throw deleteError;
 
             Alert.alert('삭제 완료', '후기가 삭제되었습니다.');
             navigation.goBack();
           } catch (err) {
-            Alert.alert('삭제 실패', err.message);
+            console.error('Delete Error:', err);
+            Alert.alert(
+              '삭제 실패',
+              err.message || '삭제 중 문제가 발생했습니다.',
+            );
           } finally {
             setIsLoading(false);
           }
@@ -153,7 +159,6 @@ function ReviewDetailScreen({ route }) {
     setCurrentImageIndex(index);
   };
 
-  // ✅ 뷰어에 공급할 이미지 배열 (형식: [{ uri }])
   const viewerImages = useMemo(() => {
     if (!Array.isArray(review?.image_urls)) return [];
     return review.image_urls.filter(Boolean).map(uri => ({ uri }));
@@ -179,8 +184,7 @@ function ReviewDetailScreen({ route }) {
             <TouchableOpacity
               key={index}
               activeOpacity={0.9}
-              onPress={() => openViewerAt(index)} // ✅ 탭 → 뷰어 오픈
-            >
+              onPress={() => openViewerAt(index)}>
               <Image
                 source={{ uri: url }}
                 style={styles.galleryImage}
@@ -243,13 +247,6 @@ function ReviewDetailScreen({ route }) {
         keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
           <Text style={styles.title}>{review.title}</Text>
-          {user && review.author_auth_id === user.id && (
-            <TouchableOpacity
-              onPress={handleDeleteReview}
-              style={styles.deleteButton}>
-              <Icon name="delete-outline" size={24} color="#e74c3c" />
-            </TouchableOpacity>
-          )}
         </View>
 
         <View style={styles.metaContainer}>
@@ -298,7 +295,6 @@ function ReviewDetailScreen({ route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -321,7 +317,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   retryButtonText: { color: 'white', fontSize: 16 },
-
   scrollContainer: { paddingBottom: 8 },
   headerContainer: {
     flexDirection: 'row',
@@ -338,8 +333,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  deleteButton: { padding: 5 },
-
   metaContainer: {
     marginBottom: 20,
     paddingBottom: 15,
@@ -360,7 +353,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   date: { fontSize: 14, color: '#7f8c8d', marginTop: 5 },
-
   imageGalleryContainer: { width, height: width * 0.75, marginBottom: 20 },
   galleryImage: { width, height: '100%', backgroundColor: '#e9ecef' },
   indicatorContainer: {
@@ -379,7 +371,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   activeIndicator: { backgroundColor: '#fff' },
-
   contentContainer: { paddingHorizontal: 20 },
   content: {
     fontSize: 16,
@@ -387,7 +378,6 @@ const styles = StyleSheet.create({
     color: '#34495e',
     textAlign: 'justify',
   },
-
   viewerHeader: {
     position: 'absolute',
     top: 0,

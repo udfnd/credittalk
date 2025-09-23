@@ -1,4 +1,3 @@
-// src/screens/NewCrimeCaseDetailScreen.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -19,38 +18,35 @@ import { useNavigation } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
-import ImageViewing from 'react-native-image-viewing'; // ✅ 추가
+import ImageViewing from 'react-native-image-viewing';
+import { useAuth } from '../context/AuthContext'; // ✅ 추가
 
 const { width } = Dimensions.get('window');
 
 function NewCrimeCaseDetailScreen({ route }) {
   const navigation = useNavigation();
   const { caseId } = route.params;
+  const { user } = useAuth(); // ✅ 추가
 
   const [caseDetail, setCaseDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  useIncrementView('new_crime_cases', caseId);
-
-  // ✅ 뷰어 상태
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useIncrementView('new_crime_cases', caseId);
+
+  const isAuthor = useMemo(() => {
+    if (!user || !caseDetail) return false;
+    return user.id === caseDetail.user_id;
+  }, [user, caseDetail]);
 
   const fetchCaseDetail = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
         .from('new_crime_cases')
-        .select('id, created_at, title, method, image_urls, link_url, views')
+        .select('*') // user_id를 가져오기 위해 전체 선택
         .eq('id', caseId)
         .eq('is_published', true)
         .single();
@@ -62,17 +58,96 @@ function NewCrimeCaseDetailScreen({ route }) {
         throw fetchError;
       }
       setCaseDetail(data);
-      navigation.setOptions({ title: data.title || '사례 상세 정보' });
     } catch (err) {
       setError(err.message || '사례 상세 정보를 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
-  }, [caseId, navigation]);
+  }, [caseId]);
 
   useEffect(() => {
-    fetchCaseDetail();
-  }, [fetchCaseDetail]);
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchCaseDetail();
+    });
+    return unsubscribe;
+  }, [navigation, fetchCaseDetail]);
+
+  useEffect(() => {
+    if (caseDetail) {
+      navigation.setOptions({
+        title: caseDetail.title || '사례 상세 정보',
+        headerRight: () =>
+          isAuthor ? (
+            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{ marginRight: 20 }}>
+                <Icon name="pencil" size={24} color="#3d5afe" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete}>
+                <Icon name="delete" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ) : null,
+      });
+    }
+  }, [caseDetail, navigation, isAuthor]);
+
+  const handleEdit = () => {
+    navigation.navigate('NewCrimeCaseEdit', { caseId: caseDetail.id });
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      '삭제 확인',
+      '정말로 이 사례를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              if (caseDetail.image_urls && caseDetail.image_urls.length > 0) {
+                const filePaths = caseDetail.image_urls
+                  .map(url => url.split('/post-images/')[1])
+                  .filter(Boolean);
+                if (filePaths.length > 0) {
+                  await supabase.storage.from('post-images').remove(filePaths);
+                }
+              }
+              const { error: deleteError } = await supabase
+                .from('new_crime_cases')
+                .delete()
+                .eq('id', caseDetail.id)
+                .eq('user_id', user.id);
+
+              if (deleteError) throw deleteError;
+
+              Alert.alert('삭제 완료', '사례가 삭제되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Delete Error:', err);
+              Alert.alert(
+                '삭제 실패',
+                err.message || '삭제 중 문제가 발생했습니다.',
+              );
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  useEffect(() => {
+    AvoidSoftInput.setShouldMimicIOSBehavior(true);
+    return () => {
+      AvoidSoftInput.setShouldMimicIOSBehavior(false);
+    };
+  }, []);
 
   const sanitizeUrl = raw => {
     if (!raw) return '';
@@ -202,7 +277,6 @@ function NewCrimeCaseDetailScreen({ route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -225,7 +299,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   retryButtonText: { color: 'white', fontSize: 16 },
-
   header: {
     marginBottom: 15,
     paddingBottom: 15,
@@ -254,14 +327,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   date: { fontSize: 13, color: '#7f8c8d' },
-
   contentContainer: {
     marginBottom: 25,
     paddingHorizontal: 20,
     backgroundColor: '#fff',
   },
   content: { fontSize: 16, lineHeight: 26, color: '#34495e' },
-
   imageSection: {
     marginTop: 10,
     paddingHorizontal: 20,
@@ -274,7 +345,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: '#e9ecef',
   },
-
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -296,8 +366,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-
-  // 뷰어 헤더
   viewerHeader: {
     position: 'absolute',
     top: 0,

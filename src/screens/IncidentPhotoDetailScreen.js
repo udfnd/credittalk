@@ -1,4 +1,3 @@
-// src/screens/IncidentPhotoDetailScreen.js
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -19,26 +18,131 @@ import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
+import { useAuth } from '../context/AuthContext'; // Import useAuth
 
 const { width } = Dimensions.get('window');
 
 function IncidentPhotoDetailScreen({ route, navigation }) {
   const { photoId, photoTitle } = route.params;
+  const { user } = useAuth(); // Get current user
 
   const [photo, setPhoto] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  useIncrementView('incident_photos', photoId);
-
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
+  useIncrementView('incident_photos', photoId);
+
+  const isAuthor = useMemo(() => {
+    if (!user || !photo) return false;
+    return user.id === photo.uploader_id;
+  }, [user, photo]);
+
+  const fetchPhotoDetail = useCallback(async () => {
+    setError(null);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('incident_photos')
+        .select('*') // Select all to get uploader_id
+        .eq('id', photoId)
+        .eq('is_published', true)
+        .single();
+
+      if (fetchError) {
+        if (fetchError.code === 'PGRST116') {
+          throw new Error('사진 자료를 찾을 수 없거나 접근 권한이 없습니다.');
+        }
+        throw fetchError;
+      }
+      setPhoto(data);
+    } catch (err) {
+      setError(err.message || '사진 자료 상세 정보를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [photoId]);
+
   useEffect(() => {
-    if (photoTitle) {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchPhotoDetail();
+    });
+    return unsubscribe;
+  }, [navigation, fetchPhotoDetail]);
+
+  useEffect(() => {
+    if (photo) {
+      navigation.setOptions({
+        title: photo.title,
+        headerRight: () =>
+          isAuthor ? (
+            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{ marginRight: 20 }}>
+                <Icon name="pencil" size={24} color="#3d5afe" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete}>
+                <Icon name="delete" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ) : null,
+      });
+    } else if (photoTitle) {
       navigation.setOptions({ title: photoTitle });
     }
-  }, [photoTitle, navigation]);
+  });
+
+  const handleEdit = () => {
+    navigation.navigate('IncidentPhotoEdit', { photoId: photo.id });
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      '삭제 확인',
+      '정말로 이 사진 자료를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLoading(true);
+            try {
+              // Also delete associated images from storage
+              if (photo.image_urls && photo.image_urls.length > 0) {
+                const filePaths = photo.image_urls
+                  .map(url => url.split('/post-images/')[1])
+                  .filter(Boolean);
+                if (filePaths.length > 0) {
+                  await supabase.storage.from('post-images').remove(filePaths);
+                }
+              }
+
+              const { error: deleteError } = await supabase
+                .from('incident_photos')
+                .delete()
+                .eq('id', photo.id)
+                .eq('uploader_id', user.id); // Secure delete with user ID
+
+              if (deleteError) throw deleteError;
+
+              Alert.alert('삭제 완료', '사진 자료가 삭제되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Delete Error:', err);
+              Alert.alert(
+                '삭제 실패',
+                err.message || '삭제 중 문제가 발생했습니다.',
+              );
+            } finally {
+              setIsLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
@@ -63,40 +167,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
       Alert.alert('오류', `이 링크를 열 수 없습니다: ${e.message}`);
     }
   };
-
-  const fetchPhotoDetail = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const { data, error: fetchError } = await supabase
-        .from('incident_photos')
-        .select(
-          'id, title, created_at, image_urls, category, description, link_url, views',
-        )
-        .eq('id', photoId)
-        .eq('is_published', true)
-        .single();
-
-      if (fetchError) {
-        if (fetchError.code === 'PGRST116') {
-          throw new Error('사진 자료를 찾을 수 없거나 접근 권한이 없습니다.');
-        }
-        throw fetchError;
-      }
-      setPhoto(data);
-      if (data?.title) {
-        navigation.setOptions({ title: data.title });
-      }
-    } catch (err) {
-      setError(err.message || '사진 자료 상세 정보를 불러오는데 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [photoId, navigation]);
-
-  useEffect(() => {
-    fetchPhotoDetail();
-  }, [fetchPhotoDetail]);
 
   const viewerImages = useMemo(() => {
     if (!Array.isArray(photo?.image_urls)) return [];
@@ -214,7 +284,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -237,7 +306,6 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   retryButtonText: { color: 'white', fontSize: 16 },
-
   header: {
     marginBottom: 15,
     paddingBottom: 15,
@@ -259,14 +327,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   date: { fontSize: 13, color: '#7f8c8d' },
-
   contentContainer: {
     marginBottom: 25,
     paddingHorizontal: 20,
     backgroundColor: '#fff',
   },
   content: { fontSize: 16, lineHeight: 26, color: '#34495e' },
-
   imageSection: {
     marginTop: 10,
     paddingHorizontal: 20,
@@ -285,7 +351,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     backgroundColor: '#e9ecef',
   },
-
   linkButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -307,7 +372,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-
   viewerHeader: {
     position: 'absolute',
     top: 0,
