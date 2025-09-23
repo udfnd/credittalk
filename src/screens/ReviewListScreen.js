@@ -1,3 +1,4 @@
+// src/screens/ReviewListScreen.js
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -15,22 +16,19 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { logPageView } from '../lib/pageViewLogger';
 
-// 별점 표시 컴포넌트 (간단 예시)
+// 별점 표시 컴포넌트
 const StarRating = ({ rating }) => {
   if (rating == null || rating < 1 || rating > 5) return null;
-  const stars = [];
-  for (let i = 1; i <= 5; i++) {
-    stars.push(
-      <Icon
-        key={i}
-        name={i <= rating ? 'star' : 'star-outline'}
-        size={16}
-        color="#FFD700" // 금색
-        style={{ marginRight: 2 }}
-      />,
-    );
-  }
-  return <View style={{ flexDirection: 'row' }}>{stars}</View>;
+  const stars = Array.from({ length: 5 }, (_, i) => (
+    <Icon
+      key={i}
+      name={i < rating ? 'star' : 'star-outline'}
+      size={16}
+      color="#FFD700"
+      style={{ marginRight: 2 }}
+    />
+  ));
+  return <View style={styles.starContainer}>{stars}</View>;
 };
 
 function ReviewListScreen() {
@@ -38,42 +36,28 @@ function ReviewListScreen() {
   const isFocused = useIsFocused();
   const { user } = useAuth();
 
-  useEffect(() => {
-    // 로그인한 사용자만 기록합니다.
-    if (user) {
-      logPageView(user.id, 'ReviewListScreen');
-    }
-  }, [user]);
-
   const [reviews, setReviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    if (user) {
+      logPageView(user.id, 'ReviewListScreen');
+    }
+  }, [user]);
+
   const fetchReviews = useCallback(async () => {
-    setIsLoading(true);
+    if (!refreshing) setIsLoading(true);
     setError(null);
     try {
-      // 후기와 함께 작성자 프로필 정보(이름)를 가져오기
-      const { data, error: fetchError } = await supabase
-        .from('reviews_with_author_profile') // 변경
-        .select(
-          `
-          id,
-          title,
-          created_at,
-          author_auth_id,
-          rating,
-          author_name,
-          views   
-        `,
-        )
-        .eq('is_published', true)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false });
+      // RPC call to the new SQL function
+      const { data, error: fetchError } = await supabase.rpc(
+        'get_reviews_with_comment_info',
+      );
 
       if (fetchError) throw fetchError;
-      setReviews(data || []); // data를 직접 사용
+      setReviews(data || []);
     } catch (err) {
       setError(err.message || '후기를 불러오는데 실패했습니다.');
       setReviews([]);
@@ -81,7 +65,7 @@ function ReviewListScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [refreshing]);
 
   useEffect(() => {
     if (isFocused) {
@@ -114,10 +98,20 @@ function ReviewListScreen() {
           reviewTitle: item.title,
         })
       }>
-      <Text style={styles.reviewTitle}>{item.title}</Text>
-      {item.rating && <StarRating rating={item.rating} />}
+      <View style={styles.titleContainer}>
+        <Text style={styles.reviewTitle} numberOfLines={2}>
+          {item.title}
+        </Text>
+        {item.has_new_comment && (
+          <View style={styles.newBadge}>
+            <Text style={styles.newBadgeText}>NEW</Text>
+          </View>
+        )}
+      </View>
+      <StarRating rating={item.rating} />
       <View style={styles.reviewMeta}>
         <Text style={styles.reviewAuthor}>{item.author_name || '익명'}</Text>
+        <Text style={styles.reviewDate}>댓글 {item.comment_count || 0}</Text>
         <Text style={styles.reviewDate}>조회 {item.views || 0}</Text>
         <Text style={styles.reviewDate}>
           {new Date(item.created_at).toLocaleDateString()}
@@ -139,7 +133,7 @@ function ReviewListScreen() {
       <View style={styles.centered}>
         <Icon name="alert-circle-outline" size={50} color="#e74c3c" />
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity onPress={fetchReviews} style={styles.retryButton}>
+        <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>다시 시도</Text>
         </TouchableOpacity>
       </View>
@@ -198,11 +192,33 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     elevation: 1,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 5,
+  },
   reviewTitle: {
     fontSize: 17,
     fontWeight: '600',
     color: '#2c3e50',
-    marginBottom: 5,
+    flex: 1,
+  },
+  newBadge: {
+    backgroundColor: '#E74C3C',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  newBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  starContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   reviewMeta: {
     flexDirection: 'row',
@@ -210,8 +226,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  reviewAuthor: { fontSize: 13, color: '#3498db' },
-  reviewDate: { fontSize: 12, color: '#7f8c8d' },
+  reviewAuthor: {
+    fontSize: 13,
+    color: '#3498db',
+    marginRight: 'auto',
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginLeft: 8,
+  },
   errorText: {
     marginTop: 10,
     fontSize: 16,
