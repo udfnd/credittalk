@@ -1,5 +1,5 @@
 // src/screens/HelpDeskEditScreen.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,19 +11,159 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  FlatList,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 
-function Field({ label, children }) {
+// --- 상수 정의 (CreateScreen과 동일) ---
+const KOREAN_PROVINCES = [
+  '서울특별시',
+  '부산광역시',
+  '대구광역시',
+  '인천광역시',
+  '광주광역시',
+  '대전광역시',
+  '울산광역시',
+  '세종특별자치시',
+  '경기도',
+  '강원특별자치도',
+  '충청북도',
+  '충청남도',
+  '전북특별자치도',
+  '전라남도',
+  '경상북도',
+  '경상남도',
+  '제주특별자치도',
+];
+const 피해자_유형 = ['개인', '사업자'];
+const 피해_카테고리 = ['불법사금융', '보이스피싱', '사기', '기타'];
+
+// --- 재사용 가능한 컴포넌트 (CreateScreen과 동일) ---
+
+const InputField = React.memo(
+  ({
+    label,
+    value,
+    onChangeText,
+    placeholder,
+    required = false,
+    multiline = false,
+    keyboardType = 'default',
+  }) => (
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={styles.required}>*</Text>}
+      </Text>
+      <TextInput
+        style={[styles.input, multiline && styles.textArea]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#adb5bd"
+        multiline={multiline}
+        numberOfLines={multiline ? 5 : 1}
+        keyboardType={keyboardType}
+      />
+    </View>
+  ),
+);
+
+const PickerField = ({
+  label,
+  value,
+  onValueChange,
+  placeholder,
+  items,
+  required = false,
+}) => {
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleSelect = itemValue => {
+    onValueChange(itemValue);
+    setModalVisible(false);
+  };
+
   return (
-    <View style={{ marginBottom: 14 }}>
-      <Text style={styles.label}>{label}</Text>
-      {children}
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={styles.required}>*</Text>}
+      </Text>
+      <TouchableOpacity
+        style={styles.input}
+        onPress={() => setModalVisible(true)}>
+        <Text style={[styles.pickerText, !value && styles.placeholderText]}>
+          {value || placeholder}
+        </Text>
+      </TouchableOpacity>
+      <Modal
+        transparent={true}
+        visible={modalVisible}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalHeader}>{label} 선택</Text>
+            <FlatList
+              data={items}
+              keyExtractor={item => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => handleSelect(item)}>
+                  <Text style={styles.modalItemText}>{item}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalCloseButtonText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </View>
   );
-}
+};
+
+const RadioGroupField = ({
+  label,
+  options,
+  selectedValue,
+  onValueChange,
+  required = false,
+}) => (
+  <View style={styles.inputContainer}>
+    <Text style={styles.label}>
+      {label} {required && <Text style={styles.required}>*</Text>}
+    </Text>
+    <View style={styles.radioGroupContainer}>
+      {options.map(option => (
+        <TouchableOpacity
+          key={option}
+          style={[
+            styles.radioButton,
+            selectedValue === option && styles.radioButtonSelected,
+          ]}
+          onPress={() => onValueChange(option)}>
+          <Text
+            style={[
+              styles.radioButtonText,
+              selectedValue === option && styles.radioButtonTextSelected,
+            ]}>
+            {option}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </View>
+);
+
+// --- 메인 스크린 컴포넌트 ---
 
 export default function HelpDeskEditScreen() {
   const navigation = useNavigation();
@@ -33,19 +173,36 @@ export default function HelpDeskEditScreen() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formState, setFormState] = useState({
+    userName: '',
+    userPhone: '',
+    birthDate: '',
+    province: '',
+    city: '',
+    victimType: '',
+    damageCategory: '',
+    conversationReason: '',
+    opponentAccount: '',
+    opponentPhone: '',
+    opponentSns: '',
+    caseSummary: '',
+    // title과 content는 create 화면에는 없지만 edit에는 있으므로 유지
+    title: '',
+    content: '',
+  });
 
-  // 폼 상태
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [caseSummary, setCaseSummary] = useState('');
-  const [userName, setUserName] = useState('');
-  const [userPhone, setUserPhone] = useState('');
-  const [conversationReason, setConversationReason] = useState('');
-  const [opponentAccount, setOpponentAccount] = useState('');
-  const [opponentPhone, setOpponentPhone] = useState('');
-  const [opponentSns, setOpponentSns] = useState('');
+  const handleInputChange = useCallback((name, value) => {
+    setFormState(prevState => ({ ...prevState, [name]: value }));
+  }, []);
 
   useEffect(() => {
+    if (!questionId) {
+      Alert.alert('오류', '문의 ID가 없습니다.', [
+        { text: '확인', onPress: () => navigation.goBack() },
+      ]);
+      return;
+    }
+
     let mounted = true;
     (async () => {
       setLoading(true);
@@ -61,8 +218,7 @@ export default function HelpDeskEditScreen() {
           { text: '확인', onPress: () => navigation.goBack() },
         ]);
       } else if (data && mounted) {
-        const uid = user?.id || user?.uid;
-        if (data.user_id !== uid) {
+        if (data.user_id !== user?.id) {
           Alert.alert('권한 없음', '내가 작성한 문의만 수정할 수 있습니다.', [
             { text: '확인', onPress: () => navigation.goBack() },
           ]);
@@ -71,15 +227,22 @@ export default function HelpDeskEditScreen() {
             { text: '확인', onPress: () => navigation.goBack() },
           ]);
         } else {
-          setTitle(data.title ?? '');
-          setContent(data.content ?? '');
-          setCaseSummary(data.case_summary ?? '');
-          setUserName(data.user_name ?? '');
-          setUserPhone(data.user_phone ?? '');
-          setConversationReason(data.conversation_reason ?? '');
-          setOpponentAccount(data.opponent_account ?? '');
-          setOpponentPhone(data.opponent_phone ?? '');
-          setOpponentSns(data.opponent_sns ?? '');
+          setFormState({
+            userName: data.user_name ?? '',
+            userPhone: data.user_phone ?? '',
+            birthDate: data.birth_date ?? '',
+            province: data.province ?? '',
+            city: data.city ?? '',
+            victimType: data.victim_type ?? '',
+            damageCategory: data.damage_category ?? '',
+            conversationReason: data.conversation_reason ?? '',
+            opponentAccount: data.opponent_account ?? '',
+            opponentPhone: data.opponent_phone ?? '',
+            opponentSns: data.opponent_sns ?? '',
+            caseSummary: data.case_summary ?? '',
+            title: data.title ?? '',
+            content: data.content ?? '',
+          });
         }
       }
       setLoading(false);
@@ -90,44 +253,61 @@ export default function HelpDeskEditScreen() {
   }, [questionId, user, navigation]);
 
   const onSave = async () => {
-    if (!title.trim() && !caseSummary.trim() && !content.trim()) {
-      Alert.alert('입력 필요', '제목/사건 개요/본문 중 하나는 입력해주세요.');
+    const {
+      userName,
+      userPhone,
+      birthDate,
+      province,
+      city,
+      victimType,
+      damageCategory,
+      conversationReason,
+      caseSummary,
+    } = formState;
+
+    if (
+      !userName ||
+      !userPhone ||
+      !birthDate ||
+      !province ||
+      !city ||
+      !victimType ||
+      !damageCategory ||
+      !conversationReason ||
+      !caseSummary
+    ) {
+      Alert.alert('입력 오류', '필수 항목(*)을 모두 입력해주세요.');
       return;
     }
+
     setSaving(true);
     const payload = {
-      title: title.trim(),
-      content: content.trim(),
-      case_summary: caseSummary.trim(),
-      user_name: userName.trim(),
-      user_phone: userPhone.trim(),
-      conversation_reason: conversationReason.trim(),
-      opponent_account: opponentAccount.trim(),
-      opponent_phone: opponentPhone.trim(),
-      opponent_sns: opponentSns.trim(),
+      user_name: formState.userName.trim(),
+      user_phone: formState.userPhone.trim(),
+      birth_date: formState.birthDate.trim(),
+      province: formState.province.trim(),
+      city: formState.city.trim(),
+      victim_type: formState.victimType.trim(),
+      damage_category: formState.damageCategory.trim(),
+      conversation_reason: formState.conversationReason.trim(),
+      opponent_account: formState.opponentAccount.trim(),
+      opponent_phone: formState.opponentPhone.trim(),
+      opponent_sns: formState.opponentSns.trim(),
+      case_summary: formState.caseSummary.trim(),
+      title: `${formState.userName.trim()}님의 ${formState.damageCategory} 관련 문의`, // 제목 자동 업데이트
+      content: formState.caseSummary.trim(), // 본문도 사건 개요로 업데이트
     };
-    Object.keys(payload).forEach(k => {
-      if (payload[k] === '') delete payload[k];
-    });
 
     const { error } = await supabase
       .from('help_questions')
       .update(payload)
-      .eq('id', questionId)
-      .eq('user_id', user?.id || user?.uid) // 클라단 방어(UX); 서버는 RLS로 보안
-      .select('id')
-      .single();
+      .eq('id', questionId);
 
     setSaving(false);
 
     if (error) {
       console.error(error);
-      Alert.alert(
-        '오류',
-        error.code === '42501'
-          ? '수정 권한이 없습니다. (답변 완료이거나 소유자가 아닙니다)'
-          : '수정 중 오류가 발생했습니다.',
-      );
+      Alert.alert('오류', '수정 중 오류가 발생했습니다.');
       return;
     }
 
@@ -146,107 +326,110 @@ export default function HelpDeskEditScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#f8f9fa' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.wrap}>
-        <Text style={styles.title}>문의 수정</Text>
+      style={{ flex: 1, backgroundColor: '#fff' }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 50 }}
+        keyboardShouldPersistTaps="handled">
+        <Text style={styles.header}>문의 수정</Text>
 
-        <Field label="제목">
-          <TextInput
-            style={styles.input}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="제목"
-            maxLength={120}
-          />
-        </Field>
-
-        <Field label="사건 개요">
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={caseSummary}
-            onChangeText={setCaseSummary}
-            placeholder="사건 개요"
-            multiline
-          />
-        </Field>
-
-        <Field label="본문">
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={content}
-            onChangeText={setContent}
-            placeholder="상세 내용"
-            multiline
-          />
-        </Field>
-
-        <Field label="이름">
-          <TextInput
-            style={styles.input}
-            value={userName}
-            onChangeText={setUserName}
-            placeholder="이름"
-            autoCapitalize="none"
-          />
-        </Field>
-
-        <Field label="연락처">
-          <TextInput
-            style={styles.input}
-            value={userPhone}
-            onChangeText={setUserPhone}
-            placeholder="010-1234-5678"
-            keyboardType="phone-pad"
-          />
-        </Field>
-
-        <Field label="대화 계기">
-          <TextInput
-            style={styles.input}
-            value={conversationReason}
-            onChangeText={setConversationReason}
-            placeholder="예: 중고거래, 투자 권유 등"
-          />
-        </Field>
-
-        <Field label="상대방 계좌">
-          <TextInput
-            style={styles.input}
-            value={opponentAccount}
-            onChangeText={setOpponentAccount}
-            placeholder="은행/계좌번호"
-          />
-        </Field>
-
-        <Field label="상대방 연락처">
-          <TextInput
-            style={styles.input}
-            value={opponentPhone}
-            onChangeText={setOpponentPhone}
-            placeholder="상대방 전화번호"
-            keyboardType="phone-pad"
-          />
-        </Field>
-
-        <Field label="상대방 SNS">
-          <TextInput
-            style={styles.input}
-            value={opponentSns}
-            onChangeText={setOpponentSns}
-            placeholder="상대방 SNS 계정"
-            autoCapitalize="none"
-          />
-        </Field>
+        <InputField
+          label="본인 이름"
+          value={formState.userName}
+          onChangeText={text => handleInputChange('userName', text)}
+          placeholder="성함을 입력해주세요"
+          required
+        />
+        <InputField
+          label="본인 전화번호"
+          value={formState.userPhone}
+          onChangeText={text => handleInputChange('userPhone', text)}
+          placeholder="연락받으실 전화번호를 입력해주세요"
+          keyboardType="phone-pad"
+          required
+        />
+        <InputField
+          label="생년월일"
+          value={formState.birthDate}
+          onChangeText={text => handleInputChange('birthDate', text)}
+          placeholder="YYYY-MM-DD 형식으로 입력"
+          keyboardType="number-pad"
+          required
+        />
+        <PickerField
+          label="지역 (시/도)"
+          value={formState.province}
+          onValueChange={value => handleInputChange('province', value)}
+          placeholder="거주 지역을 선택해주세요"
+          items={KOREAN_PROVINCES}
+          required
+        />
+        <InputField
+          label="세부 지역"
+          value={formState.city}
+          onChangeText={text => handleInputChange('city', text)}
+          placeholder="시/군/구 이하 상세주소를 입력해주세요"
+          required
+        />
+        <RadioGroupField
+          label="피해자 해당사항"
+          options={피해자_유형}
+          selectedValue={formState.victimType}
+          onValueChange={value => handleInputChange('victimType', value)}
+          required
+        />
+        <PickerField
+          label="피해 카테고리"
+          value={formState.damageCategory}
+          onValueChange={value => handleInputChange('damageCategory', value)}
+          placeholder="피해 유형을 선택해주세요"
+          items={피해_카테고리}
+          required
+        />
+        <InputField
+          label="상대방과 대화를 하게된 계기"
+          value={formState.conversationReason}
+          onChangeText={text => handleInputChange('conversationReason', text)}
+          placeholder="예: 중고거래 앱, 오픈채팅방 등"
+          required
+        />
+        <InputField
+          label="상대방이 입금 요청한 계좌"
+          value={formState.opponentAccount}
+          onChangeText={text => handleInputChange('opponentAccount', text)}
+          placeholder="은행명과 계좌번호 (선택)"
+        />
+        <InputField
+          label="상대방 전화번호"
+          value={formState.opponentPhone}
+          onChangeText={text => handleInputChange('opponentPhone', text)}
+          placeholder="전화번호 (선택)"
+          keyboardType="phone-pad"
+        />
+        <InputField
+          label="상대방 SNS 닉네임"
+          value={formState.opponentSns}
+          onChangeText={text => handleInputChange('opponentSns', text)}
+          placeholder="카카오톡 ID, 텔레그램 ID 등 (선택)"
+        />
+        <InputField
+          label="사건 개요"
+          value={formState.caseSummary}
+          onChangeText={text => handleInputChange('caseSummary', text)}
+          placeholder="언제, 어디서, 어떻게 피해를 입었는지 육하원칙에 따라 상세히 작성해주세요."
+          multiline
+          required
+        />
 
         <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+          style={[styles.submitButton, saving && styles.disabledButton]}
           onPress={onSave}
           disabled={saving}>
           {saving ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.saveText}>저장</Text>
+            <Text style={styles.submitButtonText}>수정 완료</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -254,32 +437,85 @@ export default function HelpDeskEditScreen() {
   );
 }
 
+// CreateScreen의 스타일과 EditScreen 기존 스타일을 조합
 const styles = StyleSheet.create({
-  wrap: { padding: 16 },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
+  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  header: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 25,
     color: '#343a40',
-    marginBottom: 16,
   },
-  label: { fontSize: 13, color: '#868e96', marginBottom: 6 },
+  inputContainer: { marginBottom: 18 },
+  label: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#495057' },
+  required: { color: '#e03131' },
   input: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e9ecef',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#f8f9fa',
     color: '#212529',
+    justifyContent: 'center',
+    minHeight: 48,
   },
-  multiline: { height: 120, textAlignVertical: 'top' },
-  saveBtn: {
-    marginTop: 8,
+  textArea: { height: 150, textAlignVertical: 'top' },
+  pickerText: { fontSize: 16, color: '#212529' },
+  placeholderText: { color: '#adb5bd' },
+  radioGroupContainer: { flexDirection: 'row', gap: 10 },
+  radioButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  radioButtonSelected: { backgroundColor: '#3d5afe', borderColor: '#3d5afe' },
+  radioButtonText: { fontSize: 16, color: '#495057', fontWeight: '500' },
+  radioButtonTextSelected: { color: '#fff', fontWeight: 'bold' },
+  submitButton: {
     backgroundColor: '#3d5afe',
-    borderRadius: 12,
-    paddingVertical: 14,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  disabledButton: { backgroundColor: '#adb5bd' },
+  submitButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f3f5',
+  },
+  modalItemText: { fontSize: 18, textAlign: 'center' },
+  modalCloseButton: {
+    marginTop: 20,
+    backgroundColor: '#3d5afe',
+    borderRadius: 8,
+    padding: 15,
     alignItems: 'center',
   },
-  saveText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  modalCloseButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
 });
