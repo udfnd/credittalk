@@ -10,9 +10,38 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
+  FlatList,
+  SafeAreaView,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+
+// 대한민국 주요 시/도 리스트
+const KOREAN_PROVINCES = [
+  '서울특별시',
+  '부산광역시',
+  '대구광역시',
+  '인천광역시',
+  '광주광역시',
+  '대전광역시',
+  '울산광역시',
+  '세종특별자치시',
+  '경기도',
+  '강원특별자치도',
+  '충청북도',
+  '충청남도',
+  '전북특별자치도',
+  '전라남도',
+  '경상북도',
+  '경상남도',
+  '제주특별자치도',
+];
+
+const victimType = ['개인', '사업자'];
+const victimCategory = ['불법사금융', '보이스피싱', '사기', '기타'];
+
+// --- 재사용 가능한 컴포넌트 ---
 
 const InputField = React.memo(
   ({
@@ -23,26 +52,119 @@ const InputField = React.memo(
     required = false,
     multiline = false,
     keyboardType = 'default',
-  }) => {
-    return (
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>
-          {label} {required && <Text style={styles.required}>*</Text>}
-        </Text>
-        <TextInput
-          style={[styles.input, multiline && styles.textArea]}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor="#adb5bd"
-          multiline={multiline}
-          numberOfLines={multiline ? 5 : 1}
-          keyboardType={keyboardType}
-        />
-      </View>
-    );
-  },
+  }) => (
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={styles.required}>*</Text>}
+      </Text>
+      <TextInput
+        style={[styles.input, multiline && styles.textArea]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#adb5bd"
+        multiline={multiline}
+        numberOfLines={multiline ? 5 : 1}
+        keyboardType={keyboardType}
+      />
+    </View>
+  ),
 );
+
+// 선택(Picker) 컴포넌트
+const PickerField = ({
+  label,
+  value,
+  onValueChange,
+  placeholder,
+  items,
+  required = false,
+}) => {
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const handleSelect = itemValue => {
+    onValueChange(itemValue);
+    setModalVisible(false);
+  };
+
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>
+        {label} {required && <Text style={styles.required}>*</Text>}
+      </Text>
+      <TouchableOpacity
+        style={styles.input}
+        onPress={() => setModalVisible(true)}>
+        <Text style={[styles.pickerText, !value && styles.placeholderText]}>
+          {value || placeholder}
+        </Text>
+      </TouchableOpacity>
+      <Modal
+        transparent={true}
+        visible={modalVisible}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}>
+        <SafeAreaView style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalHeader}>{label} 선택</Text>
+            <FlatList
+              data={items}
+              keyExtractor={item => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => handleSelect(item)}>
+                  <Text style={styles.modalItemText}>{item}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalCloseButtonText}>닫기</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    </View>
+  );
+};
+
+// 라디오 버튼 그룹 컴포넌트
+const RadioGroupField = ({
+  label,
+  options,
+  selectedValue,
+  onValueChange,
+  required = false,
+}) => (
+  <View style={styles.inputContainer}>
+    <Text style={styles.label}>
+      {label} {required && <Text style={styles.required}>*</Text>}
+    </Text>
+    <View style={styles.radioGroupContainer}>
+      {options.map(option => (
+        <TouchableOpacity
+          key={option}
+          style={[
+            styles.radioButton,
+            selectedValue === option && styles.radioButtonSelected,
+          ]}
+          onPress={() => onValueChange(option)}>
+          <Text
+            style={[
+              styles.radioButtonText,
+              selectedValue === option && styles.radioButtonTextSelected,
+            ]}>
+            {option}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </View>
+);
+
+// --- 메인 스크린 컴포넌트 ---
 
 export default function HelpDeskCreateScreen({ navigation }) {
   const { user } = useAuth();
@@ -50,6 +172,11 @@ export default function HelpDeskCreateScreen({ navigation }) {
   const [formState, setFormState] = useState({
     userName: '',
     userPhone: '',
+    birthDate: '', // 생년월일
+    province: '', // 지역 (시/도)
+    city: '', // 세부 지역
+    victimType: '', // 피해자 해당사항
+    damageCategory: '', // 피해 카테고리
     conversationReason: '',
     opponentAccount: '',
     opponentPhone: '',
@@ -57,12 +184,8 @@ export default function HelpDeskCreateScreen({ navigation }) {
     caseSummary: '',
   });
 
-  // useCallback을 사용하여 함수가 불필요하게 다시 생성되는 것을 방지합니다.
   const handleInputChange = useCallback((name, value) => {
-    setFormState(prevState => ({
-      ...prevState,
-      [name]: value,
-    }));
+    setFormState(prevState => ({ ...prevState, [name]: value }));
   }, []);
 
   const handleSubmit = async () => {
@@ -71,11 +194,26 @@ export default function HelpDeskCreateScreen({ navigation }) {
       return;
     }
 
-    const { userName, userPhone, conversationReason, caseSummary } = formState;
+    const {
+      userName,
+      userPhone,
+      birthDate,
+      province,
+      city,
+      victimType,
+      damageCategory,
+      conversationReason,
+      caseSummary,
+    } = formState;
 
     if (
       !userName.trim() ||
       !userPhone.trim() ||
+      !birthDate.trim() ||
+      !province.trim() ||
+      !city.trim() ||
+      !victimType.trim() ||
+      !damageCategory.trim() ||
       !conversationReason.trim() ||
       !caseSummary.trim()
     ) {
@@ -83,19 +221,30 @@ export default function HelpDeskCreateScreen({ navigation }) {
       return;
     }
 
+    // 생년월일 형식 유효성 검사 (간단한 예시)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate.trim())) {
+      Alert.alert('입력 오류', '생년월일을 YYYY-MM-DD 형식으로 입력해주세요.');
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await supabase.from('help_questions').insert({
       user_id: user.id,
-      user_name: formState.userName.trim(),
-      user_phone: formState.userPhone.trim(),
-      conversation_reason: formState.conversationReason.trim(),
+      user_name: userName.trim(),
+      user_phone: userPhone.trim(),
+      birth_date: birthDate.trim(), // DB에 'birth_date' 컬럼 추가 필요
+      province: province.trim(), // DB에 'province' 컬럼 추가 필요
+      city: city.trim(), // DB에 'city' 컬럼 추가 필요
+      victim_type: victimType.trim(), // DB에 'victim_type' 컬럼 추가 필요
+      damage_category: damageCategory.trim(), // DB에 'damage_category' 컬럼 추가 필요
+      conversation_reason: conversationReason.trim(),
       opponent_account: formState.opponentAccount.trim() || null,
       opponent_phone: formState.opponentPhone.trim() || null,
       opponent_sns: formState.opponentSns.trim() || null,
-      case_summary: formState.caseSummary.trim(),
-      title: `${formState.userName.trim()}님의 상담 요청: ${formState.caseSummary.trim().substring(0, 20)}...`,
-      content: formState.caseSummary.trim(),
+      case_summary: caseSummary.trim(),
+      title: `${userName.trim()}님의 ${damageCategory} 관련 문의`,
+      content: caseSummary.trim(),
     });
 
     setLoading(false);
@@ -122,6 +271,7 @@ export default function HelpDeskCreateScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 50 }}>
         <Text style={styles.header}>1:1 문의하기</Text>
+
         <InputField
           label="본인 이름"
           value={formState.userName}
@@ -138,6 +288,47 @@ export default function HelpDeskCreateScreen({ navigation }) {
           required
         />
         <InputField
+          label="생년월일"
+          value={formState.birthDate}
+          onChangeText={text => handleInputChange('birthDate', text)}
+          placeholder="YYYY-MM-DD 형식으로 입력"
+          keyboardType="number-pad"
+          required
+        />
+
+        <PickerField
+          label="지역 (시/도)"
+          value={formState.province}
+          onValueChange={value => handleInputChange('province', value)}
+          placeholder="거주 지역을 선택해주세요"
+          items={KOREAN_PROVINCES}
+          required
+        />
+
+        <InputField
+          label="세부 지역"
+          value={formState.city}
+          onChangeText={text => handleInputChange('city', text)}
+          placeholder="시/군/구 이하 상세주소를 입력해주세요"
+          required
+        />
+        <RadioGroupField
+          label="피해자 해당사항"
+          options={victimType}
+          selectedValue={formState.victimType}
+          onValueChange={value => handleInputChange('victimType', value)}
+          required
+        />
+
+        <PickerField
+          label="피해 카테고리"
+          value={formState.damageCategory}
+          onValueChange={value => handleInputChange('damageCategory', value)}
+          placeholder="피해 유형을 선택해주세요"
+          items={victimCategory}
+          required
+        />
+        <InputField
           label="상대방과 대화를 하게된 계기"
           value={formState.conversationReason}
           onChangeText={text => handleInputChange('conversationReason', text)}
@@ -149,7 +340,6 @@ export default function HelpDeskCreateScreen({ navigation }) {
           value={formState.opponentAccount}
           onChangeText={text => handleInputChange('opponentAccount', text)}
           placeholder="은행명과 계좌번호 (선택)"
-          keyboardType="default"
         />
         <InputField
           label="상대방 전화번호"
@@ -228,10 +418,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#f8f9fa',
     color: '#212529',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   textArea: {
     height: 150,
     textAlignVertical: 'top',
+  },
+  pickerText: {
+    fontSize: 16,
+    color: '#212529',
+  },
+  placeholderText: {
+    color: '#adb5bd',
+  },
+  radioGroupContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  radioButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
+  radioButtonSelected: {
+    backgroundColor: '#3d5afe',
+    borderColor: '#3d5afe',
+  },
+  radioButtonText: {
+    fontSize: 16,
+    color: '#495057',
+    fontWeight: '500',
+  },
+  radioButtonTextSelected: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   submitButton: {
     backgroundColor: '#3d5afe',
@@ -260,5 +485,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#495057',
     lineHeight: 22,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f3f5',
+  },
+  modalItemText: {
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  modalCloseButton: {
+    marginTop: 20,
+    backgroundColor: '#3d5afe',
+    borderRadius: 8,
+    padding: 15,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
