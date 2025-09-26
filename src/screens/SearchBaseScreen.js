@@ -397,6 +397,9 @@ const SearchBaseScreen = ({ title }) => {
           ]}>
           <Text style={[styles.categoryText, { color: style.color }]}>
             {item.category || '기타'}
+            {item.attempted_fraud ? null : (
+              <Text style={{ color: 'red' }}> (미수)</Text>
+            )}
           </Text>
         </View>
 

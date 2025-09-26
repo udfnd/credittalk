@@ -1700,7 +1700,7 @@ function ReportScreen({ navigation }) {
           value={caseSummary}
           onChangeText={setCaseSummary}
           multiline
-          placeholder="사건의 개요를 상세히 적어주세요. 누가 언제 어디서 무엇을 어떻게 왜? 피해를 당했는지, 육하원칙에 맞게 상세히 써주세요. 이름, 생년월일, 전화번호, 주소를 알고 계실 경우 기입해주세요."
+          placeholder="사건의 개요를 상세히 적어주세요. 누가 언제 어디서 무엇을 어떻게 왜? 피해를 당했는지, 육하원칙에 맞게 상세히 써주세요."
           placeholderTextColor="#6c757d"
           numberOfLines={5}
         />
