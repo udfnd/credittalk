@@ -1,4 +1,3 @@
-// src/components/PartnersCarousel.js
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -13,52 +12,32 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 
+// Invisible characters(e.g., zero-width spaces) stripper
 function stripInvisible(raw) {
   if (!raw) return '';
   return String(raw)
-    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '') // zero-width / nbsp
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
     .trim();
 }
 
-function normalizeHttpUrl(raw) {
-  const cleaned = stripInvisible(raw);
-  if (!cleaned) return '';
-  const withScheme = /^[a-z][a-z0-9+\-.]*:\/\//i.test(cleaned)
-    ? cleaned
-    : `https://${cleaned}`;
-  try {
-    const u = new URL(withScheme);
-    if (!['http:', 'https:'].includes(u.protocol)) return '';
-    return u.toString();
-  } catch {
-    return '';
+// ✨ 개선: canOpenURL 의존을 줄이고, http(s) 링크는 직접 open 시도 → 실패 시 Alert
+async function openExternal(rawUrl) {
+  const cleanedUrl = stripInvisible(rawUrl);
+  if (!cleanedUrl) {
+    Alert.alert('링크 오류', '연결할 URL 주소가 없습니다.');
+    return;
   }
-}
 
-async function openExternal(raw) {
-  const primary = normalizeHttpUrl(raw);
-  if (!primary) {
-    Alert.alert(
-      '링크가 없어요',
-      '배너의 링크 URL이 비어 있거나 형식이 올바르지 않습니다.',
-    );
-    return;
-  }
+  // URL에 http:// 또는 https:// 가 없으면 https:// 를 붙여줍니다.
+  const finalUrl = /^(https?|ftp):\/\//i.test(cleanedUrl)
+    ? cleanedUrl
+    : `https://${cleanedUrl}`;
+
   try {
-    await Linking.openURL(primary);
-    return;
-  } catch {
-    const httpFallback = primary.replace(/^https:\/\//i, 'http://');
-    if (httpFallback !== primary) {
-      try {
-        await Linking.openURL(httpFallback);
-        return;
-      } catch (e) {
-        Alert.alert('링크를 열 수 없어요', e?.message ?? String(e));
-        return;
-      }
-    }
-    Alert.alert('링크를 열 수 없어요', stripInvisible(raw));
+    await Linking.openURL(finalUrl);
+  } catch (error) {
+    console.error('[partners] openExternal error:', error);
+    Alert.alert('링크를 열 수 없어요', `이 주소는 열 수 없습니다: ${finalUrl}`);
   }
 }
 
@@ -72,7 +51,7 @@ export default function PartnersCarousel() {
     (async () => {
       const { data, error } = await supabase
         .from('partner_banners')
-        .select('id, title, image_url, link_url, sort')
+        .select('id, title, image_url, link_url, sort, created_at, is_active')
         .eq('is_active', true)
         .order('sort', { ascending: true })
         .order('created_at', { ascending: false });
@@ -116,7 +95,8 @@ export default function PartnersCarousel() {
         toValue: -loopWidth,
         duration,
         easing: Easing.linear,
-        useNativeDriver: true,
+        // ✅ 핵심 수정: native driver 사용 시 Android에서 터치 히트박스가 어긋나는 이슈가 있어 false로 설정
+        useNativeDriver: false,
       }).start(({ finished }) => {
         if (!cancelled && finished) run();
       });
@@ -137,6 +117,8 @@ export default function PartnersCarousel() {
       <View style={styles.scroller} pointerEvents="box-none">
         <Animated.View
           style={[styles.row, { transform: [{ translateX }] }]}
+          // ✅ 터치/레이아웃 안정화 (플래트닝 방지)
+          collapsable={false}
           pointerEvents="box-none">
           {doubled.map((b, i) => (
             <Pressable
@@ -144,7 +126,9 @@ export default function PartnersCarousel() {
               onPress={() => openExternal(b.link_url)}
               style={{ marginRight: GAP }}
               android_ripple={{ color: '#e5e7eb' }}
-              hitSlop={8}>
+              hitSlop={8}
+              // ✅ 각 항목도 안전하게 플래트닝 방지
+              collapsable={false}>
               <Image
                 source={{ uri: b.image_url }}
                 style={styles.card}
