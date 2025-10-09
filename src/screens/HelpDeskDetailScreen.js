@@ -1,94 +1,57 @@
-// src/screens/HelpDeskDetailScreen.js
-import React, { useCallback, useLayoutEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
-  Alert,
-  RefreshControl,
+  ActivityIndicator,
+  TextInput,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from 'react-native';
-import {
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-} from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const maskNameMiddle = name => {
-  if (!name || typeof name !== 'string' || name.length <= 1) return name || '';
-  if (name.length === 2) return `${name[0]}*`;
-  const middleIndex = Math.floor(name.length / 2);
-  return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
-};
+// 댓글 항목 UI 컴포넌트
+const CommentItem = ({ comment, currentUserId, onDelete }) => {
+  const isMyComment = comment.user_id === currentUserId;
+  const authorProfile = comment.users;
+  const authorName = authorProfile?.is_admin
+    ? '관리자'
+    : authorProfile?.nickname || authorProfile?.name || '작성자';
+  const isAdminComment = authorProfile?.is_admin;
 
-const maskPhoneNumberCustom = phoneNumber => {
-  if (!phoneNumber || typeof phoneNumber !== 'string') return phoneNumber || '';
-  const clean = phoneNumber.replace(/-/g, '');
-  const len = clean.length;
-  if (len === 11) {
-    const p1 = clean.substring(0, 3);
-    const p2 = clean.substring(3, 7);
-    const p3 = clean.substring(7, 11);
-    const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
-    const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
-    return `${p1}-${maskedP2}-${maskedP3}`;
-  }
-  if (len === 10) {
-    if (clean.startsWith('02')) {
-      const p1 = clean.substring(0, 2);
-      const p2 = clean.substring(2, 6);
-      const p3 = clean.substring(6, 10);
-      const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
-      const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
-      return `${p1}-${maskedP2}-${maskedP3}`;
-    } else {
-      const p1 = clean.substring(0, 3);
-      const p2 = clean.substring(3, 6);
-      const p3 = clean.substring(6, 10);
-      const maskedP2 = `${p2[0]}*${p2[2]}`;
-      const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
-      return `${p1}-${maskedP2}-${maskedP3}`;
-    }
-  }
-  const mid = Math.floor(len / 2) - 1;
-  if (mid <= 0) return clean;
-  return clean.substring(0, mid) + '*' + clean.substring(mid + 1);
-};
-
-const maskAccountNumber = accountNumber => {
-  if (!accountNumber || typeof accountNumber !== 'string')
-    return accountNumber || '';
-  const clean = accountNumber.replace(/-/g, '');
-  if (clean.length < 6) return accountNumber;
-  const PREFIX_COUNT = 2;
-  const MASK_COUNT = 4;
-  const start = PREFIX_COUNT;
-  const end = PREFIX_COUNT + MASK_COUNT;
   return (
-    clean.substring(0, start) + '*'.repeat(MASK_COUNT) + clean.substring(end)
-  );
-};
-
-const DetailItem = ({ label, value }) => {
-  if (!value) return null;
-  return (
-    <View style={styles.detailItem}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-};
-
-const AnswerItem = ({ answer }) => {
-  return (
-    <View style={styles.answerItemContainer}>
-      <Text style={styles.answerContent}>{answer.content}</Text>
-      <Text style={styles.answerDate}>
-        {new Date(answer.created_at).toLocaleString('ko-KR')}
+    <View
+      style={[
+        styles.commentContainer,
+        isMyComment ? styles.myComment : styles.otherComment,
+      ]}>
+      <View style={styles.commentHeader}>
+        <Text
+          style={[
+            styles.commentAuthor,
+            isAdminComment && styles.adminAuthor,
+            isMyComment && { color: '#fff' },
+          ]}>
+          {authorName}
+        </Text>
+        {isMyComment && (
+          <TouchableOpacity onPress={() => onDelete(comment.id)}>
+            <Icon name="close-circle-outline" size={18} color="#e0e0e0" />
+          </TouchableOpacity>
+        )}
+      </View>
+      <Text style={[styles.commentContent, isMyComment && { color: 'white' }]}>
+        {comment.content}
+      </Text>
+      <Text
+        style={[styles.commentTimestamp, isMyComment && { color: '#e0e0e0' }]}>
+        {new Date(comment.created_at).toLocaleString()}
       </Text>
     </View>
   );
@@ -97,245 +60,312 @@ const AnswerItem = ({ answer }) => {
 export default function HelpDeskDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { user } = useAuth();
-  const { questionId } = route.params || {};
+  const { questionId } = route.params;
+  const { user, profile } = useAuth();
 
   const [question, setQuestion] = useState(null);
-  const [isPublic, setIsPublic] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchQuestion = useCallback(async () => {
-    const { data, error } = await supabase
+  // 데이터 로딩 함수 (질문 + 댓글)
+  const fetchData = useCallback(async () => {
+    if (!questionId) return;
+
+    setLoading(true);
+    // 1. 질문 상세 정보 가져오기
+    const { data: questionData, error: questionError } = await supabase
       .from('help_questions')
-      .select(`*, help_answers(*)`)
+      .select('*')
       .eq('id', questionId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error fetching question details:', error);
-      Alert.alert('오류', '문의 내용을 불러오는 데 실패했습니다.');
-      setQuestion(null);
+    if (questionError) {
+      console.error('Error fetching question:', questionError);
+      Alert.alert('오류', '질문 정보를 불러오는 데 실패했습니다.');
+      setLoading(false);
       return;
     }
+    setQuestion(questionData);
 
-    if (data) {
-      setQuestion(data);
-      // 공개 여부(연동 케이스 존재 여부)
-      const { count } = await supabase
-        .from('new_crime_cases')
-        .select('id', { count: 'exact', head: true })
-        .eq('source_help_question_id', questionId);
+    // 2. 댓글 목록 가져오기 (작성자 프로필 정보 포함)
+    const { data: commentsData, error: commentsError } = await supabase
+      .from('help_desk_comments')
+      .select('*, users(nickname, name, is_admin)')
+      .eq('question_id', questionId)
+      .order('created_at', { ascending: true });
 
-      setIsPublic(!!count && count > 0);
+    if (commentsError) {
+      console.error('Error fetching comments:', commentsError);
     } else {
-      setQuestion(null);
+      setComments(commentsData);
     }
+
+    setLoading(false);
   }, [questionId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      fetchQuestion().finally(() => setLoading(false));
-    }, [fetchQuestion]),
-  );
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchQuestion().finally(() => setRefreshing(false));
-  }, [fetchQuestion]);
+  // 댓글 제출 함수
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !user) return;
 
-  const currentUserId = user?.id || user?.uid;
-  const isOwner = question?.user_id === currentUserId;
-
-  // 헤더에 '수정' 버튼 (소유자 & 미답변)
-  useLayoutEffect(() => {
-    const canEdit = !!question && isOwner && !question.is_answered;
-    navigation.setOptions({
-      headerRight: () =>
-        canEdit ? (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('HelpDeskEdit', { questionId })}
-            style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
-            <Text style={{ color: '#3d5afe', fontWeight: '600' }}>수정</Text>
-          </TouchableOpacity>
-        ) : null,
+    setIsSubmitting(true);
+    const { error } = await supabase.from('help_desk_comments').insert({
+      question_id: questionId,
+      content: newComment.trim(),
+      user_id: user.id,
     });
-  }, [navigation, question, isOwner, questionId]);
+
+    if (error) {
+      console.error('Error posting comment:', error);
+      Alert.alert('오류', '댓글을 작성하는 데 실패했습니다.');
+    } else {
+      setNewComment('');
+      // 새 댓글 추가 후 데이터 다시 로드
+      await fetchData();
+    }
+    setIsSubmitting(false);
+  };
+
+  // 댓글 삭제 함수
+  const handleDeleteComment = async commentId => {
+    Alert.alert('댓글 삭제', '이 댓글을 정말로 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        onPress: async () => {
+          const { error } = await supabase
+            .from('help_desk_comments')
+            .delete()
+            .eq('id', commentId);
+
+          if (error) {
+            Alert.alert('오류', '댓글 삭제에 실패했습니다.');
+            console.error('Error deleting comment:', error);
+          } else {
+            setComments(prev => prev.filter(c => c.id !== commentId));
+          }
+        },
+        style: 'destructive',
+      },
+    ]);
+  };
+
+  // 권한 확인 (관리자 또는 글 작성자인지)
+  const canComment = profile?.is_admin || question?.user_id === user?.id;
 
   if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#5262F5" />
-      </View>
-    );
+    return <ActivityIndicator style={styles.center} size="large" />;
   }
 
   if (!question) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.infoText}>
-          문의 내역을 찾을 수 없거나 접근 권한이 없습니다.
-        </Text>
+      <View style={styles.container}>
+        <Text style={styles.centerText}>질문을 찾을 수 없습니다.</Text>
       </View>
     );
   }
-
-  // 비공개 + 소유자 아님 → 접근 불가
-  if (!isOwner && !isPublic) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.infoText}>
-          비공개 문의입니다. 작성자만 볼 수 있어요.
-        </Text>
-      </View>
-    );
-  }
-
-  const shouldMaskData = isPublic && !isOwner;
-
-  // help_answers를 항상 배열로
-  let answers = [];
-  if (question?.help_answers) {
-    if (Array.isArray(question.help_answers)) {
-      answers = question.help_answers.filter(Boolean);
-    } else if (typeof question.help_answers === 'object') {
-      answers = [question.help_answers];
-    }
-  }
-  const hasAnswer = answers.length > 0;
-  const canViewAnswer = (isOwner || isPublic) && hasAnswer;
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={['#5262F5']}
-        />
-      }>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>문의 내용</Text>
-        <DetailItem
-          label="이름"
-          value={
-            shouldMaskData
-              ? maskNameMiddle(question.user_name)
-              : question.user_name
-          }
-        />
-        <DetailItem
-          label="연락처"
-          value={
-            shouldMaskData
-              ? maskPhoneNumberCustom(question.user_phone)
-              : question.user_phone
-          }
-        />
-        <DetailItem label="대화 계기" value={question.conversation_reason} />
-        <DetailItem
-          label="상대방 계좌"
-          value={
-            shouldMaskData
-              ? maskAccountNumber(question.opponent_account)
-              : question.opponent_account
-          }
-        />
-        <DetailItem
-          label="상대방 연락처"
-          value={
-            shouldMaskData
-              ? maskPhoneNumberCustom(question.opponent_phone)
-              : question.opponent_phone
-          }
-        />
-        <DetailItem
-          label="상대방 SNS"
-          value={
-            shouldMaskData
-              ? maskNameMiddle(question.opponent_sns)
-              : question.opponent_sns
-          }
-        />
-        <DetailItem label="사건 개요" value={question.case_summary} />
-      </View>
-
-      {canViewAnswer ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>관리자 답변</Text>
-          {answers.map(answer => (
-            <AnswerItem key={answer.id} answer={answer} />
-          ))}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.flexContainer}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 20 }}>
+        <View style={styles.questionSection}>
+          <Text style={styles.title}>{question.title}</Text>
+          <Text style={styles.meta}>
+            작성자: {question.user_name} |{' '}
+            {new Date(question.created_at).toLocaleDateString()}
+          </Text>
+          <View style={styles.divider} />
+          <Text style={styles.content}>{question.content}</Text>
         </View>
-      ) : (
-        isOwner &&
-        !hasAnswer && (
-          <View style={[styles.section, styles.pendingSection]}>
-            <Text style={styles.pendingText}>답변을 준비중입니다.</Text>
-          </View>
-        )
+
+        <View style={styles.commentsSection}>
+          <Text style={styles.commentsTitle}>답변 및 문의</Text>
+          {comments.length > 0 ? (
+            comments.map(comment => (
+              <CommentItem
+                key={comment.id}
+                comment={comment}
+                currentUserId={user?.id}
+                onDelete={handleDeleteComment}
+              />
+            ))
+          ) : (
+            <Text style={styles.noCommentsText}>아직 답변이 없습니다.</Text>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* 댓글 입력창 (권한이 있는 경우에만 표시) */}
+      {canComment && (
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={newComment}
+            onChangeText={setNewComment}
+            placeholder="답변 또는 문의를 입력하세요..."
+            multiline
+            editable={!isSubmitting}
+            placeholderTextColor="#888"
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, isSubmitting && styles.disabledButton]}
+            onPress={handleAddComment}
+            disabled={isSubmitting || !newComment.trim()}>
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Icon name="send" size={24} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
       )}
-    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
-  centered: {
+  flexContainer: {
+    flex: 1,
+    backgroundColor: '#f4f6f8',
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 15,
+  },
+  center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#f8f9fa',
   },
-  infoText: { fontSize: 16, color: '#495057' },
-  section: {
+  centerText: {
+    textAlign: 'center',
+  },
+  questionSection: {
     backgroundColor: 'white',
     padding: 20,
-    marginHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderRadius: 10,
+    marginTop: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  sectionTitle: {
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  meta: {
+    fontSize: 13,
+    color: 'gray',
+    marginBottom: 15,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginBottom: 15,
+  },
+  content: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#444',
+  },
+  commentsSection: {
+    marginBottom: 20,
+  },
+  commentsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#343a40',
-  },
-  detailItem: { marginBottom: 16 },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#868e96',
-    marginBottom: 6,
-  },
-  detailValue: { fontSize: 16, color: '#212529', lineHeight: 24 },
-  answerItemContainer: {
-    backgroundColor: '#f1f3f5',
-    borderRadius: 8,
-    padding: 16,
     marginBottom: 10,
+    paddingLeft: 5,
+    color: '#333',
   },
-  answerContent: { fontSize: 16, lineHeight: 24, color: '#343a40' },
-  answerDate: {
-    fontSize: 12,
-    color: '#868e96',
-    textAlign: 'right',
-    marginTop: 12,
+  noCommentsText: {
+    textAlign: 'center',
+    color: 'gray',
+    marginTop: 20,
+    padding: 20,
   },
-  pendingSection: {
+  commentContainer: {
+    padding: 12,
+    borderRadius: 15,
+    marginBottom: 10,
+    maxWidth: '85%',
+  },
+  myComment: {
+    backgroundColor: '#3d5afe',
+    alignSelf: 'flex-end',
+  },
+  otherComment: {
+    backgroundColor: 'white',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 30,
-    backgroundColor: '#fff',
-    elevation: 0,
-    shadowOpacity: 0,
+    marginBottom: 5,
   },
-  pendingText: { fontSize: 16, color: '#495057', fontWeight: '500' },
+  commentAuthor: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  adminAuthor: {
+    color: '#0056b3',
+  },
+  commentContent: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#333',
+  },
+  commentTimestamp: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 10,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderColor: '#ccc',
+  },
+  input: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 120,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingTop: Platform.OS === 'ios' ? 10 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+    fontSize: 16,
+    marginRight: 10,
+  },
+  sendButton: {
+    backgroundColor: '#3d5afe',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  disabledButton: {
+    backgroundColor: '#a9a9a9',
+  },
 });
