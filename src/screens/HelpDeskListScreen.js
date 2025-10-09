@@ -17,7 +17,7 @@ import { logPageView } from '../lib/pageViewLogger';
 import HelpDeskPinnedNotices from '../components/HelpDeskPinnedNotices';
 
 export default function HelpDeskListScreen({ navigation }) {
-  const { user } = useAuth(); // 현재 로그인한 사용자 정보
+  const { user } = useAuth();
   const [questions, setQuestions] = useState([]);
   const [publicIdSet, setPublicIdSet] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -51,8 +51,7 @@ export default function HelpDeskListScreen({ navigation }) {
     await fetchPinnedNotices();
 
     const { data: questionsData, error: questionsError } = await supabase
-      .from('help_questions')
-      .select('*')
+      .rpc('get_help_questions_with_status') // RPC 함수 이름
       .order('created_at', { ascending: false });
 
     if (questionsError) {
@@ -98,10 +97,7 @@ export default function HelpDeskListScreen({ navigation }) {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([
-      fetchPinnedNotices(),
-      fetchQuestionsAndPublicStatus(),
-    ]).finally(() => setRefreshing(false));
+    fetchQuestionsAndPublicStatus().finally(() => setRefreshing(false));
   }, [user]);
 
   const openNotice = n => {
@@ -110,13 +106,9 @@ export default function HelpDeskListScreen({ navigation }) {
 
   const renderItem = ({ item }) => {
     const isPublic = publicIdSet.has(item.id);
-    // [핵심 수정] 현재 사용자가 작성한 질문인지 확인하는 변수 추가
-    const currentUserId = user?.id || user?.uid;
-    const isMine = user && item.user_id === currentUserId;
-    // [핵심 수정] 공개되었거나, 내가 쓴 글이면 클릭 가능
+    const isMine = user && item.user_id === user.id;
     const isClickable = isPublic || isMine;
 
-    // 상태에 따른 스타일과 텍스트를 결정하는 함수
     const getStatusInfo = () => {
       if (isPublic) {
         return {
@@ -146,12 +138,7 @@ export default function HelpDeskListScreen({ navigation }) {
 
     return (
       <TouchableOpacity
-        style={[
-          styles.itemContainer,
-          // [수정] 클릭 불가능한 항목에만 비활성화 스타일 적용
-          !isClickable && styles.disabledItem,
-        ]}
-        // [수정] isClickable 변수에 따라 비활성화 여부 결정
+        style={[styles.itemContainer, !isClickable && styles.disabledItem]}
         disabled={!isClickable}
         onPress={() =>
           navigation.navigate('HelpDeskDetail', { questionId: item.id })
@@ -174,6 +161,7 @@ export default function HelpDeskListScreen({ navigation }) {
           <Text style={[styles.statusTag, statusInfo.style]}>
             {statusInfo.text}
           </Text>
+          {/* ✨ [핵심 수정 2] RPC 함수가 반환하는 is_answered 필드를 직접 사용합니다. */}
           <Text
             style={
               item.is_answered ? styles.statusAnswered : styles.statusPending
@@ -204,7 +192,7 @@ export default function HelpDeskListScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {questions.length === 0 ? (
+      {questions.length === 0 && notices.length === 0 ? (
         <View style={styles.centered}>
           <Icon name="chat-question-outline" size={60} color="#ced4da" />
           <Text style={styles.emptyText}>작성한 문의 내역이 없습니다.</Text>
@@ -280,7 +268,7 @@ const styles = StyleSheet.create({
   },
   publicTag: { backgroundColor: '#dbe4ff', color: '#3d5afe' },
   privateTag: { backgroundColor: '#e9ecef', color: '#868e96' },
-  myPrivateTag: { backgroundColor: '#e5dbff', color: '#7048e8' }, // [추가] 내가 쓴 비공개 질문 스타일
+  myPrivateTag: { backgroundColor: '#e5dbff', color: '#7048e8' },
   statusAnswered: { fontSize: 14, color: '#3d5afe', fontWeight: '600' },
   statusPending: { fontSize: 14, color: '#f03e3e', fontWeight: '600' },
   fab: {
