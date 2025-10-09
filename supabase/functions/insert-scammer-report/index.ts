@@ -37,10 +37,12 @@ interface ReportData {
   illegal_collection_evidence_urls?: string[] | null;
   traded_item_image_urls?: string[] | null;
   detailed_crime_type?: string | null;
-  crypto_transfer_amount?: number | null; // ✨ 새로운 필드 추가
+  crypto_transfer_amount?: number | null;
   damage_amount?: number | null;
   no_damage_amount?: boolean;
   is_face_to_face?: boolean;
+  reporter_name?: string | null; // ✨ 신고자 이름 필드 추가
+  reporter_phone?: string | null; // ✨ 신고자 연락처 필드 추가
 }
 
 async function encryptAndInsert(
@@ -97,6 +99,8 @@ async function encryptAndInsert(
   const encryptedImpersonatedPhoneNumber = await encrypt(
     reportData.impersonated_phone_number,
   );
+  const encryptedReporterName = await encrypt(reportData.reporter_name);
+  const encryptedReporterPhone = await encrypt(reportData.reporter_phone);
 
   const { error: insertError } = await supabaseAdminClient
     .from('scammer_reports')
@@ -131,6 +135,8 @@ async function encryptAndInsert(
       damage_amount: reportData.damage_amount,
       is_face_to_face: reportData.is_face_to_face,
       no_damage_amount: reportData.no_damage_amount,
+      reporter_name: encryptedReporterName, // ✨ 암호화된 이름 추가
+      reporter_phone: encryptedReporterPhone, // ✨ 암호화된 연락처 추가
     });
 
   if (insertError) {
@@ -203,6 +209,8 @@ serve(async (req: Request) => {
       'scam_report_source',
       'company_type',
       'gender',
+      'reporter_name', // ✨ 필수 필드 추가
+      'reporter_phone', // ✨ 필수 필드 추가
     ];
     const missingFields = requiredFields.filter(
       field =>

@@ -134,6 +134,10 @@ function ReportScreen({ navigation }) {
     }
   }, [user]);
 
+  // ✨ 신고자 정보 State 추가
+  const [reporterName, setReporterName] = useState('');
+  const [reporterPhone, setReporterPhone] = useState('');
+
   const [damageAccounts, setDamageAccounts] = useState([
     { ...initialDamageAccount },
   ]);
@@ -242,6 +246,10 @@ function ReportScreen({ navigation }) {
   }, [category, attemptedFraud]);
 
   const clearInputs = () => {
+    // ✨ 신고자 정보 초기화
+    setReporterName('');
+    setReporterPhone('');
+
     setDamageAccounts([{ ...initialDamageAccount, id: Date.now() }]);
     setNickname('');
     setPerpetratorAccount('');
@@ -407,6 +415,8 @@ function ReportScreen({ navigation }) {
     Keyboard.dismiss();
 
     if (
+      !reporterName.trim() || // ✨ 신고자 이름 유효성 검사
+      !reporterPhone.trim() || // ✨ 신고자 연락처 유효성 검사
       !companyType ||
       !category ||
       !scamReportSource ||
@@ -628,6 +638,10 @@ function ReportScreen({ navigation }) {
         );
 
       const reportData = {
+        // ✨ 신고자 정보 추가
+        reporter_name: reporterName.trim(),
+        reporter_phone: reporterPhone.trim(),
+
         damage_accounts: processedDamageAccounts,
         nickname: nickname.trim() || null,
         perpetrator_account: perpetratorAccount.trim() || null,
@@ -1048,6 +1062,31 @@ function ReportScreen({ navigation }) {
 
         <Text style={styles.title}>사기 정보 입력</Text>
         <Text style={styles.guidance}>* 표시된 항목은 필수 입력입니다.</Text>
+
+        {/* ✨ 신고자 정보 입력 필드 추가 */}
+        <Text style={styles.label}>
+          이름 <Text style={styles.required}>*</Text>
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={reporterName}
+          onChangeText={setReporterName}
+          placeholder="신고하시는 분의 성함을 입력해주세요."
+          placeholderTextColor="#6c757d"
+          autoCapitalize="words"
+        />
+
+        <Text style={styles.label}>
+          연락처 <Text style={styles.required}>*</Text>
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={reporterPhone}
+          onChangeText={setReporterPhone}
+          placeholder="'-' 없이 숫자만 입력해주세요."
+          placeholderTextColor="#6c757d"
+          keyboardType="phone-pad"
+        />
 
         <Text style={styles.label}>
           피해자 해당사항 <Text style={styles.required}>*</Text>
