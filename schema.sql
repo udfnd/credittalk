@@ -384,6 +384,8 @@ CREATE TABLE IF NOT EXISTS "public"."scammer_reports" (
     "perpetrator_id" "text",
     "perpetrator_account" "text",
     "crypto_transfer_amount" numeric,
+    "reporter_name" "bytea",
+    "reporter_phone" "bytea",
     CONSTRAINT "scammer_reports_company_type_check" CHECK (("company_type" = ANY (ARRAY['사업자'::"text", '개인'::"text"]))),
     CONSTRAINT "scammer_reports_gender_check" CHECK (("gender" = ANY (ARRAY['남성'::"text", '여성'::"text", '모름'::"text"])))
 );
@@ -482,6 +484,52 @@ $$;
 ALTER FUNCTION "public"."get_allowed_scammer_reports_for_user"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_arrest_news_with_comment_info"() RETURNS TABLE("id" bigint, "title" "text", "created_at" timestamp with time zone, "author_name" "text", "image_urls" "text"[], "views" bigint, "is_pinned" boolean, "is_published" boolean, "comment_count" bigint, "has_new_comment" boolean)
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        an.id,
+        an.title,
+        an.created_at,
+        an.author_name,
+        an.image_urls,
+        an.views,
+        an.is_pinned,
+        an.is_published,
+        COALESCE(c.comment_count, 0) as comment_count,
+        EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE comments.post_id = an.id
+              AND comments.board_type = 'arrest_news' -- 'post_type' -> 'board_type'으로 수정
+              AND comments.created_at > now() - interval '24 hours'
+        ) as has_new_comment
+    FROM
+        arrest_news an
+    LEFT JOIN (
+        SELECT
+            post_id,
+            count(*) as comment_count
+        FROM
+            comments
+        WHERE
+            comments.board_type = 'arrest_news' -- 'post_type' -> 'board_type'으로 수정
+        GROUP BY
+            post_id
+    ) c ON an.id = c.post_id
+    WHERE an.is_published = true
+    ORDER BY
+        an.is_pinned DESC,
+        an.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_arrest_news_with_comment_info"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_bank_account_stats"() RETURNS TABLE("bank_name" "text", "report_count" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -509,6 +557,53 @@ $$;
 
 
 ALTER FUNCTION "public"."get_bank_account_stats"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_community_posts_with_comment_info"() RETURNS TABLE("id" bigint, "title" "text", "created_at" timestamp with time zone, "author_auth_id" "uuid", "views" bigint, "author_name" "text", "image_urls" "text"[], "is_pinned" boolean, "comment_count" bigint, "has_new_comment" boolean)
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        cp.id,
+        cp.title,
+        cp.created_at,
+        cp.user_id as author_auth_id,
+        cp.views,
+        u.nickname as author_name,
+        cp.image_urls,
+        cp.is_pinned,
+        COALESCE(c.comment_count, 0) as comment_count,
+        EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE comments.post_id = cp.id
+              AND comments.board_type = 'community_posts'
+              AND comments.created_at > now() - interval '24 hours'
+        ) as has_new_comment
+    FROM
+        community_posts cp
+    LEFT JOIN
+        users u ON cp.user_id = u.auth_user_id
+    LEFT JOIN (
+        SELECT
+            post_id,
+            count(*) as comment_count
+        FROM
+            comments
+        WHERE
+            comments.board_type = 'community_posts'
+        GROUP BY
+            post_id
+    ) c ON cp.id = c.post_id
+    ORDER BY
+        cp.is_pinned DESC,
+        cp.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_community_posts_with_comment_info"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."get_crime_summary_stats"() RETURNS "jsonb"
@@ -620,6 +715,199 @@ $$;
 ALTER FUNCTION "public"."get_decrypted_report_for_admin"("report_id_input" bigint) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) RETURNS TABLE("id" bigint, "question_id" bigint, "user_id" "uuid", "content" "text", "created_at" timestamp with time zone, "nickname" "text", "name" "text", "is_admin" boolean)
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    hdc.id,
+    hdc.question_id,
+    hdc.user_id,
+    hdc.content,
+    hdc.created_at,
+    -- users 테이블에서 닉네임, 이름, 관리자 여부를 가져옴
+    u.nickname,
+    u.name,
+    u.is_admin
+  FROM
+    public.help_desk_comments hdc
+  -- help_desk_comments의 user_id와 users의 auth_user_id를 기준으로 JOIN
+  LEFT JOIN
+    public.users u ON hdc.user_id = u.auth_user_id
+  WHERE
+    hdc.question_id = p_question_id
+  ORDER BY
+    hdc.created_at ASC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_help_questions_with_status"() RETURNS TABLE("id" bigint, "user_id" "uuid", "title" "text", "content" "text", "created_at" timestamp with time zone, "user_name" "text", "user_phone" "text", "conversation_reason" "text", "opponent_account" "text", "opponent_phone" "text", "opponent_sns" "text", "case_summary" "text", "birth_date" "text", "province" "text", "city" "text", "victim_type" "text", "damage_category" "text", "is_answered" boolean)
+    LANGUAGE "plpgsql" STABLE SECURITY DEFINER
+    AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    hq.*,
+    -- 각 질문(hq.id)에 대해, 관리자(u.is_admin = true)가 작성한 댓글이 하나라도 존재하는지 확인합니다.
+    EXISTS (
+        SELECT 1
+        FROM public.help_desk_comments hdc
+        JOIN public.users u ON hdc.user_id = u.auth_user_id
+        WHERE hdc.question_id = hq.id AND u.is_admin = true
+    ) AS is_answered
+  FROM
+    public.help_questions hq;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_help_questions_with_status"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_incident_photos_with_comment_info"() RETURNS TABLE("id" bigint, "title" "text", "created_at" timestamp with time zone, "image_urls" "text"[], "category" "text", "description" "text", "is_pinned" boolean, "views" bigint, "is_published" boolean, "comment_count" bigint, "has_new_comment" boolean)
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ip.id,
+        ip.title,
+        ip.created_at,
+        ip.image_urls,
+        ip.category,
+        ip.description,
+        ip.is_pinned,
+        ip.views,
+        ip.is_published,
+        COALESCE(c.comment_count, 0) as comment_count,
+        EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE comments.post_id = ip.id
+              AND comments.board_type = 'incident_photos'
+              AND comments.created_at > now() - interval '24 hours'
+        ) as has_new_comment
+    FROM
+        incident_photos ip
+    LEFT JOIN (
+        SELECT
+            post_id,
+            count(*) as comment_count
+        FROM
+            comments
+        WHERE
+            comments.board_type = 'incident_photos'
+        GROUP BY
+            post_id
+    ) c ON ip.id = c.post_id
+    WHERE ip.is_published = true
+    ORDER BY
+        ip.is_pinned DESC,
+        ip.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_incident_photos_with_comment_info"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_new_crime_cases_with_comment_info"() RETURNS TABLE("id" bigint, "created_at" timestamp with time zone, "title" "text", "image_urls" "text"[], "category" "text", "views" bigint, "is_pinned" boolean, "is_published" boolean, "comment_count" bigint, "has_new_comment" boolean)
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ncc.id,
+        ncc.created_at,
+        ncc.title,
+        ncc.image_urls,
+        ncc.category,
+        ncc.views,
+        ncc.is_pinned,
+        ncc.is_published,
+        COALESCE(c.comment_count, 0) as comment_count,
+        EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE comments.post_id = ncc.id
+              AND comments.board_type = 'new_crime_cases'
+              AND comments.created_at > now() - interval '24 hours'
+        ) as has_new_comment
+    FROM
+        new_crime_cases ncc
+    LEFT JOIN (
+        SELECT
+            post_id,
+            count(*) as comment_count
+        FROM
+            comments
+        WHERE
+            comments.board_type = 'new_crime_cases'
+        GROUP BY
+            post_id
+    ) c ON ncc.id = c.post_id
+    WHERE ncc.is_published = true
+    ORDER BY
+        ncc.is_pinned DESC,
+        ncc.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_new_crime_cases_with_comment_info"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_notices_with_comment_info"() RETURNS TABLE("id" bigint, "title" "text", "created_at" timestamp with time zone, "author_name" "text", "image_urls" "text"[], "views" bigint, "is_published" boolean, "is_pinned" boolean, "comment_count" bigint, "has_new_comment" boolean)
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        n.id,
+        n.title,
+        n.created_at,
+        n.author_name,
+        n.image_urls,
+        n.views,
+        n.is_published,
+        n.is_pinned,
+        COALESCE(c.comment_count, 0) as comment_count,
+        EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE comments.post_id = n.id
+              AND comments.board_type = 'notices'
+              AND comments.created_at > now() - interval '24 hours'
+        ) as has_new_comment
+    FROM
+        notices n
+    LEFT JOIN (
+        SELECT
+            post_id,
+            count(*) as comment_count
+        FROM
+            comments
+        WHERE
+            comments.board_type = 'notices'
+        GROUP BY
+            post_id
+    ) c ON n.id = c.post_id
+    WHERE n.is_published = true
+    ORDER BY
+        n.is_pinned DESC,
+        n.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_notices_with_comment_info"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_phone_number_stats"() RETURNS TABLE("phone_number" "text", "report_count" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -657,6 +945,55 @@ $$;
 
 
 ALTER FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_reviews_with_comment_info"() RETURNS TABLE("id" bigint, "title" "text", "created_at" timestamp with time zone, "author_auth_id" "uuid", "rating" smallint, "author_name" "text", "views" bigint, "is_published" boolean, "is_pinned" boolean, "comment_count" bigint, "has_new_comment" boolean)
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        r.id,
+        r.title,
+        r.created_at,
+        r.user_id as author_auth_id,
+        r.rating,
+        u.nickname as author_name,
+        r.views,
+        r.is_published,
+        r.is_pinned,
+        COALESCE(c.comment_count, 0) as comment_count,
+        EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE comments.post_id = r.id
+              AND comments.board_type = 'reviews'
+              AND comments.created_at > now() - interval '24 hours'
+        ) as has_new_comment
+    FROM
+        reviews r
+    LEFT JOIN
+        users u ON r.user_id = u.auth_user_id
+    LEFT JOIN (
+        SELECT
+            post_id,
+            count(*) as comment_count
+        FROM
+            comments
+        WHERE
+            comments.board_type = 'reviews'
+        GROUP BY
+            post_id
+    ) c ON r.id = c.post_id
+    WHERE r.is_published = true
+    ORDER BY
+        r.is_pinned DESC,
+        r.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_reviews_with_comment_info"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."get_user_job_type"() RETURNS "text"
@@ -1104,6 +1441,8 @@ CREATE OR REPLACE VIEW "public"."decrypted_scammer_reports" AS
     "r"."site_name",
     "r"."traded_item_image_urls",
     "public"."decrypt_secret"("r"."impersonated_phone_number") AS "impersonated_phone_number",
+    "public"."decrypt_secret"("r"."reporter_name") AS "reporter_name",
+    "public"."decrypt_secret"("r"."reporter_phone") AS "reporter_phone",
     "r"."detailed_crime_type",
     "r"."damage_amount",
     "r"."no_damage_amount",
@@ -1154,7 +1493,9 @@ CREATE OR REPLACE VIEW "public"."admin_scammer_reports_view" AS
     "decrypted_scammer_reports"."damage_amount",
     "decrypted_scammer_reports"."no_damage_amount",
     "decrypted_scammer_reports"."phone_numbers",
-    "decrypted_scammer_reports"."damage_accounts"
+    "decrypted_scammer_reports"."damage_accounts",
+    "decrypted_scammer_reports"."reporter_name",
+    "decrypted_scammer_reports"."reporter_phone"
    FROM "public"."decrypted_scammer_reports";
 
 
@@ -1460,24 +1801,21 @@ CREATE TABLE IF NOT EXISTS "public"."device_push_tokens" (
 ALTER TABLE "public"."device_push_tokens" OWNER TO "postgres";
 
 
-CREATE TABLE IF NOT EXISTS "public"."help_answers" (
+CREATE TABLE IF NOT EXISTS "public"."help_desk_comments" (
     "id" bigint NOT NULL,
     "question_id" bigint NOT NULL,
-    "admin_id" "uuid" NOT NULL,
+    "user_id" "uuid" NOT NULL,
     "content" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "help_desk_comments_content_check" CHECK (("char_length"("content") > 0))
 );
 
 
-ALTER TABLE "public"."help_answers" OWNER TO "postgres";
+ALTER TABLE "public"."help_desk_comments" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "public"."help_answers" IS '헬프 데스크 답변';
-
-
-
-ALTER TABLE "public"."help_answers" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
-    SEQUENCE NAME "public"."help_answers_id_seq"
+ALTER TABLE "public"."help_desk_comments" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."help_desk_comments_id_seq"
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1525,14 +1863,18 @@ CREATE TABLE IF NOT EXISTS "public"."help_questions" (
     "title" "text",
     "content" "text",
     "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL,
-    "is_answered" boolean DEFAULT false NOT NULL,
     "user_name" "text",
     "user_phone" "text",
     "conversation_reason" "text",
     "opponent_account" "text",
     "opponent_phone" "text",
     "opponent_sns" "text",
-    "case_summary" "text"
+    "case_summary" "text",
+    "birth_date" "text",
+    "province" "text",
+    "city" "text",
+    "victim_type" "text",
+    "damage_category" "text"
 );
 
 
@@ -1540,10 +1882,6 @@ ALTER TABLE "public"."help_questions" OWNER TO "postgres";
 
 
 COMMENT ON TABLE "public"."help_questions" IS '헬프 데스크 질문';
-
-
-
-COMMENT ON COLUMN "public"."help_questions"."is_answered" IS '관리자 답변 여부';
 
 
 
@@ -1592,7 +1930,6 @@ CREATE OR REPLACE VIEW "public"."help_questions_with_author" AS
     "hq"."title",
     "hq"."content",
     "hq"."created_at",
-    "hq"."is_answered",
     "u"."name" AS "author_name"
    FROM ("public"."help_questions" "hq"
      LEFT JOIN "public"."users" "u" ON (("hq"."user_id" = "u"."auth_user_id")));
@@ -1690,7 +2027,9 @@ CREATE OR REPLACE VIEW "public"."masked_scammer_reports" AS
     "decrypted_scammer_reports"."damage_amount",
     "decrypted_scammer_reports"."no_damage_amount",
     "decrypted_scammer_reports"."phone_numbers",
-    "decrypted_scammer_reports"."damage_accounts"
+    "decrypted_scammer_reports"."damage_accounts",
+    "decrypted_scammer_reports"."reporter_name",
+    "decrypted_scammer_reports"."reporter_phone"
    FROM "public"."decrypted_scammer_reports";
 
 
@@ -2098,13 +2437,8 @@ ALTER TABLE ONLY "public"."device_push_tokens"
 
 
 
-ALTER TABLE ONLY "public"."help_answers"
-    ADD CONSTRAINT "help_answers_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."help_answers"
-    ADD CONSTRAINT "help_answers_question_id_key" UNIQUE ("question_id");
+ALTER TABLE ONLY "public"."help_desk_comments"
+    ADD CONSTRAINT "help_desk_comments_pkey" PRIMARY KEY ("id");
 
 
 
@@ -2344,16 +2678,6 @@ ALTER TABLE ONLY "public"."device_push_tokens"
 
 
 
-ALTER TABLE ONLY "public"."help_answers"
-    ADD CONSTRAINT "fk_admin" FOREIGN KEY ("admin_id") REFERENCES "public"."users"("auth_user_id") ON DELETE CASCADE;
-
-
-
-ALTER TABLE ONLY "public"."help_answers"
-    ADD CONSTRAINT "fk_question" FOREIGN KEY ("question_id") REFERENCES "public"."help_questions"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."new_crime_cases"
     ADD CONSTRAINT "fk_source_help_question" FOREIGN KEY ("source_help_question_id") REFERENCES "public"."help_questions"("id") ON DELETE SET NULL;
 
@@ -2361,6 +2685,21 @@ ALTER TABLE ONLY "public"."new_crime_cases"
 
 ALTER TABLE ONLY "public"."help_questions"
     ADD CONSTRAINT "fk_user" FOREIGN KEY ("user_id") REFERENCES "public"."users"("auth_user_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."help_desk_comments"
+    ADD CONSTRAINT "help_desk_comments_question_id_fkey" FOREIGN KEY ("question_id") REFERENCES "public"."help_questions"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."help_desk_comments"
+    ADD CONSTRAINT "help_desk_comments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."help_desk_comments"
+    ADD CONSTRAINT "help_desk_comments_user_id_fkey_public" FOREIGN KEY ("user_id") REFERENCES "public"."users"("auth_user_id") ON DELETE CASCADE;
 
 
 
@@ -2443,10 +2782,6 @@ CREATE POLICY "Allow admin to read all push tokens" ON "public"."device_push_tok
 
 
 
-CREATE POLICY "Allow admins to insert answers" ON "public"."help_answers" FOR INSERT WITH CHECK ("public"."is_admin"("auth"."uid"()));
-
-
-
 CREATE POLICY "Allow admins to read page_views" ON "public"."page_views" FOR SELECT USING ("public"."is_current_user_admin"());
 
 
@@ -2455,11 +2790,11 @@ CREATE POLICY "Allow admins to update questions" ON "public"."help_questions" FO
 
 
 
-CREATE POLICY "Allow all authenticated users to view all answers" ON "public"."help_answers" FOR SELECT USING (("auth"."role"() = 'authenticated'::"text"));
-
-
-
 CREATE POLICY "Allow authenticated users to insert page_views" ON "public"."page_views" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Allow delete for comment owner" ON "public"."help_desk_comments" FOR DELETE USING (("user_id" = "auth"."uid"()));
 
 
 
@@ -2471,7 +2806,23 @@ CREATE POLICY "Allow insert for authenticated users on scammer_reports" ON "publ
 
 
 
+CREATE POLICY "Allow insert for owner and admins" ON "public"."help_desk_comments" FOR INSERT WITH CHECK ((("user_id" = "auth"."uid"()) AND ((( SELECT "help_questions"."user_id"
+   FROM "public"."help_questions"
+  WHERE ("help_questions"."id" = "help_desk_comments"."question_id")) = "auth"."uid"()) OR (( SELECT "users"."is_admin"
+   FROM "public"."users"
+  WHERE ("users"."auth_user_id" = "auth"."uid"())) = true))));
+
+
+
 CREATE POLICY "Allow read based on job type for scammer_reports" ON "public"."scammer_reports" FOR SELECT USING ((("auth"."role"() = 'authenticated'::"text") AND ((("public"."get_user_job_type"() = '사업자'::"text") AND ("category" = ANY (ARRAY['불법사금융'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text"]))) OR ((("public"."get_user_job_type"() = '일반'::"text") OR ("public"."get_user_job_type"() IS NULL)) AND (NOT ("category" = ANY (ARRAY['불법사금융'::"text", '노쇼 대리구매 사기'::"text", '공갈 협박 범죄'::"text", '알바 범죄'::"text", '렌탈 사업'::"text"])))))));
+
+
+
+CREATE POLICY "Allow read for owner and admins" ON "public"."help_desk_comments" FOR SELECT USING (((( SELECT "help_questions"."user_id"
+   FROM "public"."help_questions"
+  WHERE ("help_questions"."id" = "help_desk_comments"."question_id")) = "auth"."uid"()) OR (( SELECT "users"."is_admin"
+   FROM "public"."users"
+  WHERE ("users"."auth_user_id" = "auth"."uid"())) = true)));
 
 
 
@@ -2543,12 +2894,6 @@ CREATE POLICY "Enable read access for all users" ON "public"."search_logs" FOR S
 
 
 
-CREATE POLICY "Enable select for users based on question ownership" ON "public"."help_answers" FOR SELECT USING ((EXISTS ( SELECT 1
-   FROM "public"."help_questions"
-  WHERE (("help_questions"."id" = "help_answers"."question_id") AND ("help_questions"."user_id" = "auth"."uid"())))));
-
-
-
 CREATE POLICY "Public can read arrest news" ON "public"."arrest_news" FOR SELECT USING (true);
 
 
@@ -2593,11 +2938,31 @@ CREATE POLICY "Users can delete their own community posts." ON "public"."communi
 
 
 
+CREATE POLICY "Users can delete their own crime cases" ON "public"."new_crime_cases" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can delete their own incident photos" ON "public"."incident_photos" FOR DELETE USING (("auth"."uid"() = "uploader_id"));
+
+
+
 CREATE POLICY "Users can delete their own participation." ON "public"."chat_room_participants" FOR DELETE USING (("user_id" = "auth"."uid"()));
 
 
 
+CREATE POLICY "Users can delete their own posts" ON "public"."arrest_news" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can delete their own posts" ON "public"."community_posts" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Users can delete their own questions." ON "public"."help_questions" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can delete their own reviews" ON "public"."reviews" FOR DELETE USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -2631,7 +2996,19 @@ CREATE POLICY "Users can update their own community posts." ON "public"."communi
 
 
 
+CREATE POLICY "Users can update their own crime cases" ON "public"."new_crime_cases" FOR UPDATE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can update their own incident photos" ON "public"."incident_photos" FOR UPDATE USING (("auth"."uid"() = "uploader_id"));
+
+
+
 CREATE POLICY "Users can update their own questions." ON "public"."help_questions" FOR UPDATE USING (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can update their own reviews" ON "public"."reviews" FOR UPDATE USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -2656,6 +3033,16 @@ CREATE POLICY "Users can view their own analysis results." ON "public"."audio_an
 
 
 CREATE POLICY "Users can view their own participation." ON "public"."chat_room_participants" FOR SELECT USING (("user_id" = "auth"."uid"()));
+
+
+
+CREATE POLICY "allow_update_only_before_admin_comment" ON "public"."help_questions" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND (NOT (EXISTS ( SELECT 1
+   FROM ("public"."help_desk_comments" "c"
+     JOIN "public"."users" "u" ON (("c"."user_id" = "u"."auth_user_id")))
+  WHERE (("c"."question_id" = "help_questions"."id") AND ("u"."is_admin" = true))))))) WITH CHECK ((("user_id" = "auth"."uid"()) AND (NOT (EXISTS ( SELECT 1
+   FROM ("public"."help_desk_comments" "c"
+     JOIN "public"."users" "u" ON (("c"."user_id" = "u"."auth_user_id")))
+  WHERE (("c"."question_id" = "help_questions"."id") AND ("u"."is_admin" = true)))))));
 
 
 
@@ -2735,7 +3122,7 @@ CREATE POLICY "dpt update own (uuid)" ON "public"."device_push_tokens" FOR UPDAT
 
 
 
-ALTER TABLE "public"."help_answers" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."help_desk_comments" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."help_desk_notices" ENABLE ROW LEVEL SECURITY;
@@ -2746,10 +3133,6 @@ CREATE POLICY "help_desk_notices_read_published" ON "public"."help_desk_notices"
 
 
 ALTER TABLE "public"."help_questions" ENABLE ROW LEVEL SECURITY;
-
-
-CREATE POLICY "help_questions_update_own_unanswered" ON "public"."help_questions" FOR UPDATE TO "authenticated" USING ((("user_id" = "auth"."uid"()) AND ("is_answered" = false))) WITH CHECK ((("user_id" = "auth"."uid"()) AND ("is_answered" = false)));
-
 
 
 ALTER TABLE "public"."incident_photos" ENABLE ROW LEVEL SECURITY;
@@ -3073,9 +3456,21 @@ GRANT ALL ON FUNCTION "public"."get_allowed_scammer_reports_for_user"() TO "serv
 
 
 
+GRANT ALL ON FUNCTION "public"."get_arrest_news_with_comment_info"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_arrest_news_with_comment_info"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_arrest_news_with_comment_info"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_bank_account_stats"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_bank_account_stats"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_bank_account_stats"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_community_posts_with_comment_info"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_community_posts_with_comment_info"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_community_posts_with_comment_info"() TO "service_role";
 
 
 
@@ -3097,6 +3492,36 @@ GRANT ALL ON FUNCTION "public"."get_decrypted_report_for_admin"("report_id_input
 
 
 
+GRANT ALL ON FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_help_questions_with_status"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_help_questions_with_status"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_help_questions_with_status"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_incident_photos_with_comment_info"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_incident_photos_with_comment_info"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_incident_photos_with_comment_info"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_new_crime_cases_with_comment_info"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_new_crime_cases_with_comment_info"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_new_crime_cases_with_comment_info"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_notices_with_comment_info"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_notices_with_comment_info"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_notices_with_comment_info"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "service_role";
@@ -3106,6 +3531,12 @@ GRANT ALL ON FUNCTION "public"."get_phone_number_stats"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) TO "anon";
 GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_public_question_ids"("p_question_ids" "uuid"[]) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_reviews_with_comment_info"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_reviews_with_comment_info"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_reviews_with_comment_info"() TO "service_role";
 
 
 
@@ -3362,15 +3793,15 @@ GRANT ALL ON TABLE "public"."device_push_tokens" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."help_answers" TO "anon";
-GRANT ALL ON TABLE "public"."help_answers" TO "authenticated";
-GRANT ALL ON TABLE "public"."help_answers" TO "service_role";
+GRANT ALL ON TABLE "public"."help_desk_comments" TO "anon";
+GRANT ALL ON TABLE "public"."help_desk_comments" TO "authenticated";
+GRANT ALL ON TABLE "public"."help_desk_comments" TO "service_role";
 
 
 
-GRANT ALL ON SEQUENCE "public"."help_answers_id_seq" TO "anon";
-GRANT ALL ON SEQUENCE "public"."help_answers_id_seq" TO "authenticated";
-GRANT ALL ON SEQUENCE "public"."help_answers_id_seq" TO "service_role";
+GRANT ALL ON SEQUENCE "public"."help_desk_comments_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."help_desk_comments_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."help_desk_comments_id_seq" TO "service_role";
 
 
 
