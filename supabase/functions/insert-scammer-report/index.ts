@@ -41,8 +41,8 @@ interface ReportData {
   damage_amount?: number | null;
   no_damage_amount?: boolean;
   is_face_to_face?: boolean;
-  reporter_name?: string | null; // ✨ 신고자 이름 필드 추가
-  reporter_phone?: string | null; // ✨ 신고자 연락처 필드 추가
+  reporter_name?: string | null;
+  reporter_phone?: string | null;
 }
 
 async function encryptAndInsert(
@@ -135,8 +135,8 @@ async function encryptAndInsert(
       damage_amount: reportData.damage_amount,
       is_face_to_face: reportData.is_face_to_face,
       no_damage_amount: reportData.no_damage_amount,
-      reporter_name: encryptedReporterName, // ✨ 암호화된 이름 추가
-      reporter_phone: encryptedReporterPhone, // ✨ 암호화된 연락처 추가
+      reporter_name: encryptedReporterName,
+      reporter_phone: encryptedReporterPhone,
     });
 
   if (insertError) {
@@ -209,8 +209,6 @@ serve(async (req: Request) => {
       'scam_report_source',
       'company_type',
       'gender',
-      'reporter_name', // ✨ 필수 필드 추가
-      'reporter_phone', // ✨ 필수 필드 추가
     ];
     const missingFields = requiredFields.filter(
       field =>
