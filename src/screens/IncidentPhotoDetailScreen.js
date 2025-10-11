@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  ActionSheetIOS,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -19,6 +20,7 @@ import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext'; // Import useAuth
+import ReportModal from '../components/ReportModal';
 
 const { width } = Dimensions.get('window');
 
@@ -31,6 +33,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   const [error, setError] = useState(null);
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
 
   useIncrementView('incident_photos', photoId);
 
@@ -70,34 +73,80 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     return unsubscribe;
   }, [navigation, fetchPhotoDetail]);
 
-  useEffect(() => {
-    if (photo) {
-      navigation.setOptions({
-        title: photo.title,
-        headerRight: () =>
-          isAuthor ? (
-            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
-              <TouchableOpacity
-                onPress={handleEdit}
-                style={{ marginRight: 20 }}>
-                <Icon name="pencil" size={24} color="#3d5afe" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDelete}>
-                <Icon name="delete" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            </View>
-          ) : null,
-      });
-    } else if (photoTitle) {
-      navigation.setOptions({ title: photoTitle });
+  const handleBlockUser = useCallback(() => {
+    if (!user || !photo || user.id === photo.uploader_id) {
+      if (!user) {
+        Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
+      }
+      return;
     }
-  });
 
-  const handleEdit = () => {
+    const targetName = photo.uploader_name || '익명 사용자';
+
+    Alert.alert(
+      '사용자 차단',
+      `'${targetName}'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: photo.uploader_id,
+              });
+              if (error) throw error;
+              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [navigation, photo, user]);
+
+  const showPhotoOptions = useCallback(() => {
+    if (!photo) return;
+
+    const options = ['취소', '사진 신고하기'];
+    const blockAvailable = user && photo.uploader_id && user.id !== photo.uploader_id;
+    if (blockAvailable) {
+      options.push('이 사용자 차단하기');
+    }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        destructiveButtonIndex: blockAvailable ? 2 : undefined,
+        title: '게시물 옵션',
+      },
+      buttonIndex => {
+        if (buttonIndex === 1) {
+          setReportModalVisible(true);
+        } else if (blockAvailable && buttonIndex === 2) {
+          handleBlockUser();
+        }
+      },
+    );
+  }, [handleBlockUser, photo, user]);
+
+  const handleEdit = useCallback(() => {
+    if (!photo) return;
     navigation.navigate('IncidentPhotoEdit', { photoId: photo.id });
-  };
+  }, [navigation, photo]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
+    if (!photo || !user) return;
+
     Alert.alert(
       '삭제 확인',
       '정말로 이 사진 자료를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
@@ -109,7 +158,6 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
           onPress: async () => {
             setIsLoading(true);
             try {
-              // Also delete associated images from storage
               if (photo.image_urls && photo.image_urls.length > 0) {
                 const filePaths = photo.image_urls
                   .map(url => url.split('/post-images/')[1])
@@ -142,7 +190,41 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
         },
       ],
     );
-  };
+  }, [navigation, photo, user]);
+
+  useEffect(() => {
+    if (photo) {
+      navigation.setOptions({
+        title: photo.title,
+        headerRight: () => {
+          if (isAuthor) {
+            return (
+              <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+                <TouchableOpacity
+                  onPress={handleEdit}
+                  style={{ marginRight: 20 }}>
+                  <Icon name="pencil" size={24} color="#3d5afe" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDelete}>
+                  <Icon name="delete" size={24} color="#e74c3c" />
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
+          if (!photo.uploader_id) return null;
+
+          return (
+            <TouchableOpacity onPress={showPhotoOptions} style={{ marginRight: 12 }}>
+              <Icon name="dots-vertical" size={24} color="#333" />
+            </TouchableOpacity>
+          );
+        },
+      });
+    } else if (photoTitle) {
+      navigation.setOptions({ title: photoTitle });
+    }
+  }, [handleDelete, handleEdit, isAuthor, navigation, photo, photoTitle, showPhotoOptions]);
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
@@ -278,6 +360,15 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
           </View>
         )}
       />
+      {photo && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          contentId={photo.id}
+          contentType="incident_photo"
+          authorId={photo.uploader_id}
+        />
+      )}
     </SafeAreaView>
   );
 }
