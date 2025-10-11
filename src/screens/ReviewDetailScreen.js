@@ -10,6 +10,7 @@ import {
   Alert,
   Image,
   Dimensions,
+  ActionSheetIOS,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -18,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import ImageViewing from 'react-native-image-viewing';
+import ReportModal from '../components/ReportModal';
 
 const { width } = Dimensions.get('window');
 
@@ -51,6 +53,7 @@ function ReviewDetailScreen({ route }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
 
   const isAuthor = useMemo(() => {
     if (!user || !review) return false;
@@ -83,34 +86,80 @@ function ReviewDetailScreen({ route }) {
     return unsubscribe;
   }, [navigation, fetchReviewDetail]);
 
-  useEffect(() => {
-    if (review) {
-      navigation.setOptions({
-        title: review.title,
-        headerRight: () =>
-          isAuthor ? (
-            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
-              <TouchableOpacity
-                onPress={handleEdit}
-                style={{ marginRight: 20 }}>
-                <Icon name="pencil" size={24} color="#3d5afe" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDeleteReview}>
-                <Icon name="delete" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            </View>
-          ) : null,
-      });
-    } else if (reviewTitle) {
-      navigation.setOptions({ title: reviewTitle });
+  const handleBlockUser = useCallback(() => {
+    if (!user || !review || user.id === review.author_auth_id) {
+      if (!user) {
+        Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
+      }
+      return;
     }
-  }, [review, reviewTitle, navigation, isAuthor]);
 
-  const handleEdit = () => {
+    const targetName = review.author_name || '익명 사용자';
+
+    Alert.alert(
+      '사용자 차단',
+      `'${targetName}'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: review.author_auth_id,
+              });
+              if (error) throw error;
+              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [navigation, review, user]);
+
+  const showReviewOptions = useCallback(() => {
+    if (!review) return;
+
+    const options = ['취소', '게시물 신고하기'];
+    const blockAvailable = user && review.author_auth_id && user.id !== review.author_auth_id;
+    if (blockAvailable) {
+      options.push('이 사용자 차단하기');
+    }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        destructiveButtonIndex: blockAvailable ? 2 : undefined,
+        title: '게시물 옵션',
+      },
+      buttonIndex => {
+        if (buttonIndex === 1) {
+          setReportModalVisible(true);
+        } else if (blockAvailable && buttonIndex === 2) {
+          handleBlockUser();
+        }
+      },
+    );
+  }, [handleBlockUser, review, user]);
+
+  const handleEdit = useCallback(() => {
+    if (!review) return;
     navigation.navigate('ReviewEdit', { reviewId: review.id });
-  };
+  }, [navigation, review]);
 
-  const handleDeleteReview = async () => {
+  const handleDeleteReview = useCallback(() => {
+    if (!review || !user) return;
+
     Alert.alert('후기 삭제', '정말로 이 후기를 삭제하시겠습니까?', [
       { text: '취소', style: 'cancel' },
       {
@@ -151,7 +200,49 @@ function ReviewDetailScreen({ route }) {
         },
       },
     ]);
-  };
+  }, [navigation, review, reviewId, user]);
+
+  useEffect(() => {
+    if (review) {
+      navigation.setOptions({
+        title: review.title,
+        headerRight: () => {
+          if (isAuthor) {
+            return (
+              <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+                <TouchableOpacity
+                  onPress={handleEdit}
+                  style={{ marginRight: 20 }}>
+                  <Icon name="pencil" size={24} color="#3d5afe" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDeleteReview}>
+                  <Icon name="delete" size={24} color="#e74c3c" />
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
+          if (!review.author_auth_id) return null;
+
+          return (
+            <TouchableOpacity onPress={showReviewOptions} style={{ marginRight: 12 }}>
+              <Icon name="dots-vertical" size={24} color="#333" />
+            </TouchableOpacity>
+          );
+        },
+      });
+    } else if (reviewTitle) {
+      navigation.setOptions({ title: reviewTitle });
+    }
+  }, [
+    handleDeleteReview,
+    handleEdit,
+    isAuthor,
+    navigation,
+    review,
+    reviewTitle,
+    showReviewOptions,
+  ]);
 
   const handleScroll = event => {
     const contentOffsetX = event.nativeEvent.contentOffset.x;
@@ -289,6 +380,15 @@ function ReviewDetailScreen({ route }) {
           </View>
         )}
       />
+      {review && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          contentId={review.id}
+          contentType="review"
+          authorId={review.author_auth_id}
+        />
+      )}
     </SafeAreaView>
   );
 }
