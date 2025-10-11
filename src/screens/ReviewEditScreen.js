@@ -20,6 +20,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 const StarEditor = ({ rating, setRating }) => {
   const stars = [];
@@ -149,6 +150,17 @@ export default function ReviewEditScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'content', label: '내용', value: content, allowEmpty: false },
+      ]);
+    } catch (error) {
+      Alert.alert('수정 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const newImageUrls = await Promise.all(
@@ -159,8 +171,8 @@ export default function ReviewEditScreen() {
       const { error: updateError } = await supabase
         .from('reviews')
         .update({
-          title: title.trim(),
-          content: content.trim(),
+          title: sanitized.title,
+          content: sanitized.content,
           rating,
           image_urls: finalImageUrls.length > 0 ? finalImageUrls : null,
         })

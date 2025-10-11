@@ -20,6 +20,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 export default function IncidentPhotoCreateScreen() {
   const navigation = useNavigation();
@@ -101,14 +102,27 @@ export default function IncidentPhotoCreateScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'description', label: '설명', value: description },
+        { key: 'category', label: '카테고리', value: category },
+        { key: 'link', label: '링크', value: linkUrl },
+      ]);
+    } catch (error) {
+      Alert.alert('작성 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const imageUrls = await Promise.all(photos.map(p => uploadToSupabase(p)));
       const { error } = await supabase.from('incident_photos').insert({
-        title: title.trim(),
-        description: description.trim() || null,
-        category: category.trim() || null,
-        link_url: linkUrl.trim() || null,
+        title: sanitized.title,
+        description: sanitized.description || null,
+        category: sanitized.category || null,
+        link_url: sanitized.link || null,
         uploader_id: user.id,
         image_urls: imageUrls.length ? imageUrls : null,
       });

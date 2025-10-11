@@ -21,6 +21,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer'; // Buffer import
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 export default function CommunityPostCreateScreen() {
   const navigation = useNavigation();
@@ -111,12 +112,23 @@ export default function CommunityPostCreateScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'content', label: '내용', value: content },
+      ]);
+    } catch (error) {
+      Alert.alert('작성 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const imageUrls = await Promise.all(photos.map(p => uploadToSupabase(p)));
       const { error } = await supabase.from('community_posts').insert({
-        title: title.trim(),
-        content: content.trim(),
+        title: sanitized.title,
+        content: sanitized.content || null,
         user_id: user.id,
         image_urls: imageUrls.length ? imageUrls : null,
       });

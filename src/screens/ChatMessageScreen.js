@@ -12,6 +12,7 @@ import { GiftedChat, InputToolbar } from 'react-native-gifted-chat'; // InputToo
 import { supabase } from '../lib/supabaseClient'; //
 import { useAuth } from '../context/AuthContext'; //
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 function ChatMessageScreen() {
   const { user, profile } = useAuth();
@@ -131,23 +132,36 @@ function ChatMessageScreen() {
       if (!user || !profile || !roomId) return; // profile도 확인
 
       const messageToSend = newMessages[0];
+
+      let safeText;
+      try {
+        ({ message: safeText } = ensureSafeContent([
+          { key: 'message', label: '메시지', value: messageToSend.text, allowEmpty: false },
+        ]));
+      } catch (error) {
+        Alert.alert('전송 불가', error.message);
+        return;
+      }
+
+      const sanitizedMessage = { ...messageToSend, text: safeText };
+
       setText(''); // 입력창 비우기
 
       setMessages(previousMessages =>
-        GiftedChat.append(previousMessages, [messageToSend]),
+        GiftedChat.append(previousMessages, [sanitizedMessage]),
       );
 
       const { error } = await supabase.from('chat_messages').insert({
         room_id: roomId,
         sender_id: user.id,
-        content: messageToSend.text,
+        content: safeText,
       });
 
       if (error) {
         Alert.alert('전송 실패', error.message);
         console.error('Send message error:', error);
         setMessages(previousMessages =>
-          previousMessages.filter(msg => msg._id !== messageToSend._id),
+          previousMessages.filter(msg => msg._id !== sanitizedMessage._id),
         );
       }
     },
