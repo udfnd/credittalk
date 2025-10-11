@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActionSheetIOS,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import ReportModal from '../components/ReportModal';
 
 // 댓글 항목 UI 컴포넌트
 const CommentItem = ({ comment, currentUserId, onDelete }) => {
@@ -68,6 +70,12 @@ export default function HelpDeskDetailScreen() {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
+
+  const isAuthor = useMemo(() => {
+    if (!user || !question) return false;
+    return user.id === question.user_id;
+  }, [user, question]);
 
   // 데이터 로딩 함수 (질문 + 댓글)
   const fetchData = useCallback(async () => {
@@ -158,6 +166,90 @@ export default function HelpDeskDetailScreen() {
   // 권한 확인 (관리자 또는 글 작성자인지)
   const canComment = profile?.is_admin || question?.user_id === user?.id;
 
+  const handleBlockUser = useCallback(() => {
+    if (!user || !question || user.id === question.user_id) {
+      if (!user) {
+        Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
+      }
+      return;
+    }
+
+    const targetName = question.user_name || '익명 사용자';
+
+    Alert.alert(
+      '사용자 차단',
+      `'${targetName}'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: question.user_id,
+              });
+              if (error) throw error;
+              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [navigation, question, user]);
+
+  const showQuestionOptions = useCallback(() => {
+    if (!question) return;
+
+    const options = ['취소', '게시물 신고하기'];
+    const blockAvailable = user && question.user_id && user.id !== question.user_id;
+    if (blockAvailable) {
+      options.push('이 사용자 차단하기');
+    }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        destructiveButtonIndex: blockAvailable ? 2 : undefined,
+        title: '게시물 옵션',
+      },
+      buttonIndex => {
+        if (buttonIndex === 1) {
+          setReportModalVisible(true);
+        } else if (blockAvailable && buttonIndex === 2) {
+          handleBlockUser();
+        }
+      },
+    );
+  }, [handleBlockUser, question, user]);
+
+  useEffect(() => {
+    if (!question) return;
+
+    navigation.setOptions({
+      title: question.title || '문의 상세',
+      headerRight: () => {
+        if (isAuthor) return null;
+        return (
+          <TouchableOpacity
+            onPress={showQuestionOptions}
+            style={{ marginRight: 12 }}>
+            <Icon name="dots-vertical" size={24} color="#333" />
+          </TouchableOpacity>
+        );
+      },
+    });
+  }, [navigation, question, isAuthor, showQuestionOptions]);
+
   if (loading) {
     return <ActivityIndicator style={styles.center} size="large" />;
   }
@@ -228,6 +320,16 @@ export default function HelpDeskDetailScreen() {
             )}
           </TouchableOpacity>
         </View>
+      )}
+
+      {question && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          contentId={question.id}
+          contentType="help_question"
+          authorId={question.user_id}
+        />
       )}
     </KeyboardAvoidingView>
   );
