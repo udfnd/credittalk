@@ -20,6 +20,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 export default function NewCrimeCaseEditScreen() {
   const navigation = useNavigation();
@@ -131,6 +132,19 @@ export default function NewCrimeCaseEditScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'method', label: '범죄 수법', value: method, allowEmpty: false },
+        { key: 'category', label: '카테고리', value: category },
+        { key: 'link', label: '링크', value: linkUrl },
+      ]);
+    } catch (error) {
+      Alert.alert('수정 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const newImageUrls = await Promise.all(
@@ -141,10 +155,10 @@ export default function NewCrimeCaseEditScreen() {
       const { error: updateError } = await supabase
         .from('new_crime_cases')
         .update({
-          title: title.trim(),
-          method: method.trim(),
-          link_url: linkUrl.trim() || null,
-          category: category.trim() || null,
+          title: sanitized.title,
+          method: sanitized.method,
+          link_url: sanitized.link || null,
+          category: sanitized.category || null,
           image_urls: finalImageUrls.length > 0 ? finalImageUrls : null,
         })
         .eq('id', caseId);

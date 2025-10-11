@@ -20,6 +20,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 export default function IncidentPhotoEditScreen() {
   const navigation = useNavigation();
@@ -133,6 +134,19 @@ export default function IncidentPhotoEditScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'description', label: '설명', value: description },
+        { key: 'category', label: '카테고리', value: category },
+        { key: 'link', label: '링크', value: linkUrl },
+      ]);
+    } catch (error) {
+      Alert.alert('수정 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const newImageUrls = await Promise.all(
@@ -143,10 +157,10 @@ export default function IncidentPhotoEditScreen() {
       const { error: updateError } = await supabase
         .from('incident_photos')
         .update({
-          title: title.trim(),
-          description: description.trim() || null,
-          link_url: linkUrl.trim() || null,
-          category: category.trim() || null,
+          title: sanitized.title,
+          description: sanitized.description || null,
+          link_url: sanitized.link || null,
+          category: sanitized.category || null,
           image_urls: finalImageUrls.length > 0 ? finalImageUrls : null,
         })
         .eq('id', photoId);

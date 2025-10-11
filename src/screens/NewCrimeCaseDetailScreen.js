@@ -11,6 +11,7 @@ import {
   Dimensions,
   Linking,
   Alert,
+  ActionSheetIOS,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -20,6 +21,7 @@ import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext'; // ✅ 추가
+import ReportModal from '../components/ReportModal';
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +35,7 @@ function NewCrimeCaseDetailScreen({ route }) {
   const [error, setError] = useState(null);
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
 
   useIncrementView('new_crime_cases', caseId);
 
@@ -72,32 +75,80 @@ function NewCrimeCaseDetailScreen({ route }) {
     return unsubscribe;
   }, [navigation, fetchCaseDetail]);
 
-  useEffect(() => {
-    if (caseDetail) {
-      navigation.setOptions({
-        title: caseDetail.title || '사례 상세 정보',
-        headerRight: () =>
-          isAuthor ? (
-            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
-              <TouchableOpacity
-                onPress={handleEdit}
-                style={{ marginRight: 20 }}>
-                <Icon name="pencil" size={24} color="#3d5afe" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDelete}>
-                <Icon name="delete" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            </View>
-          ) : null,
-      });
+  const handleBlockUser = useCallback(() => {
+    if (!user || !caseDetail || user.id === caseDetail.user_id) {
+      if (!user) {
+        Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
+      }
+      return;
     }
-  }, [caseDetail, navigation, isAuthor]);
 
-  const handleEdit = () => {
+    const targetName = caseDetail.user_name || '익명 사용자';
+
+    Alert.alert(
+      '사용자 차단',
+      `'${targetName}'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: caseDetail.user_id,
+              });
+              if (error) throw error;
+              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [caseDetail, navigation, user]);
+
+  const showCaseOptions = useCallback(() => {
+    if (!caseDetail) return;
+
+    const options = ['취소', '게시물 신고하기'];
+    const blockAvailable = user && caseDetail.user_id && user.id !== caseDetail.user_id;
+    if (blockAvailable) {
+      options.push('이 사용자 차단하기');
+    }
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        destructiveButtonIndex: blockAvailable ? 2 : undefined,
+        title: '게시물 옵션',
+      },
+      buttonIndex => {
+        if (buttonIndex === 1) {
+          setReportModalVisible(true);
+        } else if (blockAvailable && buttonIndex === 2) {
+          handleBlockUser();
+        }
+      },
+    );
+  }, [caseDetail, handleBlockUser, user]);
+
+  const handleEdit = useCallback(() => {
+    if (!caseDetail) return;
     navigation.navigate('NewCrimeCaseEdit', { caseId: caseDetail.id });
-  };
+  }, [caseDetail, navigation]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
+    if (!caseDetail || !user) return;
+
     Alert.alert(
       '삭제 확인',
       '정말로 이 사례를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
@@ -140,7 +191,39 @@ function NewCrimeCaseDetailScreen({ route }) {
         },
       ],
     );
-  };
+  }, [caseDetail, navigation, user]);
+
+  useEffect(() => {
+    if (!caseDetail) return;
+
+    navigation.setOptions({
+      title: caseDetail.title || '사례 상세 정보',
+      headerRight: () => {
+        if (isAuthor) {
+          return (
+            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{ marginRight: 20 }}>
+                <Icon name="pencil" size={24} color="#3d5afe" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDelete}>
+                <Icon name="delete" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          );
+        }
+
+        if (!caseDetail.user_id) return null;
+
+        return (
+          <TouchableOpacity onPress={showCaseOptions} style={{ marginRight: 12 }}>
+            <Icon name="dots-vertical" size={24} color="#333" />
+          </TouchableOpacity>
+        );
+      },
+    });
+  }, [caseDetail, handleDelete, handleEdit, isAuthor, navigation, showCaseOptions]);
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
@@ -271,6 +354,15 @@ function NewCrimeCaseDetailScreen({ route }) {
           </View>
         )}
       />
+      {caseDetail && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          contentId={caseDetail.id}
+          contentType="new_crime_case"
+          authorId={caseDetail.user_id}
+        />
+      )}
     </SafeAreaView>
   );
 }

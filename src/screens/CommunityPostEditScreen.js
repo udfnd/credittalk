@@ -20,6 +20,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 export default function CommunityPostEditScreen() {
   const navigation = useNavigation();
@@ -129,6 +130,18 @@ export default function CommunityPostEditScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'content', label: '내용', value: content },
+        { key: 'link', label: '링크', value: linkUrl },
+      ]);
+    } catch (error) {
+      Alert.alert('수정 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const newImageUrls = await Promise.all(
@@ -139,9 +152,9 @@ export default function CommunityPostEditScreen() {
       const { error: updateError } = await supabase
         .from('community_posts')
         .update({
-          title: title.trim(),
-          content: content.trim() || null,
-          link_url: linkUrl.trim() || null,
+          title: sanitized.title,
+          content: sanitized.content || null,
+          link_url: sanitized.link || null,
           image_urls: finalImageUrls.length > 0 ? finalImageUrls : null,
         })
         .eq('id', postId);
