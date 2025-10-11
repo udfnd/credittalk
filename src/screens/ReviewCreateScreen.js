@@ -19,6 +19,7 @@ import { supabase } from '../lib/supabaseClient'; // 경로는 실제 프로젝�
 import { useAuth } from '../context/AuthContext'; // 경로는 실제 프로젝트에 맞게 확인해주세요.
 import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 // 별점 평가를 위한 컴포넌트
 const StarRating = ({ rating, setRating }) => {
@@ -95,6 +96,17 @@ function ReviewCreateScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'content', label: '내용', value: content, allowEmpty: false },
+      ]);
+    } catch (error) {
+      Alert.alert('등록 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -140,8 +152,8 @@ function ReviewCreateScreen() {
       // Supabase 'reviews' 테이블에 데이터 삽입
       const { error: insertError } = await supabase.from('reviews').insert([
         {
-          title: title.trim(),
-          content: content.trim(),
+          title: sanitized.title,
+          content: sanitized.content,
           rating: rating,
           user_id: user.id,
           image_urls: imageUrls.length > 0 ? imageUrls : null, // 이미지가 있으면 URL 배열 저장

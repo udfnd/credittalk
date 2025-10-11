@@ -3,7 +3,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -26,6 +26,7 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import notifee from '@notifee/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   wireMessageHandlers,
@@ -81,6 +82,9 @@ import HelpDeskEditScreen from './src/screens/HelpDeskEditScreen';
 import HelpDeskNoticeDetailScreen from './src/screens/HelpDeskNoticeDetailScreen';
 import AdditionalInfoScreen from './src/screens/AdditionalInfoScreen';
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen';
+import SafetyPolicyScreen from './src/screens/SafetyPolicyScreen';
+import SafetyAgreementModal from './src/components/SafetyAgreementModal';
+import { SAFETY_AGREEMENT_STORAGE_KEY } from './src/lib/contentSafety';
 
 const linking = {
   prefixes: ['credittalk://'],
@@ -154,6 +158,7 @@ export type RootStackParamList = {
   UpdatePassword: undefined;
   AdditionalInfo: undefined;
   DeleteAccount: undefined;
+  SafetyPolicy: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -489,6 +494,11 @@ function AppNavigator() {
             component={DeleteAccountScreen}
             options={{ title: '회원 탈퇴' }}
           />
+          <RootStack.Screen
+            name="SafetyPolicy"
+            component={SafetyPolicyScreen}
+            options={{ title: '커뮤니티 안전 약관' }}
+          />
         </>
       )}
     </RootStack.Navigator>
@@ -497,6 +507,8 @@ function AppNavigator() {
 
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
+  const [hasAcceptedSafety, setHasAcceptedSafety] = useState(false);
+  const [isCheckingSafety, setIsCheckingSafety] = useState(true);
 
   const navigateToScreen = useCallback(
     (screen: string, params?: any) => {
@@ -548,6 +560,31 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     (async () => {
+      try {
+        const acceptedAt = await AsyncStorage.getItem(
+          SAFETY_AGREEMENT_STORAGE_KEY,
+        );
+        setHasAcceptedSafety(Boolean(acceptedAt));
+      } catch (error) {
+        console.error('Failed to load safety agreement state', error);
+      } finally {
+        setIsCheckingSafety(false);
+      }
+    })();
+  }, []);
+
+  const handleAcceptSafety = useCallback(async () => {
+    try {
+      const now = new Date().toISOString();
+      await AsyncStorage.setItem(SAFETY_AGREEMENT_STORAGE_KEY, now);
+      setHasAcceptedSafety(true);
+    } catch (error) {
+      console.error('Failed to persist safety agreement', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
       await requestNotificationPermissionAndroid();
       await ensureNotificationChannel();
 
@@ -574,6 +611,12 @@ function App(): React.JSX.Element {
           fallback={<Text>Loading...</Text>}>
           <AppNavigator />
         </NavigationContainer>
+        {!isCheckingSafety && (
+          <SafetyAgreementModal
+            visible={!hasAcceptedSafety}
+            onAccept={handleAcceptSafety}
+          />
+        )}
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { AvoidSoftInputView } from 'react-native-avoid-softinput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ReportModal from './ReportModal'; // ReportModal 컴포넌트 import
+import { ensureSafeContent } from '../lib/contentSafety';
 
 // --- 수정/대댓글 공용 입력 컴포넌트 (기존과 동일) ---
 const CommentInput = ({
@@ -279,10 +280,13 @@ const CommentsSection = ({ postId, boardType }) => {
     else setSubmittingRoot(true);
 
     try {
+      const { comment: safeContent } = ensureSafeContent([
+        { key: 'comment', label: '댓글', value: trimmed, allowEmpty: false },
+      ]);
       const { error } = await supabase.rpc('add_comment', {
         _post_id: postId,
         _board_type: boardType,
-        _content: trimmed,
+        _content: safeContent,
         _parent_comment_id: parentId,
       });
 
@@ -308,9 +312,20 @@ const CommentsSection = ({ postId, boardType }) => {
 
     setSubmittingReplyId(commentId);
 
+    let safeContent;
+    try {
+      ({ comment: safeContent } = ensureSafeContent([
+        { key: 'comment', label: '댓글', value: trimmed, allowEmpty: false },
+      ]));
+    } catch (error) {
+      setSubmittingReplyId(null);
+      Alert.alert('수정 불가', error.message);
+      return;
+    }
+
     const { error } = await supabase.rpc('update_comment', {
       p_comment_id: commentId,
-      p_new_content: trimmed,
+      p_new_content: safeContent,
     });
 
     setSubmittingReplyId(null);

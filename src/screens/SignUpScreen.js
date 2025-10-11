@@ -12,8 +12,11 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { SAFETY_AGREEMENT_STORAGE_KEY } from '../lib/contentSafety';
 
 const jobTypes = ['일반', '사업자'];
 
@@ -32,6 +35,8 @@ function SignUpScreen() {
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingNickname, setIsCheckingNickname] = useState(false); // 닉네임 확인 전용 로딩 상태
+  const [hasAcceptedSafetyAgreement, setHasAcceptedSafetyAgreement] =
+    useState(false);
 
   const [emailMessage, setEmailMessage] = useState('');
   const [isEmailAvailable, setIsEmailAvailable] = useState(null);
@@ -196,6 +201,13 @@ function SignUpScreen() {
     Keyboard.dismiss();
     if (!isOtpSent) {
       Alert.alert('인증 필요', '먼저 휴대폰 인증을 완료해주세요.');
+      return;
+    }
+    if (!hasAcceptedSafetyAgreement) {
+      Alert.alert(
+        '약관 동의 필요',
+        '커뮤니티 안전 약관(EULA)과 무관용 정책에 동의해야 회원가입을 진행할 수 있습니다.',
+      );
       return;
     }
     if (isEmailAvailable !== true) {
@@ -409,6 +421,44 @@ function SignUpScreen() {
               keyboardType="number-pad"
               maxLength={6}
             />
+            <View style={styles.termsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.checkbox,
+                  hasAcceptedSafetyAgreement && styles.checkboxChecked,
+                ]}
+                onPress={async () => {
+                  const nextValue = !hasAcceptedSafetyAgreement;
+                  setHasAcceptedSafetyAgreement(nextValue);
+                  try {
+                    if (nextValue) {
+                      await AsyncStorage.setItem(
+                        SAFETY_AGREEMENT_STORAGE_KEY,
+                        new Date().toISOString(),
+                      );
+                    } else {
+                      await AsyncStorage.removeItem(
+                        SAFETY_AGREEMENT_STORAGE_KEY,
+                      );
+                    }
+                  } catch (error) {
+                    console.error('Failed to persist safety agreement state', error);
+                  }
+                }}>
+                {hasAcceptedSafetyAgreement ? (
+                  <Icon name="check" size={18} color="#fff" />
+                ) : null}
+              </TouchableOpacity>
+              <View style={styles.termsTextContainer}>
+                <Text style={styles.termsText}>
+                  커뮤니티 안전 약관(EULA)과 무관용 정책을 확인했고 동의합니다.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('SafetyPolicy')}>
+                  <Text style={styles.termsLink}>약관 전문 보기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             {isLoading ? (
               <ActivityIndicator
                 size="large"
@@ -524,6 +574,39 @@ const styles = StyleSheet.create({
   jobTypeButtonTextSelected: { color: 'white', fontWeight: 'bold' },
   linkButton: { marginTop: 20, alignItems: 'center' },
   linkText: { color: '#3d5afe', fontSize: 15, textDecorationLine: 'underline' },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#3d5afe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    backgroundColor: '#fff',
+  },
+  checkboxChecked: {
+    backgroundColor: '#3d5afe',
+  },
+  termsTextContainer: { flex: 1 },
+  termsText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#495057',
+  },
+  termsLink: {
+    marginTop: 6,
+    color: '#3d5afe',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
 });
 
 export default SignUpScreen;
