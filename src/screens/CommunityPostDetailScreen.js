@@ -11,6 +11,7 @@ import {
   Image,
   Dimensions,
   Linking,
+  ActionSheetIOS,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -20,6 +21,7 @@ import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
+import ReportModal from '../components/ReportModal'; // ReportModal import
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +35,7 @@ function CommunityPostDetailScreen({ route }) {
   const [error, setError] = useState(null);
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [isReportModalVisible, setReportModalVisible] = useState(false); // ReportModal 상태 추가
 
   useIncrementView('community_posts', postId);
 
@@ -46,7 +49,7 @@ function CommunityPostDetailScreen({ route }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('community_posts_with_author_profile')
-        .select('*') // user_id 대신 author_auth_id가 사용되므로 전체 선택
+        .select('*')
         .eq('id', postId)
         .single();
 
@@ -71,23 +74,88 @@ function CommunityPostDetailScreen({ route }) {
     return unsubscribe;
   }, [navigation, fetchPostDetail]);
 
+  const handleBlockUser = async () => {
+    if (!user || !post || user.id === post.author_auth_id) return;
+
+    Alert.alert(
+      '사용자 차단',
+      `'${
+        post.author_name || '익명'
+      }'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: post.author_auth_id,
+              });
+              if (error) throw error;
+              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const showPostOptions = () => {
+    const options = ['취소', '게시물 신고하기', '이 사용자 차단하기'];
+    const destructiveButtonIndex = 2;
+    const cancelButtonIndex = 0;
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        destructiveButtonIndex,
+        title: '게시물 옵션',
+        message: '원하는 작업을 선택해주세요.',
+      },
+      buttonIndex => {
+        if (buttonIndex === 1) {
+          setReportModalVisible(true);
+        } else if (buttonIndex === 2) {
+          handleBlockUser();
+        }
+      },
+    );
+  };
+
   useEffect(() => {
     if (post) {
       navigation.setOptions({
         title: post.title,
-        headerRight: () =>
-          isAuthor ? (
-            <View style={{ flexDirection: 'row', paddingRight: 8 }}>
-              <TouchableOpacity
-                onPress={handleEditPost}
-                style={{ marginRight: 20 }}>
-                <Icon name="pencil" size={24} color="#3d5afe" />
+        headerRight: () => (
+          <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+            {isAuthor ? (
+              <>
+                <TouchableOpacity
+                  onPress={handleEditPost}
+                  style={{ marginRight: 20 }}>
+                  <Icon name="pencil" size={24} color="#3d5afe" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDeletePost}>
+                  <Icon name="delete" size={24} color="#e74c3c" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity onPress={showPostOptions}>
+                <Icon name="dots-vertical" size={24} color="#333" />
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleDeletePost}>
-                <Icon name="delete" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            </View>
-          ) : null,
+            )}
+          </View>
+        ),
       });
     } else if (postTitle) {
       navigation.setOptions({ title: postTitle });
@@ -105,7 +173,7 @@ function CommunityPostDetailScreen({ route }) {
     navigation.navigate('CommunityPostEdit', { postId: post.id });
   };
 
-  const handleDeletePost = async () => {
+  const handleDeletePost = () => {
     Alert.alert('게시글 삭제', '정말로 이 게시글을 삭제하시겠습니까?', [
       { text: '취소', style: 'cancel' },
       {
@@ -126,7 +194,7 @@ function CommunityPostDetailScreen({ route }) {
               .from('community_posts')
               .delete()
               .eq('id', postId)
-              .eq('user_id', user.id); // RLS를 위한 조건 추가
+              .eq('user_id', user.id);
 
             if (deleteError) throw deleteError;
 
@@ -157,9 +225,7 @@ function CommunityPostDetailScreen({ route }) {
   const handleLinkPress = async rawUrl => {
     const url = sanitizeUrl(rawUrl);
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) await Linking.openURL(url);
-      else await Linking.openURL(url);
+      await Linking.openURL(url);
     } catch (e) {
       Alert.alert('오류', `이 링크를 열 수 없습니다: ${e.message}`);
     }
@@ -274,10 +340,20 @@ function CommunityPostDetailScreen({ route }) {
           </View>
         )}
       />
+      {post && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          contentId={post.id}
+          contentType="post"
+          authorId={post.author_auth_id}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
+// 스타일 시트는 기존과 동일하게 유지합니다.
 const styles = StyleSheet.create({
   centered: {
     flex: 1,
