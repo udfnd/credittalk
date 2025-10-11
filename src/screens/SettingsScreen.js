@@ -107,6 +107,12 @@ function SettingsScreen() {
       icon: 'help-circle-outline',
       onPress: handleHelpCenterLink,
     },
+    {
+      id: 'safetyPolicy',
+      title: '커뮤니티 안전 약관',
+      icon: 'shield-check-outline',
+      onPress: () => navigation.navigate('SafetyPolicy'),
+    },
   ];
 
   const renderMenuItem = item => (
@@ -196,6 +202,13 @@ function SettingsScreen() {
           <Text style={styles.menuGroupTitle}>커뮤니티</Text>
           {menuItems
             .filter(item => ['community'].includes(item.id))
+            .map(renderMenuItem)}
+        </View>
+
+        <View style={styles.menuGroup}>
+          <Text style={styles.menuGroupTitle}>정책 및 약관</Text>
+          {menuItems
+            .filter(item => ['safetyPolicy'].includes(item.id))
             .map(renderMenuItem)}
         </View>
 

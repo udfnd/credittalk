@@ -20,6 +20,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 export default function NewCrimeCaseCreateScreen() {
   const navigation = useNavigation();
@@ -110,14 +111,26 @@ export default function NewCrimeCaseCreateScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'title', label: '제목', value: title, allowEmpty: false },
+        { key: 'method', label: '범죄 수법 및 내용', value: method, allowEmpty: false },
+        { key: 'category', label: '카테고리', value: category },
+      ]);
+    } catch (error) {
+      Alert.alert('작성 불가', error.message);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const imageUrls = await Promise.all(photos.map(p => uploadToSupabase(p)));
 
       const { error } = await supabase.from('new_crime_cases').insert({
-        title: title.trim(),
-        method: method.trim(),
-        category: category.trim() || null, // category 추가
+        title: sanitized.title,
+        method: sanitized.method,
+        category: sanitized.category || null, // category 추가
         user_id: user.id,
         image_urls: imageUrls.length ? imageUrls : null,
       });

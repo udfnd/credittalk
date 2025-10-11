@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 // 대한민국 주요 시/도 리스트
 const KOREAN_PROVINCES = [
@@ -227,24 +228,51 @@ export default function HelpDeskCreateScreen({ navigation }) {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'userName', label: '이름', value: userName, allowEmpty: false },
+        { key: 'conversationReason', label: '대화 계기', value: conversationReason, allowEmpty: false },
+        { key: 'caseSummary', label: '사건 개요', value: caseSummary, allowEmpty: false },
+        {
+          key: 'opponentAccount',
+          label: '상대방 계좌',
+          value: formState.opponentAccount,
+        },
+        {
+          key: 'opponentPhone',
+          label: '상대방 전화번호',
+          value: formState.opponentPhone,
+        },
+        {
+          key: 'opponentSns',
+          label: '상대방 SNS',
+          value: formState.opponentSns,
+        },
+      ]);
+    } catch (error) {
+      Alert.alert('등록 불가', error.message);
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await supabase.from('help_questions').insert({
       user_id: user.id,
-      user_name: userName.trim(),
+      user_name: sanitized.userName,
       user_phone: userPhone.trim(),
       birth_date: birthDate.trim(), // DB에 'birth_date' 컬럼 추가 필요
       province: province.trim(), // DB에 'province' 컬럼 추가 필요
       city: city.trim(), // DB에 'city' 컬럼 추가 필요
       victim_type: victimType.trim(), // DB에 'victim_type' 컬럼 추가 필요
       damage_category: damageCategory.trim(), // DB에 'damage_category' 컬럼 추가 필요
-      conversation_reason: conversationReason.trim(),
-      opponent_account: formState.opponentAccount.trim() || null,
-      opponent_phone: formState.opponentPhone.trim() || null,
-      opponent_sns: formState.opponentSns.trim() || null,
-      case_summary: caseSummary.trim(),
-      title: `${userName.trim()}님의 ${damageCategory} 관련 문의`,
-      content: caseSummary.trim(),
+      conversation_reason: sanitized.conversationReason,
+      opponent_account: sanitized.opponentAccount || null,
+      opponent_phone: sanitized.opponentPhone || null,
+      opponent_sns: sanitized.opponentSns || null,
+      case_summary: sanitized.caseSummary,
+      title: `${sanitized.userName}님의 ${damageCategory} 관련 문의`,
+      content: sanitized.caseSummary,
     });
 
     setLoading(false);
