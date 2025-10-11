@@ -2758,6 +2758,10 @@ ALTER TABLE ONLY "public"."users"
 
 
 
+CREATE POLICY "Admin full access" ON "public"."new_crime_cases" TO "service_role" USING (true) WITH CHECK (true);
+
+
+
 CREATE POLICY "Admins can manage arrest news." ON "public"."arrest_news" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
 
 
@@ -2838,10 +2842,6 @@ CREATE POLICY "Allow update for authenticated users on incident_photos" ON "publ
 
 
 
-CREATE POLICY "Allow update for authenticated users on new_crime_cases" ON "public"."new_crime_cases" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
-
-
-
 CREATE POLICY "Allow update for authenticated users on notices" ON "public"."notices" FOR UPDATE TO "authenticated" USING (true) WITH CHECK (true);
 
 
@@ -2854,10 +2854,6 @@ CREATE POLICY "Allow users to insert their own questions" ON "public"."help_ques
 
 
 
-CREATE POLICY "Authenticated users can create cases." ON "public"."new_crime_cases" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
-
-
-
 CREATE POLICY "Authenticated users can create community posts." ON "public"."community_posts" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
 
 
@@ -2867,6 +2863,10 @@ CREATE POLICY "Authenticated users can create reviews." ON "public"."reviews" FO
 
 
 CREATE POLICY "Authenticated users can insert arrest news" ON "public"."arrest_news" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "Authenticated users can insert their own cases" ON "public"."new_crime_cases" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -2906,7 +2906,7 @@ CREATE POLICY "Public can view published arrest news." ON "public"."arrest_news"
 
 
 
-CREATE POLICY "Public can view published cases." ON "public"."new_crime_cases" FOR SELECT USING (("is_published" = true));
+CREATE POLICY "Public can view published cases" ON "public"."new_crime_cases" FOR SELECT USING (("is_published" = true));
 
 
 
@@ -2930,15 +2930,11 @@ CREATE POLICY "TEST Allow all authenticated to insert chat rooms" ON "public"."c
 
 
 
-CREATE POLICY "Users can delete their own cases." ON "public"."new_crime_cases" FOR DELETE USING (("auth"."uid"() = "user_id"));
+CREATE POLICY "Users can delete their own cases" ON "public"."new_crime_cases" FOR DELETE TO "authenticated" USING (("auth"."uid"() = "user_id"));
 
 
 
 CREATE POLICY "Users can delete their own community posts." ON "public"."community_posts" FOR DELETE USING (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users can delete their own crime cases" ON "public"."new_crime_cases" FOR DELETE USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -2992,11 +2988,11 @@ CREATE POLICY "Users can send messages in rooms they are part of." ON "public"."
 
 
 
+CREATE POLICY "Users can update their own cases" ON "public"."new_crime_cases" FOR UPDATE TO "authenticated" USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Users can update their own community posts." ON "public"."community_posts" FOR UPDATE USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Users can update their own crime cases" ON "public"."new_crime_cases" FOR UPDATE USING (("auth"."uid"() = "user_id"));
 
 
 

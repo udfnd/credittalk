@@ -1,5 +1,3 @@
-// src/components/CommentsSection.js
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -10,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  ActionSheetIOS, // ActionSheetIOS import
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -19,8 +18,9 @@ import { ko } from 'date-fns/locale';
 import { useNavigation } from '@react-navigation/native';
 import { AvoidSoftInputView } from 'react-native-avoid-softinput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ReportModal from './ReportModal'; // ReportModal 컴포넌트 import
 
-// --- 수정/대댓글 공용 입력 컴포넌트 ---
+// --- 수정/대댓글 공용 입력 컴포넌트 (기존과 동일) ---
 const CommentInput = ({
   initialContent = '',
   placeholder,
@@ -80,13 +80,13 @@ const CommentInput = ({
   );
 };
 
-// --- 개별 댓글 아이템 컴포넌트 ---
+// --- 개별 댓글 아이템 컴포넌트 (수정됨) ---
 const CommentItem = ({
   comment,
   profile,
   // 함수 Props
   onReplyPress,
-  onDelete,
+  onShowOptions, // 옵션 메뉴를 보여줄 함수
   onEditSubmit,
   onReplySubmit,
   // 상태 Props
@@ -95,14 +95,12 @@ const CommentItem = ({
   replyingToId,
   submittingReplyId,
 }) => {
-  const isAuthor = profile && comment.user_id === profile.id;
   const isEditingThis = editingComment?.id === comment.id;
   const isReplyingToThis = replyingToId === comment.id;
 
   const handleEdit = async newContent => {
-    // onEditSubmit은 비동기일 수 있으므로 await
     await onEditSubmit(comment.id, newContent);
-    setEditingComment(null); // 수정 완료 후 상태 초기화
+    setEditingComment(null);
   };
 
   return (
@@ -112,19 +110,12 @@ const CommentItem = ({
           <Text style={styles.commentAuthor}>
             {comment.users?.nickname || '탈퇴한 사용자'}
           </Text>
-          {isAuthor &&
-            !isEditingThis && ( // 수정 중일 때는 아이콘 숨김
-              <View style={styles.authorActions}>
-                <TouchableOpacity
-                  onPress={() => setEditingComment(comment)}
-                  style={{ marginRight: 10 }}>
-                  <Icon name="pencil" size={16} color="#888" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => onDelete(comment.id)}>
-                  <Icon name="delete-outline" size={16} color="#888" />
-                </TouchableOpacity>
-              </View>
-            )}
+          {/* 더보기 버튼으로 통합 */}
+          <TouchableOpacity
+            style={styles.optionsButton}
+            onPress={() => onShowOptions(comment)}>
+            <Icon name="dots-vertical" size={18} color="#666" />
+          </TouchableOpacity>
         </View>
 
         {isEditingThis ? (
@@ -133,7 +124,7 @@ const CommentItem = ({
             placeholder="댓글 수정..."
             onCancel={() => setEditingComment(null)}
             onSubmit={handleEdit}
-            loading={submittingReplyId === comment.id} // 로딩 상태 재활용
+            loading={submittingReplyId === comment.id}
             isEdit
           />
         ) : (
@@ -170,7 +161,7 @@ const CommentItem = ({
               comment={reply}
               profile={profile}
               onReplyPress={onReplyPress}
-              onDelete={onDelete}
+              onShowOptions={onShowOptions} // 재귀적으로 전달
               onEditSubmit={onEditSubmit}
               editingComment={editingComment}
               setEditingComment={setEditingComment}
@@ -185,7 +176,7 @@ const CommentItem = ({
   );
 };
 
-// --- 메인 컴포넌트 ---
+// --- 메인 컴포넌트 (수정됨) ---
 const CommentsSection = ({ postId, boardType }) => {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
@@ -195,20 +186,24 @@ const CommentsSection = ({ postId, boardType }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 수정/답글 상태
+  // 수정/답글/신고 상태
   const [replyingToId, setReplyingToId] = useState(null);
-  const [editingComment, setEditingComment] = useState(null); // 수정 중인 댓글 객체
+  const [editingComment, setEditingComment] = useState(null);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
+  const [selectedComment, setSelectedComment] = useState(null);
 
   // 중복 제출 방지
   const [submittingRoot, setSubmittingRoot] = useState(false);
   const [submittingReplyId, setSubmittingReplyId] = useState(null);
   const guardingRef = useRef(false);
 
+  // --- 기존 함수들 (fetchComments, useEffect 등)은 거의 동일 ---
   const fetchComments = useCallback(async () => {
+    // ... 기존 fetchComments 로직은 변경 없음 ...
     try {
       const { data, error } = await supabase
         .from('comments')
-        .select('*, users(id, nickname)') // users 테이블의 id도 가져옵니다.
+        .select('*, users(id, nickname, auth_user_id)') // users 테이블의 auth_user_id도 가져옵니다.
         .eq('post_id', postId)
         .eq('board_type', boardType)
         .order('created_at', { ascending: true });
@@ -239,6 +234,7 @@ const CommentsSection = ({ postId, boardType }) => {
   }, [postId, boardType]);
 
   useEffect(() => {
+    // ... 기존 useEffect 로직은 변경 없음 ...
     if (!postId || !boardType) return;
     fetchComments();
 
@@ -253,7 +249,6 @@ const CommentsSection = ({ postId, boardType }) => {
           filter: `post_id=eq.${postId}`,
         },
         () => {
-          // 실시간 업데이트 시 수정/답글 상태가 풀리지 않도록 방지
           if (!editingComment && !replyingToId) {
             fetchComments();
           }
@@ -266,7 +261,9 @@ const CommentsSection = ({ postId, boardType }) => {
     };
   }, [postId, boardType, fetchComments, editingComment, replyingToId]);
 
+  // --- 기존 핸들러 함수들 (handleAddComment, handleUpdateComment 등)은 거의 동일 ---
   const handleAddComment = async (content, parentId = null) => {
+    // ... 기존 handleAddComment 로직은 변경 없음 ...
     if (!user) {
       return Alert.alert(
         '로그인 필요',
@@ -294,7 +291,7 @@ const CommentsSection = ({ postId, boardType }) => {
       if (parentId) setReplyingToId(null);
       else setNewComment('');
 
-      await fetchComments(); // RPC 호출 후 즉시 UI 업데이트
+      await fetchComments();
     } catch (error) {
       Alert.alert('오류', '댓글 등록에 실패했습니다: ' + error.message);
     } finally {
@@ -305,10 +302,11 @@ const CommentsSection = ({ postId, boardType }) => {
   };
 
   const handleUpdateComment = async (commentId, newContent) => {
+    // ... 기존 handleUpdateComment 로직은 변경 없음 ...
     const trimmed = (newContent || '').trim();
     if (!trimmed) return;
 
-    setSubmittingReplyId(commentId); // 로딩 인디케이터를 위해 ID를 공유
+    setSubmittingReplyId(commentId);
 
     const { error } = await supabase.rpc('update_comment', {
       p_comment_id: commentId,
@@ -319,11 +317,12 @@ const CommentsSection = ({ postId, boardType }) => {
     if (error) {
       Alert.alert('오류', '댓글 수정에 실패했습니다: ' + error.message);
     } else {
-      await fetchComments(); // 수정 성공 시 목록 새로고침
+      await fetchComments();
     }
   };
 
   const handleDeleteComment = commentId => {
+    // ... 기존 handleDeleteComment 로직은 변경 없음 ...
     Alert.alert(
       '댓글 삭제',
       '정말로 이 댓글을 삭제하시겠습니까? 대댓글도 모두 삭제됩니다.',
@@ -339,11 +338,89 @@ const CommentsSection = ({ postId, boardType }) => {
             if (error) {
               Alert.alert('오류', '댓글 삭제에 실패했습니다: ' + error.message);
             } else {
-              await fetchComments(); // 삭제 성공 시 목록 새로고침
+              await fetchComments();
             }
           },
         },
       ],
+    );
+  };
+
+  // --- ✨ 신고 및 차단 관련 추가 함수 ---
+  const handleBlockUser = async (authorId, authorNickname) => {
+    if (!user) return;
+    Alert.alert(
+      '사용자 차단',
+      `'${
+        authorNickname || '익명'
+      }'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: authorId,
+              });
+              if (error && error.code !== '23505') throw error; // 중복 에러는 무시
+              Alert.alert(
+                '차단 완료',
+                '사용자가 성공적으로 차단되었습니다. 앱을 다시 시작하면 모든 콘텐츠가 숨겨집니다.',
+              );
+              fetchComments(); // 차단 후 댓글 목록 새로고침
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const showCommentOptions = comment => {
+    if (!user) {
+      return Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
+    }
+
+    const isAuthor = user.id === comment.users?.auth_user_id;
+    const options = ['취소'];
+    const actions = {};
+
+    if (isAuthor) {
+      options.push('수정하기', '삭제하기');
+      actions[1] = () => setEditingComment(comment);
+      actions[2] = () => handleDeleteComment(comment.id);
+    } else {
+      options.push('댓글 신고하기', '이 사용자 차단하기');
+      actions[1] = () => {
+        setSelectedComment(comment);
+        setReportModalVisible(true);
+      };
+      actions[2] = () =>
+        handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
+    }
+
+    const destructiveButtonIndex = isAuthor ? 2 : 2;
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: 0,
+        destructiveButtonIndex,
+        title: '댓글 옵션',
+      },
+      buttonIndex => {
+        if (actions[buttonIndex]) {
+          actions[buttonIndex]();
+        }
+      },
     );
   };
 
@@ -364,7 +441,8 @@ const CommentsSection = ({ postId, boardType }) => {
               comment={item}
               profile={profile}
               onReplyPress={setReplyingToId}
-              onDelete={handleDeleteComment}
+              onShowOptions={showCommentOptions} // ✨ 옵션 함수 전달
+              onDelete={handleDeleteComment} // 삭제는 유지 (옵션 메뉴 내부에서 호출)
               onEditSubmit={handleUpdateComment}
               editingComment={editingComment}
               setEditingComment={setEditingComment}
@@ -379,10 +457,11 @@ const CommentsSection = ({ postId, boardType }) => {
             </Text>
           }
           keyboardShouldPersistTaps="always"
-          scrollEnabled={false} // 👈 이 부분이 핵심입니다.
+          scrollEnabled={false}
         />
       )}
 
+      {/* --- 기존 댓글 입력창 및 로그인 안내 (변경 없음) --- */}
       {user ? (
         <AvoidSoftInputView
           avoidOffset={insets.bottom}
@@ -420,6 +499,20 @@ const CommentsSection = ({ postId, boardType }) => {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* --- ✨ 신고 모달 추가 --- */}
+      {selectedComment && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => {
+            setReportModalVisible(false);
+            setSelectedComment(null);
+          }}
+          contentId={selectedComment.id}
+          contentType="comment"
+          authorId={selectedComment.users?.auth_user_id}
+        />
+      )}
     </View>
   );
 };
@@ -452,9 +545,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   commentAuthor: { fontWeight: 'bold', fontSize: 15, color: '#444' },
-  authorActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  optionsButton: {
+    padding: 5, // 터치 영역 확보
   },
   commentContent: { fontSize: 14, lineHeight: 21, color: '#555' },
   commentFooter: {
