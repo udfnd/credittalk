@@ -18,6 +18,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { ensureSafeContent } from '../lib/contentSafety';
 
 // --- 상수 정의 (CreateScreen과 동일) ---
 const KOREAN_PROVINCES = [
@@ -280,22 +281,54 @@ export default function HelpDeskEditScreen() {
       return;
     }
 
+    let sanitized;
+    try {
+      sanitized = ensureSafeContent([
+        { key: 'userName', label: '이름', value: formState.userName, allowEmpty: false },
+        {
+          key: 'conversationReason',
+          label: '대화 계기',
+          value: formState.conversationReason,
+          allowEmpty: false,
+        },
+        { key: 'caseSummary', label: '사건 개요', value: formState.caseSummary, allowEmpty: false },
+        {
+          key: 'opponentAccount',
+          label: '상대방 계좌',
+          value: formState.opponentAccount,
+        },
+        {
+          key: 'opponentPhone',
+          label: '상대방 전화번호',
+          value: formState.opponentPhone,
+        },
+        {
+          key: 'opponentSns',
+          label: '상대방 SNS',
+          value: formState.opponentSns,
+        },
+      ]);
+    } catch (error) {
+      Alert.alert('수정 불가', error.message);
+      return;
+    }
+
     setSaving(true);
     const payload = {
-      user_name: formState.userName.trim(),
+      user_name: sanitized.userName,
       user_phone: formState.userPhone.trim(),
       birth_date: formState.birthDate.trim(),
       province: formState.province.trim(),
       city: formState.city.trim(),
       victim_type: formState.victimType.trim(),
       damage_category: formState.damageCategory.trim(),
-      conversation_reason: formState.conversationReason.trim(),
-      opponent_account: formState.opponentAccount.trim(),
-      opponent_phone: formState.opponentPhone.trim(),
-      opponent_sns: formState.opponentSns.trim(),
-      case_summary: formState.caseSummary.trim(),
-      title: `${formState.userName.trim()}님의 ${formState.damageCategory} 관련 문의`, // 제목 자동 업데이트
-      content: formState.caseSummary.trim(), // 본문도 사건 개요로 업데이트
+      conversation_reason: sanitized.conversationReason,
+      opponent_account: sanitized.opponentAccount || null,
+      opponent_phone: sanitized.opponentPhone || null,
+      opponent_sns: sanitized.opponentSns || null,
+      case_summary: sanitized.caseSummary,
+      title: `${sanitized.userName}님의 ${formState.damageCategory} 관련 문의`, // 제목 자동 업데이트
+      content: sanitized.caseSummary, // 본문도 사건 개요로 업데이트
     };
 
     const { error } = await supabase
