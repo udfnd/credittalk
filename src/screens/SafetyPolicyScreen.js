@@ -1,12 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { SAFETY_POLICY_SECTIONS, SAFETY_POLICY_SUMMARY } from '../lib/contentSafety';
+import {
+  SAFETY_POLICY_LAST_UPDATED,
+  SAFETY_POLICY_SECTIONS,
+  SAFETY_POLICY_SUMMARY,
+} from '../lib/contentSafety';
 
 const SafetyPolicyScreen = () => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>커뮤니티 안전 약관</Text>
       <Text style={styles.subtitle}>{SAFETY_POLICY_SUMMARY}</Text>
+      <Text style={styles.lastUpdated}>
+        마지막 업데이트: {SAFETY_POLICY_LAST_UPDATED}
+      </Text>
       {SAFETY_POLICY_SECTIONS.map(section => (
         <View key={section.title} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -16,8 +23,9 @@ const SafetyPolicyScreen = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>운영진 대응</Text>
         <Text style={styles.sectionBody}>
-          신고된 콘텐츠와 이용자는 최대 24시간 내에 검토하며, 위반 사실이 확인되면 해당 콘텐츠를 삭제하고
-          이용자 계정을 즉시 제한합니다. 반복 위반 시 서비스 이용이 영구 중단됩니다.
+          신고된 콘텐츠와 이용자는 최대 24시간 내에 전담 운영진이 반드시 검토합니다. 무관용 원칙에 따라 위반 사실이 확인되면
+          해당 콘텐츠는 즉시 삭제되고 계정은 사전 통보 없이 정지 또는 영구 해지됩니다. 반복 위반자는 서비스를 다시 이용할 수 없으며
+          필요 시 관계 기관에 즉시 신고됩니다.
         </Text>
       </View>
     </ScrollView>
@@ -44,6 +52,11 @@ const styles = StyleSheet.create({
     color: '#4a5568',
     lineHeight: 22,
     marginBottom: 24,
+  },
+  lastUpdated: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 20,
   },
   section: {
     marginBottom: 20,
