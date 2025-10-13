@@ -206,7 +206,7 @@ function SignUpScreen() {
     if (!hasAcceptedSafetyAgreement) {
       Alert.alert(
         '약관 동의 필요',
-        '커뮤니티 안전 약관(EULA)과 무관용 정책에 동의해야 회원가입을 진행할 수 있습니다.',
+        '커뮤니티 안전 약관(EULA)은 불법·유해 콘텐츠와 악용 이용자에 대한 무관용 정책을 포함합니다. 약관에 동의해야 회원가입을 진행할 수 있습니다.',
       );
       return;
     }
@@ -451,7 +451,7 @@ function SignUpScreen() {
               </TouchableOpacity>
               <View style={styles.termsTextContainer}>
                 <Text style={styles.termsText}>
-                  커뮤니티 안전 약관(EULA)과 무관용 정책을 확인했고 동의합니다.
+                  커뮤니티 안전 약관(EULA)의 무관용 정책을 확인했고 동의합니다.
                 </Text>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('SafetyPolicy')}>
