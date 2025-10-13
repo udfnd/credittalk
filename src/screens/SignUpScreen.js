@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// SignUpScreen.js
+import React, { useEffect, useState } from 'react';
 import {
   View,
   TextInput,
@@ -14,39 +15,60 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import { supabase } from '../lib/supabaseClient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { supabase } from '../lib/supabaseClient';
 import { SAFETY_AGREEMENT_STORAGE_KEY } from '../lib/contentSafety';
 
+// 심사용 고정 약관 버전(약관 문서/심사 노트와 일치시킬 것)
+const TERMS_VERSION = '2025-10-13';
 const jobTypes = ['일반', '사업자'];
 
 function SignUpScreen() {
   const navigation = useNavigation();
 
+  // ---- form states ----
   const [email, setEmail] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [isEmailAvailable, setIsEmailAvailable] = useState(null);
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
+  const [nicknameMessage, setNicknameMessage] = useState(
+    '닉네임은 실명과 거리가 먼 것으로 작성해주세요.',
+  );
+  const [nicknameMessageColor, setNicknameMessageColor] = useState('grey');
+  const [isNicknameAvailable, setIsNicknameAvailable] = useState(null);
+
   const [phoneNumber, setPhoneNumber] = useState('');
   const [jobType, setJobType] = useState('일반');
 
   const [otp, setOtp] = useState('');
   const [isOtpSent, setIsOtpSent] = useState(false);
+
+  // ---- ui states ----
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingNickname, setIsCheckingNickname] = useState(false); // 닉네임 확인 전용 로딩 상태
+  const [isCheckingNickname, setIsCheckingNickname] = useState(false);
+
+  // ---- EULA ----
   const [hasAcceptedSafetyAgreement, setHasAcceptedSafetyAgreement] =
     useState(false);
 
-  const [emailMessage, setEmailMessage] = useState('');
-  const [isEmailAvailable, setIsEmailAvailable] = useState(null);
+  // 앱 재실행 시 로컬 동의 이력 복원
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem(SAFETY_AGREEMENT_STORAGE_KEY);
+        setHasAcceptedSafetyAgreement(Boolean(v));
+      } catch {
+        // no-op
+      }
+    })();
+  }, []);
 
-  const [nicknameMessage, setNicknameMessage] = useState(
-    '닉네임은 실명과 거리가 먼 것으로 작성해주세요.',
-  );
-  const [nicknameMessageColor, setNicknameMessageColor] = useState('grey'); // 기본 안내 메시지 색상
-  const [isNicknameAvailable, setIsNicknameAvailable] = useState(null);
-
+  // -------- helpers --------
   const validateEmailFormat = text => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
 
   const handleEmailChange = text => {
@@ -66,55 +88,21 @@ function SignUpScreen() {
     }
   };
 
-  const handleCheckNickname = async () => {
-    Keyboard.dismiss();
-    const trimmedNickname = nickname.trim();
-    if (trimmedNickname.length < 2) {
-      Alert.alert('입력 오류', '닉네임은 2자 이상이어야 합니다.');
-      return;
-    }
-
-    setIsCheckingNickname(true);
-    setNicknameMessage('');
-    setIsNicknameAvailable(null);
-
+  const toggleSafetyAgreement = async () => {
+    const next = !hasAcceptedSafetyAgreement;
+    setHasAcceptedSafetyAgreement(next);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        'check-nickname-availability',
-        { body: { nickname: trimmedNickname } },
-      );
-
-      if (error) throw error;
-
-      switch (data.status) {
-        case 'available':
-          setIsNicknameAvailable(true);
-          setNicknameMessage('사용 가능한 닉네임입니다.');
-          setNicknameMessageColor('green'); // 성공 시 녹색
-          break;
-        case 'taken':
-          setIsNicknameAvailable(false);
-          setNicknameMessage(data.message);
-          setNicknameMessageColor('red'); // 실패 시 빨간색
-          break;
-        case 'forbidden':
-          setIsNicknameAvailable(false);
-          setNicknameMessage(data.message);
-          setNicknameMessageColor('red'); // 실패 시 빨간색
-          break;
-        default:
-          throw new Error('서버로부터 알 수 없는 응답을 받았습니다.');
+      if (next) {
+        await AsyncStorage.setItem(SAFETY_AGREEMENT_STORAGE_KEY, TERMS_VERSION);
+      } else {
+        await AsyncStorage.removeItem(SAFETY_AGREEMENT_STORAGE_KEY);
       }
-    } catch (err) {
-      const errorMessage = err.context?.data?.error || err.message;
-      setIsNicknameAvailable(false);
-      setNicknameMessage(errorMessage);
-      setNicknameMessageColor('red'); // 실패 시 빨간색
-    } finally {
-      setIsCheckingNickname(false);
+    } catch (e) {
+      console.error('Failed to persist safety agreement state', e);
     }
   };
 
+  // -------- availability checks --------
   const handleCheckEmail = async () => {
     Keyboard.dismiss();
     if (!validateEmailFormat(email)) {
@@ -127,10 +115,12 @@ function SignUpScreen() {
     try {
       const { data, error } = await supabase.functions.invoke(
         'check-email-availability',
-        { body: { email: email.trim() } },
+        {
+          body: { email: email.trim() },
+        },
       );
-
       if (error) throw error;
+
       if (data.available) {
         setIsEmailAvailable(true);
         setEmailMessage('사용 가능한 이메일입니다.');
@@ -138,7 +128,7 @@ function SignUpScreen() {
         setIsEmailAvailable(false);
         setEmailMessage('이미 사용 중인 이메일입니다.');
       }
-    } catch (err) {
+    } catch (e) {
       setIsEmailAvailable(null);
       setEmailMessage('오류: 이메일 중복 확인에 실패했습니다.');
     } finally {
@@ -146,8 +136,60 @@ function SignUpScreen() {
     }
   };
 
+  const handleCheckNickname = async () => {
+    Keyboard.dismiss();
+    const trimmed = nickname.trim();
+    if (trimmed.length < 2) {
+      Alert.alert('입력 오류', '닉네임은 2자 이상이어야 합니다.');
+      return;
+    }
+
+    setIsCheckingNickname(true);
+    setNicknameMessage('');
+    setIsNicknameAvailable(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        'check-nickname-availability',
+        {
+          body: { nickname: trimmed },
+        },
+      );
+      if (error) throw error;
+
+      if (data.status === 'available') {
+        setIsNicknameAvailable(true);
+        setNicknameMessage('사용 가능한 닉네임입니다.');
+        setNicknameMessageColor('green');
+      } else if (data.status === 'taken' || data.status === 'forbidden') {
+        setIsNicknameAvailable(false);
+        setNicknameMessage(data.message);
+        setNicknameMessageColor('red');
+      } else {
+        throw new Error('서버로부터 알 수 없는 응답을 받았습니다.');
+      }
+    } catch (err) {
+      const errorMessage = err?.context?.data?.error || err.message;
+      setIsNicknameAvailable(false);
+      setNicknameMessage(errorMessage);
+      setNicknameMessageColor('red');
+    } finally {
+      setIsCheckingNickname(false);
+    }
+  };
+
+  // -------- OTP / signup --------
   const handleSendVerificationCode = async () => {
     Keyboard.dismiss();
+
+    // EULA 동의 없으면 인증 자체 차단(1.2 대응)
+    if (!hasAcceptedSafetyAgreement) {
+      Alert.alert(
+        '약관 동의 필요',
+        '커뮤니티 안전 약관(EULA)의 무관용 정책에 동의해야 인증을 진행할 수 있습니다.',
+      );
+      return;
+    }
 
     if (!phoneNumber || !/^\d{10,11}$/.test(phoneNumber)) {
       Alert.alert('입력 오류', '올바른 휴대폰 번호를 입력해주세요.');
@@ -158,13 +200,14 @@ function SignUpScreen() {
     try {
       const { data, error } = await supabase.functions.invoke(
         'send-verification-otp',
-        { body: { phone: phoneNumber.trim() } },
+        {
+          body: { phone: phoneNumber.trim() },
+        },
       );
 
       if (error) {
-        const contextError = error.context?.errorMessage;
+        const contextError = error?.context?.errorMessage;
         let displayError = '인증번호 발송에 실패했습니다.';
-
         if (contextError) {
           try {
             const parsed = JSON.parse(contextError);
@@ -179,7 +222,6 @@ function SignUpScreen() {
         const title = displayError.includes('가입된')
           ? '인증 불가'
           : '인증번호 발송 실패';
-
         Alert.alert(title, displayError);
         return;
       }
@@ -199,15 +241,16 @@ function SignUpScreen() {
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
-    if (!isOtpSent) {
-      Alert.alert('인증 필요', '먼저 휴대폰 인증을 완료해주세요.');
-      return;
-    }
+
     if (!hasAcceptedSafetyAgreement) {
       Alert.alert(
         '약관 동의 필요',
         '커뮤니티 안전 약관(EULA)은 불법·유해 콘텐츠와 악용 이용자에 대한 무관용 정책을 포함합니다. 약관에 동의해야 회원가입을 진행할 수 있습니다.',
       );
+      return;
+    }
+    if (!isOtpSent) {
+      Alert.alert('인증 필요', '먼저 휴대폰 인증을 완료해주세요.');
       return;
     }
     if (isEmailAvailable !== true) {
@@ -248,17 +291,18 @@ function SignUpScreen() {
           phoneNumber: phoneNumber.trim(),
           jobType,
           otp: otp.trim(),
+          accepted_terms_version: TERMS_VERSION,
         },
       });
 
       if (error) {
-        const contextError = error.context?.errorMessage;
+        const contextError = error?.context?.errorMessage;
         let displayError = '알 수 없는 오류가 발생했습니다.';
         if (contextError) {
           try {
             const parsedError = JSON.parse(contextError);
             displayError = parsedError.error || displayError;
-          } catch (e) {
+          } catch {
             displayError = contextError;
           }
         } else {
@@ -279,6 +323,7 @@ function SignUpScreen() {
     }
   };
 
+  // -------- UI --------
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContainer}
@@ -286,6 +331,7 @@ function SignUpScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>회원가입</Text>
 
+        {/* 이메일 + 중복확인 */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.inputField}
@@ -313,6 +359,7 @@ function SignUpScreen() {
           </Text>
         )}
 
+        {/* 비밀번호 */}
         <TextInput
           style={styles.input}
           placeholder="비밀번호 (6자 이상)"
@@ -330,6 +377,7 @@ function SignUpScreen() {
           secureTextEntry
         />
 
+        {/* 이름 */}
         <TextInput
           style={styles.input}
           placeholder="이름"
@@ -338,6 +386,7 @@ function SignUpScreen() {
           onChangeText={setName}
         />
 
+        {/* 닉네임 + 중복확인 */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.inputField}
@@ -364,6 +413,7 @@ function SignUpScreen() {
           </Text>
         )}
 
+        {/* 직업 유형 */}
         <Text style={styles.label}>직업 유형</Text>
         <View style={styles.jobTypeContainer}>
           {jobTypes.map(type => (
@@ -385,6 +435,33 @@ function SignUpScreen() {
           ))}
         </View>
 
+        {/* ✅ 초기 화면에서 EULA 동의 수집 */}
+        <View style={styles.termsRow}>
+          <TouchableOpacity
+            style={[
+              styles.checkbox,
+              hasAcceptedSafetyAgreement && styles.checkboxChecked,
+            ]}
+            onPress={toggleSafetyAgreement}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: hasAcceptedSafetyAgreement }}>
+            {hasAcceptedSafetyAgreement ? (
+              <Icon name="check" size={18} color="#fff" />
+            ) : null}
+          </TouchableOpacity>
+          <View style={styles.termsTextContainer}>
+            <Text style={styles.termsText}>
+              커뮤니티 안전 약관(EULA)의 무관용 정책을 확인했고 동의합니다.
+              (필수) (버전 {TERMS_VERSION})
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('SafetyPolicy')}>
+              <Text style={styles.termsLink}>약관 전문 보기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 휴대폰 인증 단계 */}
         {!isOtpSent ? (
           <>
             <View style={styles.inputContainer}>
@@ -398,7 +475,10 @@ function SignUpScreen() {
                 maxLength={11}
               />
               <TouchableOpacity
-                style={styles.checkButton}
+                style={[
+                  styles.checkButton,
+                  !hasAcceptedSafetyAgreement && { backgroundColor: '#B0B7C3' },
+                ]}
                 onPress={handleSendVerificationCode}
                 disabled={isLoading}>
                 {isLoading && !isCheckingNickname ? (
@@ -421,44 +501,6 @@ function SignUpScreen() {
               keyboardType="number-pad"
               maxLength={6}
             />
-            <View style={styles.termsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.checkbox,
-                  hasAcceptedSafetyAgreement && styles.checkboxChecked,
-                ]}
-                onPress={async () => {
-                  const nextValue = !hasAcceptedSafetyAgreement;
-                  setHasAcceptedSafetyAgreement(nextValue);
-                  try {
-                    if (nextValue) {
-                      await AsyncStorage.setItem(
-                        SAFETY_AGREEMENT_STORAGE_KEY,
-                        new Date().toISOString(),
-                      );
-                    } else {
-                      await AsyncStorage.removeItem(
-                        SAFETY_AGREEMENT_STORAGE_KEY,
-                      );
-                    }
-                  } catch (error) {
-                    console.error('Failed to persist safety agreement state', error);
-                  }
-                }}>
-                {hasAcceptedSafetyAgreement ? (
-                  <Icon name="check" size={18} color="#fff" />
-                ) : null}
-              </TouchableOpacity>
-              <View style={styles.termsTextContainer}>
-                <Text style={styles.termsText}>
-                  커뮤니티 안전 약관(EULA)의 무관용 정책을 확인했고 동의합니다.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('SafetyPolicy')}>
-                  <Text style={styles.termsLink}>약관 전문 보기</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
             {isLoading ? (
               <ActivityIndicator
                 size="large"
