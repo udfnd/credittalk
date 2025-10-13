@@ -343,6 +343,11 @@ function AppNavigator() {
             component={UpdatePasswordScreen}
             options={{ title: '새 비밀번호 설정' }}
           />
+          <RootStack.Screen
+            name="SafetyPolicy"
+            component={SafetyPolicyScreen}
+            options={{ title: '커뮤니티 안전 약관' }}
+          />
         </>
       ) : !profile ? (
         <>
