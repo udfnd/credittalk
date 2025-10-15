@@ -6,18 +6,18 @@
 	<string>음성 파일을 선택하여 업로드하거나, 프로필 사진을 설정하기 위해 사진 앨범에 접근해야 합니다.</string>
 	<key>NidAppName</key>
 	<string>credittalk</string>
-	<key>NidClientID</key>
-	<string>belWdkUzgFugOnoHOfBs</string>
-	<key>NidClientSecret</key>
-	<string>x0Cc7_4tSU</string>
-	<key>NidUrlScheme</key>
-	<string>org.reactjs.native.example.credittalk</string>
-	<key>naverServiceAppUrlScheme</key>
-	<string>org.reactjs.native.example.credittalk</string>
-	<key>naverConsumerKey</key>
-	<string>belWdkUzgFugOnoHOfBs</string>
-	<key>naverConsumerSecret</key>
-	<string>x0Cc7_4tSU</string>
+        <key>NidClientID</key>
+        <string>QWU6hRfI6lQMlQ5QIZN1</string>
+        <key>NidClientSecret</key>
+        <string>VtyqGV8HHb</string>
+        <key>NidUrlScheme</key>
+        <string>credittalk</string>
+        <key>naverServiceAppUrlScheme</key>
+        <string>credittalk</string>
+        <key>naverConsumerKey</key>
+        <string>QWU6hRfI6lQMlQ5QIZN1</string>
+        <key>naverConsumerSecret</key>
+        <string>VtyqGV8HHb</string>
 	<key>naverServiceAppName</key>
 	<string>credittalk</string>
 	<key>LSApplicationQueriesSchemes</key>
@@ -32,16 +32,28 @@
 		<string>naversearchthirdlogin</string>
 	</array>
 	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>credittalk</string>
-			</array>
-		</dict>
-	</array>
+        <array>
+                <dict>
+                        <key>CFBundleTypeRole</key>
+                        <string>Editor</string>
+                        <key>CFBundleURLName</key>
+                        <string>naver</string>
+                        <key>CFBundleURLSchemes</key>
+                        <array>
+                                <string>credittalk</string>
+                        </array>
+                </dict>
+                <dict>
+                        <key>CFBundleTypeRole</key>
+                        <string>Editor</string>
+                        <key>CFBundleURLName</key>
+                        <string>kakao</string>
+                        <key>CFBundleURLSchemes</key>
+                        <array>
+                                <string>kakaoa5721065cc212efd0cecafc66e4fe14a</string>
+                        </array>
+                </dict>
+        </array>
 	<key>KAKAO_APP_KEY</key>
 	<string>a5721065cc212efd0cecafc66e4fe14a</string>
 	<key>CFBundleDevelopmentRegion</key>
