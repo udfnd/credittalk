@@ -7,12 +7,31 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		19504E381536996957C4FF57 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
-		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		DA99287C5B0A394F145B38AB /* Pods_CreditTalk.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 881581C7DD817381E1E71119 /* Pods_CreditTalk.framework */; };
-		EF6D1AB02E7AC9B0003A2C3A /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EF6D1AAF2E7AC9B0003A2C3A /* GoogleService-Info.plist */; };
+                13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+                19504E381536996957C4FF57 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+                761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
+                81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+                DA99287C5B0A394F145B38AB /* Pods_CreditTalk.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 881581C7DD817381E1E71119 /* Pods_CreditTalk.framework */; };
+                EF6D1AB02E7AC9B0003A2C3A /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EF6D1AAF2E7AC9B0003A2C3A /* GoogleService-Info.plist */; };
+                EF6709102DB5E0F000C672C0 /* AntDesign.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708EE2DB5E00900C672C0 /* AntDesign.ttf */; };
+                EF6709112DB5E0F000C672C0 /* Entypo.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708EF2DB5E00900C672C0 /* Entypo.ttf */; };
+                EF6709122DB5E0F000C672C0 /* EvilIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F02DB5E00900C672C0 /* EvilIcons.ttf */; };
+                EF6709132DB5E0F000C672C0 /* Feather.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F12DB5E00900C672C0 /* Feather.ttf */; };
+                EF6709142DB5E0F000C672C0 /* FontAwesome.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F22DB5E00900C672C0 /* FontAwesome.ttf */; };
+                EF6709152DB5E0F000C672C0 /* FontAwesome5_Brands.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F32DB5E00900C672C0 /* FontAwesome5_Brands.ttf */; };
+                EF6709162DB5E0F000C672C0 /* FontAwesome5_Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F42DB5E00900C672C0 /* FontAwesome5_Regular.ttf */; };
+                EF6709172DB5E0F000C672C0 /* FontAwesome5_Solid.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F52DB5E00900C672C0 /* FontAwesome5_Solid.ttf */; };
+                EF6709182DB5E0F000C672C0 /* FontAwesome6_Brands.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F62DB5E00900C672C0 /* FontAwesome6_Brands.ttf */; };
+                EF6709192DB5E0F000C672C0 /* FontAwesome6_Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F72DB5E00900C672C0 /* FontAwesome6_Regular.ttf */; };
+                EF67091A2DB5E0F000C672C0 /* FontAwesome6_Solid.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F82DB5E00900C672C0 /* FontAwesome6_Solid.ttf */; };
+                EF67091B2DB5E0F000C672C0 /* Fontisto.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708F92DB5E00900C672C0 /* Fontisto.ttf */; };
+                EF67091C2DB5E0F000C672C0 /* Foundation.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708FA2DB5E00900C672C0 /* Foundation.ttf */; };
+                EF67091D2DB5E0F000C672C0 /* Ionicons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708FB2DB5E00900C672C0 /* Ionicons.ttf */; };
+                EF67091E2DB5E0F000C672C0 /* MaterialCommunityIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708FC2DB5E00900C672C0 /* MaterialCommunityIcons.ttf */; };
+                EF67091F2DB5E0F000C672C0 /* MaterialIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708FD2DB5E00900C672C0 /* MaterialIcons.ttf */; };
+                EF6709202DB5E0F000C672C0 /* Octicons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708FE2DB5E00900C672C0 /* Octicons.ttf */; };
+                EF6709212DB5E0F000C672C0 /* SimpleLineIcons.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6708FF2DB5E00900C672C0 /* SimpleLineIcons.ttf */; };
+                EF6709222DB5E0F000C672C0 /* Zocial.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EF6709002DB5E00900C672C0 /* Zocial.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -207,17 +226,36 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		13B07F8E1A680F5B00A75B9A /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
-				EF6D1AB02E7AC9B0003A2C3A /* GoogleService-Info.plist in Resources */,
-				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
-				19504E381536996957C4FF57 /* PrivacyInfo.xcprivacy in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+                13B07F8E1A680F5B00A75B9A /* Resources */ = {
+                        isa = PBXResourcesBuildPhase;
+                        buildActionMask = 2147483647;
+                        files = (
+                                81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
+                                EF6D1AB02E7AC9B0003A2C3A /* GoogleService-Info.plist in Resources */,
+                                13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+                                19504E381536996957C4FF57 /* PrivacyInfo.xcprivacy in Resources */,
+                                EF6709102DB5E0F000C672C0 /* AntDesign.ttf in Resources */,
+                                EF6709112DB5E0F000C672C0 /* Entypo.ttf in Resources */,
+                                EF6709122DB5E0F000C672C0 /* EvilIcons.ttf in Resources */,
+                                EF6709132DB5E0F000C672C0 /* Feather.ttf in Resources */,
+                                EF6709142DB5E0F000C672C0 /* FontAwesome.ttf in Resources */,
+                                EF6709152DB5E0F000C672C0 /* FontAwesome5_Brands.ttf in Resources */,
+                                EF6709162DB5E0F000C672C0 /* FontAwesome5_Regular.ttf in Resources */,
+                                EF6709172DB5E0F000C672C0 /* FontAwesome5_Solid.ttf in Resources */,
+                                EF6709182DB5E0F000C672C0 /* FontAwesome6_Brands.ttf in Resources */,
+                                EF6709192DB5E0F000C672C0 /* FontAwesome6_Regular.ttf in Resources */,
+                                EF67091A2DB5E0F000C672C0 /* FontAwesome6_Solid.ttf in Resources */,
+                                EF67091B2DB5E0F000C672C0 /* Fontisto.ttf in Resources */,
+                                EF67091C2DB5E0F000C672C0 /* Foundation.ttf in Resources */,
+                                EF67091D2DB5E0F000C672C0 /* Ionicons.ttf in Resources */,
+                                EF67091E2DB5E0F000C672C0 /* MaterialCommunityIcons.ttf in Resources */,
+                                EF67091F2DB5E0F000C672C0 /* MaterialIcons.ttf in Resources */,
+                                EF6709202DB5E0F000C672C0 /* Octicons.ttf in Resources */,
+                                EF6709212DB5E0F000C672C0 /* SimpleLineIcons.ttf in Resources */,
+                                EF6709222DB5E0F000C672C0 /* Zocial.ttf in Resources */,
+                        );
+                        runOnlyForDeploymentPostprocessing = 0;
+                };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
