@@ -63,7 +63,7 @@ export default function HelpDeskDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const { questionId } = route.params;
-  const { user, profile } = useAuth();
+  const { user, profile, isLoading: isAuthLoading } = useAuth();
 
   const [question, setQuestion] = useState(null);
   const [comments, setComments] = useState([]);
@@ -79,7 +79,15 @@ export default function HelpDeskDetailScreen() {
 
   // 데이터 로딩 함수 (질문 + 댓글)
   const fetchData = useCallback(async () => {
-    if (!questionId) return;
+    if (!questionId || isAuthLoading) {
+      return;
+    }
+
+    if (!user) {
+      setLoading(false);
+      Alert.alert('로그인 필요', '로그인 후 문의 내역을 확인할 수 있습니다.');
+      return;
+    }
 
     setLoading(true);
     // 1. 질문 상세 정보 가져오기
@@ -111,7 +119,7 @@ export default function HelpDeskDetailScreen() {
     }
 
     setLoading(false);
-  }, [questionId]);
+  }, [isAuthLoading, questionId, user]);
 
   useEffect(() => {
     fetchData();
