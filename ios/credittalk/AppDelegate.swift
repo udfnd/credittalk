@@ -45,8 +45,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if RNKakaoLogins.isKakaoTalkLoginUrl(url) {
       return RNKakaoLogins.handleOpen(url)
     }
-    if NaverThirdPartyLoginConnection.getSharedInstance().application(app, open: url, options: options) {
-      return true
+    if url.scheme == "credittalk" {
+      if NaverThirdPartyLoginConnection.getSharedInstance().application(app, open: url, options: options) {
+        return true
+      }
     }
     if RCTLinkingManager.application(app, open: url, options: options) {
       return true
