@@ -558,7 +558,7 @@ function App(): React.JSX.Element {
       appName: '크레딧톡',
       consumerKey: 'QWU6hRfI6lQMlQ5QIZN1',
       consumerSecret: 'VtyqGV8HHb',
-      serviceUrlSchemeIOS: 'credittalk',
+      serviceUrlSchemeIOS: 'naverQWU6hRfI6lQMlQ5QIZN1',
       disableNaverAppAuthIOS: false,
     });
   }, []);
