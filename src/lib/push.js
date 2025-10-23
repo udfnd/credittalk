@@ -187,6 +187,16 @@ export function openFromPayload(navigateTo, data = {}) {
 /** 백그라운드/종료 상태: 데이터 전용 푸시 → 로컬 알림 생성 */
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   try {
+    const hasNotificationPayload =
+      remoteMessage?.notification &&
+      Object.keys(remoteMessage.notification).length > 0 &&
+      Object.values(remoteMessage.notification).some(value => value);
+
+    if (hasNotificationPayload) {
+      // 알림 메시지(notification payload)는 시스템에서 이미 표시됨 → 중복 방지
+      return;
+    }
+
     await ensureNotificationChannel();
     const { title, body, data } = pickTitleBody(remoteMessage);
     await notifee.displayNotification({
