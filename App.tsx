@@ -26,6 +26,7 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import notifee from '@notifee/react-native';
+import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
@@ -589,6 +590,13 @@ function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp(
+      remoteMessage => {
+        if (!remoteMessage) return;
+        openFromPayload(navigateToScreen, remoteMessage.data || {});
+      },
+    );
+
     (async () => {
       await requestNotificationPermissionAndroid();
       await ensureNotificationChannel();
@@ -604,7 +612,16 @@ function App(): React.JSX.Element {
           initialNotifee.notification?.data || {},
         );
       }
+
+      // ✅ FCM 시스템 알림으로 앱이 열렸는지도 확인
+      const initialRemote = await messaging().getInitialNotification();
+      if (initialRemote) {
+        openFromPayload(navigateToScreen, initialRemote.data || {});
+      }
     })();
+    return () => {
+      unsubscribeNotificationOpened();
+    };
   }, [navigateToScreen]);
 
   return (
