@@ -17,7 +17,11 @@ import App from './App';
 import { name as appName } from './app.json';
 
 // 앱 내부 push 유틸에서 채널 ID 재사용
-import { CHANNEL_ID } from './src/lib/push';
+import {
+  CHANNEL_ID,
+  hasNotificationPayload,
+  pickTitleBody,
+} from './src/lib/push';
 
 /* ──────────────────────────────────────────────────────────────
  *  백그라운드 수신/탭 처리 (엔트리에서 반드시 등록)
@@ -89,19 +93,21 @@ if (!global.__PUSH_BG_BOUND__) {
   // (1) 백그라운드 수신(data-only 포함) → 우리가 직접 로컬 표시
   messaging().setBackgroundMessageHandler(async remoteMessage => {
     try {
-      const d = remoteMessage?.data ?? {};
-      const title = d.title || remoteMessage?.notification?.title || '알림';
-      const body = d.body || remoteMessage?.notification?.body || '';
+      if (hasNotificationPayload(remoteMessage)) {
+        // 시스템이 이미 표시하는 알림이라면 중복 표시 방지
+        return;
+      }
 
       await ensureChannel();
+      const { title, body, data } = pickTitleBody(remoteMessage);
 
       await notifee.displayNotification({
         title,
         body,
-        data: d, // 탭 시 link_url을 열기 위해 반드시 data를 실어야 함
+        data,
         android: {
           channelId: CHANNEL_ID,
-          pressAction: { id: 'default' }, // 탭 이벤트 전달
+          pressAction: { id: 'default', launchActivity: 'default' },
           style:
             body && body.length > 60
               ? { type: AndroidStyle.BIGTEXT, text: body }
