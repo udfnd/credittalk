@@ -2,6 +2,6 @@
     <string name="client_id">QWU6hRfI6lQMlQ5QIZN1</string>
     <string name="client_secret">VtyqGV8HHb</string>
     <string name="kakao_app_key">a5721065cc212efd0cecafc66e4fe14a</string>
-    <string name="client_name">크레디톡</string>
+    <string name="client_name">크레딧톡</string>
     <string name="app_name">credittalk</string>
 </resources>

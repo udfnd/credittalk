@@ -53,6 +53,7 @@ const InputField = React.memo(
     required = false,
     multiline = false,
     keyboardType = 'default',
+    maxLength, // maxLength prop 추가
   }) => (
     <View style={styles.inputContainer}>
       <Text style={styles.label}>
@@ -67,6 +68,7 @@ const InputField = React.memo(
         multiline={multiline}
         numberOfLines={multiline ? 5 : 1}
         keyboardType={keyboardType}
+        maxLength={maxLength} // maxLength 적용
       />
     </View>
   ),
@@ -185,8 +187,30 @@ export default function HelpDeskCreateScreen({ navigation }) {
     caseSummary: '',
   });
 
+  // ✨ 여기가 수정된 부분입니다 ✨
   const handleInputChange = useCallback((name, value) => {
-    setFormState(prevState => ({ ...prevState, [name]: value }));
+    // 생년월일 입력 시 자동 하이픈 추가 로직
+    if (name === 'birthDate') {
+      const cleaned = value.replace(/[^\d]/g, ''); // 숫자 이외의 문자 제거
+      let formatted = cleaned;
+
+      if (cleaned.length > 4) {
+        // YYYY-MM 형식
+        formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+      }
+      if (cleaned.length > 6) {
+        // YYYY-MM-DD 형식
+        formatted = `${cleaned.slice(0, 4)}-${cleaned.slice(
+          4,
+          6,
+        )}-${cleaned.slice(6, 8)}`;
+      }
+
+      setFormState(prevState => ({ ...prevState, [name]: formatted }));
+    } else {
+      // 다른 필드는 기존 로직 유지
+      setFormState(prevState => ({ ...prevState, [name]: value }));
+    }
   }, []);
 
   const handleSubmit = async () => {
@@ -222,7 +246,7 @@ export default function HelpDeskCreateScreen({ navigation }) {
       return;
     }
 
-    // 생년월일 형식 유효성 검사 (간단한 예시)
+    // 생년월일 형식 유효성 검사 (자동 포맷팅으로 인해 이 부분은 통과하기 쉬워짐)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate.trim())) {
       Alert.alert('입력 오류', '생년월일을 YYYY-MM-DD 형식으로 입력해주세요.');
       return;
@@ -232,8 +256,18 @@ export default function HelpDeskCreateScreen({ navigation }) {
     try {
       sanitized = ensureSafeContent([
         { key: 'userName', label: '이름', value: userName, allowEmpty: false },
-        { key: 'conversationReason', label: '대화 계기', value: conversationReason, allowEmpty: false },
-        { key: 'caseSummary', label: '사건 개요', value: caseSummary, allowEmpty: false },
+        {
+          key: 'conversationReason',
+          label: '대화 계기',
+          value: conversationReason,
+          allowEmpty: false,
+        },
+        {
+          key: 'caseSummary',
+          label: '사건 개요',
+          value: caseSummary,
+          allowEmpty: false,
+        },
         {
           key: 'opponentAccount',
           label: '상대방 계좌',
@@ -261,11 +295,11 @@ export default function HelpDeskCreateScreen({ navigation }) {
       user_id: user.id,
       user_name: sanitized.userName,
       user_phone: userPhone.trim(),
-      birth_date: birthDate.trim(), // DB에 'birth_date' 컬럼 추가 필요
-      province: province.trim(), // DB에 'province' 컬럼 추가 필요
-      city: city.trim(), // DB에 'city' 컬럼 추가 필요
-      victim_type: victimType.trim(), // DB에 'victim_type' 컬럼 추가 필요
-      damage_category: damageCategory.trim(), // DB에 'damage_category' 컬럼 추가 필요
+      birth_date: birthDate.trim(),
+      province: province.trim(),
+      city: city.trim(),
+      victim_type: victimType.trim(),
+      damage_category: damageCategory.trim(),
       conversation_reason: sanitized.conversationReason,
       opponent_account: sanitized.opponentAccount || null,
       opponent_phone: sanitized.opponentPhone || null,
@@ -315,13 +349,15 @@ export default function HelpDeskCreateScreen({ navigation }) {
           keyboardType="phone-pad"
           required
         />
+        {/* ✨ 생년월일 입력 필드에 maxLength 추가 */}
         <InputField
           label="생년월일"
           value={formState.birthDate}
           onChangeText={text => handleInputChange('birthDate', text)}
-          placeholder="YYYY-MM-DD 형식으로 입력"
+          placeholder="YYYYMMDD 형식으로 입력"
           keyboardType="number-pad"
           required
+          maxLength={10}
         />
 
         <PickerField
