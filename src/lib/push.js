@@ -124,7 +124,7 @@ async function openExternalUrlBestEffort(url) {
 }
 
 /** data-only/notification 폴백 포함 제목/본문 추출 */
-function pickTitleBody(remote) {
+export function pickTitleBody(remote) {
   const d = remote?.data || {};
   const n = remote?.notification || {};
 
@@ -148,6 +148,12 @@ function pickTitleBody(remote) {
       ...parsedParams, // screen, postId 등을 data 최상위로 올림
     },
   };
+}
+
+export function hasNotificationPayload(remoteMessage) {
+  const notif = remoteMessage?.notification;
+  if (!notif) return false;
+  return Object.values(notif).some(value => Boolean(value));
 }
 
 /** 푸시 페이로드 → 네비게이션 or 외부 링크 */
@@ -183,26 +189,6 @@ export function openFromPayload(navigateTo, data = {}) {
     console.warn('[Push] openFromPayload error:', e?.message || e);
   }
 }
-
-/** 백그라운드/종료 상태: 데이터 전용 푸시 → 로컬 알림 생성 */
-messaging().setBackgroundMessageHandler(async remoteMessage => {
-  try {
-    await ensureNotificationChannel();
-    const { title, body, data } = pickTitleBody(remoteMessage);
-    await notifee.displayNotification({
-      title,
-      body,
-      data,
-      android: {
-        channelId: CHANNEL_ID,
-        pressAction: { id: 'default', launchActivity: 'default' },
-        style: body ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
-      },
-    });
-  } catch (e) {
-    console.warn('[FCM] bg display error:', e?.message || e);
-  }
-});
 
 /** 런타임 와이어링 (App.tsx에서 호출) */
 export async function wireMessageHandlers(navigateTo) {
