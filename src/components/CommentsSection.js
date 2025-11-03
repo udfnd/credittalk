@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  ActionSheetIOS, // ActionSheetIOS import
+  ActionSheetIOS,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -18,10 +18,13 @@ import { ko } from 'date-fns/locale';
 import { useNavigation } from '@react-navigation/native';
 import { AvoidSoftInputView } from 'react-native-avoid-softinput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import ReportModal from './ReportModal'; // ReportModal 컴포넌트 import
+import ReportModal from './ReportModal';
 import { ensureSafeContent } from '../lib/contentSafety';
 
-// --- 수정/대댓글 공용 입력 컴포넌트 (기존과 동일) ---
+/**
+ * 공용 입력 컴포넌트
+ * - depth를 받아서 depth>0(대댓글 이상)일 때는 추가 들여쓰기를 하지 않는 스타일로 렌더링
+ */
 const CommentInput = ({
   initialContent = '',
   placeholder,
@@ -29,6 +32,7 @@ const CommentInput = ({
   onSubmit,
   loading = false,
   isEdit = false,
+  depth = 0, // ✅ 추가: 현재 깊이
 }) => {
   const [text, setText] = useState(initialContent);
   const disabled = loading;
@@ -36,7 +40,13 @@ const CommentInput = ({
   return (
     <AvoidSoftInputView avoidOffset={8}>
       <View
-        style={isEdit ? styles.editInputContainer : styles.replyInputContainer}>
+        style={
+          isEdit
+            ? styles.editInputContainer
+            : depth > 0
+              ? styles.replyInputContainerFlat // ✅ 대댓글 이상: 추가 들여쓰기 없음
+              : styles.replyInputContainer // ✅ 루트에 달리는 답글 입력창만 1회 들여쓰기
+        }>
         <TextInput
           style={[styles.replyInput, disabled && { opacity: 0.6 }]}
           placeholder={placeholder}
@@ -81,13 +91,17 @@ const CommentInput = ({
   );
 };
 
-// --- 개별 댓글 아이템 컴포넌트 (수정됨) ---
+/**
+ * 개별 댓글 아이템
+ * - depth를 재귀적으로 전달하여 첫 레벨(depth===0)에만 좌측 라인/패딩을 적용
+ * - 두 번째 레벨 이상(depth>=1)에는 추가 들여쓰기 없음
+ */
 const CommentItem = ({
   comment,
   profile,
   // 함수 Props
   onReplyPress,
-  onShowOptions, // 옵션 메뉴를 보여줄 함수
+  onShowOptions,
   onEditSubmit,
   onReplySubmit,
   // 상태 Props
@@ -95,6 +109,7 @@ const CommentItem = ({
   setEditingComment,
   replyingToId,
   submittingReplyId,
+  depth = 0, // ✅ 추가: 현재 댓글의 깊이
 }) => {
   const isEditingThis = editingComment?.id === comment.id;
   const isReplyingToThis = replyingToId === comment.id;
@@ -111,7 +126,6 @@ const CommentItem = ({
           <Text style={styles.commentAuthor}>
             {comment.users?.nickname || '탈퇴한 사용자'}
           </Text>
-          {/* 더보기 버튼으로 통합 */}
           <TouchableOpacity
             style={styles.optionsButton}
             onPress={() => onShowOptions(comment)}>
@@ -127,6 +141,7 @@ const CommentItem = ({
             onSubmit={handleEdit}
             loading={submittingReplyId === comment.id}
             isEdit
+            depth={depth}
           />
         ) : (
           <Text style={styles.commentContent}>{comment.content}</Text>
@@ -145,30 +160,39 @@ const CommentItem = ({
         </View>
       </View>
 
+      {/* ✅ 답글 입력창: 루트(depth=0)일 때만 들여쓰기 컨테이너, 그 이상은 평평 */}
       {isReplyingToThis && (
         <CommentInput
           placeholder={`@${comment.users?.nickname || '...'}님에게 답글`}
           onCancel={() => onReplyPress(null)}
           onSubmit={replyText => onReplySubmit(replyText, comment.id)}
           loading={submittingReplyId === comment.id}
+          depth={depth} // 루트에서만 들여쓰기 1회, 그 이상은 flat
         />
       )}
 
+      {/* ✅ 자식 댓글 컨테이너: 첫 레벨(depth===0)에만 들여쓰기/좌측 라인 */}
       {comment.replies && comment.replies.length > 0 && (
-        <View style={styles.repliesContainer}>
+        <View
+          style={
+            depth === 0
+              ? styles.repliesContainerIndented // 첫 레벨만 들여쓰기
+              : styles.repliesContainerFlat // 그 아래는 들여쓰기 없음
+          }>
           {comment.replies.map(reply => (
             <CommentItem
               key={reply.id}
               comment={reply}
               profile={profile}
               onReplyPress={onReplyPress}
-              onShowOptions={onShowOptions} // 재귀적으로 전달
+              onShowOptions={onShowOptions}
               onEditSubmit={onEditSubmit}
               editingComment={editingComment}
               setEditingComment={setEditingComment}
               replyingToId={replyingToId}
               submittingReplyId={submittingReplyId}
               onReplySubmit={onReplySubmit}
+              depth={depth + 1} // 재귀적으로 뎁스 증가
             />
           ))}
         </View>
@@ -177,7 +201,9 @@ const CommentItem = ({
   );
 };
 
-// --- 메인 컴포넌트 (수정됨) ---
+/**
+ * 메인 섹션
+ */
 const CommentsSection = ({ postId, boardType }) => {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
@@ -198,13 +224,12 @@ const CommentsSection = ({ postId, boardType }) => {
   const [submittingReplyId, setSubmittingReplyId] = useState(null);
   const guardingRef = useRef(false);
 
-  // --- 기존 함수들 (fetchComments, useEffect 등)은 거의 동일 ---
+  // 댓글 불러오기
   const fetchComments = useCallback(async () => {
-    // ... 기존 fetchComments 로직은 변경 없음 ...
     try {
       const { data, error } = await supabase
         .from('comments')
-        .select('*, users(id, nickname, auth_user_id)') // users 테이블의 auth_user_id도 가져옵니다.
+        .select('*, users(id, nickname, auth_user_id)')
         .eq('post_id', postId)
         .eq('board_type', boardType)
         .order('created_at', { ascending: true });
@@ -234,8 +259,8 @@ const CommentsSection = ({ postId, boardType }) => {
     }
   }, [postId, boardType]);
 
+  // 실시간 구독
   useEffect(() => {
-    // ... 기존 useEffect 로직은 변경 없음 ...
     if (!postId || !boardType) return;
     fetchComments();
 
@@ -262,9 +287,8 @@ const CommentsSection = ({ postId, boardType }) => {
     };
   }, [postId, boardType, fetchComments, editingComment, replyingToId]);
 
-  // --- 기존 핸들러 함수들 (handleAddComment, handleUpdateComment 등)은 거의 동일 ---
+  // 댓글 추가
   const handleAddComment = async (content, parentId = null) => {
-    // ... 기존 handleAddComment 로직은 변경 없음 ...
     if (!user) {
       return Alert.alert(
         '로그인 필요',
@@ -305,8 +329,8 @@ const CommentsSection = ({ postId, boardType }) => {
     }
   };
 
+  // 댓글 수정
   const handleUpdateComment = async (commentId, newContent) => {
-    // ... 기존 handleUpdateComment 로직은 변경 없음 ...
     const trimmed = (newContent || '').trim();
     if (!trimmed) return;
 
@@ -336,8 +360,8 @@ const CommentsSection = ({ postId, boardType }) => {
     }
   };
 
+  // 댓글 삭제
   const handleDeleteComment = commentId => {
-    // ... 기존 handleDeleteComment 로직은 변경 없음 ...
     Alert.alert(
       '댓글 삭제',
       '정말로 이 댓글을 삭제하시겠습니까? 대댓글도 모두 삭제됩니다.',
@@ -361,14 +385,12 @@ const CommentsSection = ({ postId, boardType }) => {
     );
   };
 
-  // --- ✨ 신고 및 차단 관련 추가 함수 ---
+  // 사용자 차단
   const handleBlockUser = async (authorId, authorNickname) => {
     if (!user) return;
     Alert.alert(
       '사용자 차단',
-      `'${
-        authorNickname || '익명'
-      }'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      `'${authorNickname || '익명'}'님을 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
       [
         { text: '취소', style: 'cancel' },
         {
@@ -380,12 +402,12 @@ const CommentsSection = ({ postId, boardType }) => {
                 user_id: user.id,
                 blocked_user_id: authorId,
               });
-              if (error && error.code !== '23505') throw error; // 중복 에러는 무시
+              if (error && error.code !== '23505') throw error; // 중복(이미 차단) 에러는 무시
               Alert.alert(
                 '차단 완료',
                 '사용자가 성공적으로 차단되었습니다. 앱을 다시 시작하면 모든 콘텐츠가 숨겨집니다.',
               );
-              fetchComments(); // 차단 후 댓글 목록 새로고침
+              fetchComments();
             } catch (err) {
               console.error('Block user error:', err);
               Alert.alert(
@@ -399,6 +421,7 @@ const CommentsSection = ({ postId, boardType }) => {
     );
   };
 
+  // 댓글 옵션(수정/삭제/신고/차단)
   const showCommentOptions = comment => {
     if (!user) {
       return Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
@@ -456,14 +479,14 @@ const CommentsSection = ({ postId, boardType }) => {
               comment={item}
               profile={profile}
               onReplyPress={setReplyingToId}
-              onShowOptions={showCommentOptions} // ✨ 옵션 함수 전달
-              onDelete={handleDeleteComment} // 삭제는 유지 (옵션 메뉴 내부에서 호출)
+              onShowOptions={showCommentOptions}
               onEditSubmit={handleUpdateComment}
               editingComment={editingComment}
               setEditingComment={setEditingComment}
               replyingToId={replyingToId}
               submittingReplyId={submittingReplyId}
               onReplySubmit={handleAddComment}
+              depth={0} // ✅ 루트는 0
             />
           )}
           ListEmptyComponent={
@@ -476,7 +499,7 @@ const CommentsSection = ({ postId, boardType }) => {
         />
       )}
 
-      {/* --- 기존 댓글 입력창 및 로그인 안내 (변경 없음) --- */}
+      {/* 작성 바 */}
       {user ? (
         <AvoidSoftInputView
           avoidOffset={insets.bottom}
@@ -515,7 +538,7 @@ const CommentsSection = ({ postId, boardType }) => {
         </View>
       )}
 
-      {/* --- ✨ 신고 모달 추가 --- */}
+      {/* 신고 모달 */}
       {selectedComment && (
         <ReportModal
           isVisible={isReportModalVisible}
@@ -547,6 +570,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+
   commentWrapper: {},
   commentContainer: {
     paddingVertical: 15,
@@ -572,12 +596,22 @@ const styles = StyleSheet.create({
   },
   commentDate: { fontSize: 12, color: '#999' },
   replyButtonText: { fontSize: 12, color: '#3d5afe', fontWeight: 'bold' },
-  repliesContainer: {
+
+  /** ✅ 첫 레벨(대댓글 컨테이너)에만 적용할 들여쓰기/좌측 라인 */
+  repliesContainerIndented: {
     marginLeft: 20,
     borderLeftWidth: 2,
     borderLeftColor: '#e9ecef',
     paddingLeft: 10,
   },
+  /** ✅ 두 번째 레벨 이상에선 추가 들여쓰기 없음 */
+  repliesContainerFlat: {
+    marginLeft: 0,
+    borderLeftWidth: 0,
+    paddingLeft: 0,
+  },
+
+  /** 루트에 달리는 답글 입력창(한 번만 들여쓰기) */
   replyInputContainer: {
     marginVertical: 10,
     marginLeft: 20,
@@ -585,12 +619,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
   },
+  /** 대댓글 이상에서의 답글 입력창(추가 들여쓰기 없음) */
+  replyInputContainerFlat: {
+    marginVertical: 10,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 10,
+  },
+  /** 수정 입력창은 항상 본문 위치에 그대로 */
   editInputContainer: {
     marginVertical: 10,
     backgroundColor: '#f8f9fa',
     borderRadius: 8,
     padding: 10,
   },
+
   replyInput: {
     padding: 10,
     fontSize: 14,
@@ -613,12 +656,14 @@ const styles = StyleSheet.create({
   },
   cancelButton: { backgroundColor: '#868e96', marginLeft: 10 },
   replyActionButtonText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+
   noCommentsText: {
     textAlign: 'center',
     color: '#aaa',
     marginVertical: 25,
     fontSize: 14,
   },
+
   footerAvoidWrapper: {},
   footerInputBar: {
     flexDirection: 'row',
