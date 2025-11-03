@@ -27,9 +27,8 @@ import PartnersCarousel from '../components/PartnersCarousel';
 const { width } = Dimensions.get('window');
 const BANNER_HEIGHT = 150;
 
-// 이미지 경로는 그대로 유지합니다.
 const noticeBannerImg = require('../assets/images/notice_banner.jpg');
-const arrestBannerImg = require('../assets/images/arrest_banner.jpg');
+const arrestBannerImg = require('../assets/images/arrest_banner.png');
 const crimeListBannerImg = require('../assets/images/crime_list_banner.jpg');
 const reviewBannerImg = require('../assets/images/review_banner.jpg');
 const incidentPhotosBannerImg = require('../assets/images/incident_photos_banner.jpg');
