@@ -116,15 +116,29 @@ async function sendToToken(params: {
   const hasLink = typeof data.link_url === 'string' && data.link_url.length > 0;
   const isDataOnly = hasLink || (!title && !body);
 
+  const dataPayload: Record<string, string> = {
+    ...data,
+    ...(imageUrl ? { image: imageUrl } : {}), // 앱 로컬 알림용 이미지도 data에 둔다
+  };
+
+  if (isDataOnly) {
+    // data-only → 로컬 표시를 위해 제목/본문을 data에도 포함
+    if (!dataPayload.title) dataPayload.title = String(title ?? '');
+    if (!dataPayload.body) dataPayload.body = String(body ?? '');
+  }
+
   const message: Record<string, unknown> = {
     token,
-    data: { ...data, ...(imageUrl ? { image: imageUrl } : {}) }, // 앱 로컬 알림용 이미지도 data에 둔다
+    data: dataPayload,
     android: { priority: 'HIGH' },
   };
 
   if (isDataOnly) {
-    // data-only → OS 시스템 알림 생성 방지
-    message['apns'] = { payload: { aps: { 'content-available': 1 } } };
+    // data-only → OS 시스템 알림 생성 방지 + iOS 배경 수신 보장
+    message['apns'] = {
+      payload: { aps: { 'content-available': 1 } },
+      headers: { 'apns-push-type': 'background', 'apns-priority': '5' },
+    };
   } else {
     // 시스템 알림 1개만 (이미지 포함)
     message['notification'] = {
