@@ -3,7 +3,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -513,6 +513,7 @@ function AppNavigator() {
 
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
+  const pendingNavRef = useRef<{ screen: string; params?: any } | null>(null);
   const [hasAcceptedSafety, setHasAcceptedSafety] = useState(false);
   const [isCheckingSafety, setIsCheckingSafety] = useState(true);
 
@@ -520,8 +521,8 @@ function App(): React.JSX.Element {
     (screen: string, params?: any) => {
       if (!navRef.isReady()) return;
 
-      const castAndNavigate = (targetScreen, targetParams) => {
-        const casted = {};
+      const castAndNavigate = (targetScreen: string, targetParams?: any) => {
+        const casted: Record<string, any> = {};
         Object.keys(targetParams || {}).forEach(k => {
           const v = targetParams[k];
           const num = Number(v);
@@ -538,7 +539,7 @@ function App(): React.JSX.Element {
             screen: 'CommunityPostDetail',
             params: { postId: Number(params.postId) },
           },
-        });
+        } as never);
       } else if (screen === 'HelpDeskDetail' && params?.questionId) {
         navRef.navigate('MainApp', {
           screen: 'HelpCenterTab',
@@ -546,12 +547,24 @@ function App(): React.JSX.Element {
             screen: 'HelpDeskDetail',
             params: { questionId: Number(params.questionId) },
           },
-        });
+        } as never);
       } else {
         castAndNavigate(screen, params);
       }
     },
     [navRef],
+  );
+
+  // 준비 전엔 큐잉, 준비되면 즉시 실행
+  const navigateToMaybeQueue = useCallback(
+    (screen: string, params?: any) => {
+      if (navRef.isReady()) {
+        navigateToScreen(screen, params);
+      } else {
+        pendingNavRef.current = { screen, params };
+      }
+    },
+    [navRef, navigateToScreen],
   );
 
   useEffect(() => {
@@ -593,7 +606,7 @@ function App(): React.JSX.Element {
     const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp(
       remoteMessage => {
         if (!remoteMessage) return;
-        openFromPayload(navigateToScreen, remoteMessage.data || {});
+        openFromPayload(navigateToMaybeQueue, remoteMessage.data || {});
       },
     );
 
@@ -601,34 +614,38 @@ function App(): React.JSX.Element {
       await requestNotificationPermissionAndroid();
       await ensureNotificationChannel();
 
-      // ✅ Notifee를 통한 이벤트 핸들링으로 일원화
-      await wireMessageHandlers(navigateToScreen);
+      await wireMessageHandlers(navigateToMaybeQueue);
 
-      // ✅ 앱 시작 시 Notifee의 초기 알림만 확인
       const initialNotifee = await notifee.getInitialNotification();
       if (initialNotifee) {
         openFromPayload(
-          navigateToScreen,
+          navigateToMaybeQueue,
           initialNotifee.notification?.data || {},
         );
       }
 
-      // ✅ FCM 시스템 알림으로 앱이 열렸는지도 확인
       const initialRemote = await messaging().getInitialNotification();
       if (initialRemote) {
-        openFromPayload(navigateToScreen, initialRemote.data || {});
+        openFromPayload(navigateToMaybeQueue, initialRemote.data || {});
       }
     })();
     return () => {
       unsubscribeNotificationOpened();
     };
-  }, [navigateToScreen]);
+  }, [navigateToMaybeQueue]);
 
   return (
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer
           ref={navRef}
+          onReady={() => {
+            if (pendingNavRef.current) {
+              const { screen, params } = pendingNavRef.current;
+              pendingNavRef.current = null;
+              navigateToScreen(screen, params);
+            }
+          }}
           linking={linking}
           fallback={<Text>Loading...</Text>}>
           <AppNavigator />
