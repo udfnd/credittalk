@@ -136,6 +136,14 @@ export async function displayOnce(remote, source = 'unknown') {
       pressAction: { id: 'default' },
       style: body ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
     },
+    ios: {
+      sound: 'default',
+      foregroundPresentationOptions: {
+        alert: true,
+        sound: true,
+        badge: true,
+      },
+    },
   });
 }
 

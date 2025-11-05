@@ -113,44 +113,54 @@ async function sendToToken(params: {
 }) {
   const { accessToken, token, title, body, data = {}, imageUrl } = params;
 
-  const hasLink = typeof data.link_url === 'string' && data.link_url.length > 0;
-  const isDataOnly = hasLink || (!title && !body);
-
   const dataPayload: Record<string, string> = {
     ...data,
-    ...(imageUrl ? { image: imageUrl } : {}), // 앱 로컬 알림용 이미지도 data에 둔다
+    ...(imageUrl ? { image: imageUrl } : {}),
   };
 
-  if (isDataOnly) {
-    // data-only → 로컬 표시를 위해 제목/본문을 data에도 포함
-    if (!dataPayload.title) dataPayload.title = String(title ?? '');
-    if (!dataPayload.body) dataPayload.body = String(body ?? '');
+  if (!dataPayload.title && title) dataPayload.title = String(title);
+  if (!dataPayload.body && body) dataPayload.body = String(body);
+
+  const hasLink = typeof dataPayload.link_url === 'string' && dataPayload.link_url.length > 0;
+
+  const notificationPayload: Record<string, string> = {};
+  if (title) notificationPayload.title = title;
+  if (body) notificationPayload.body = body;
+  if (imageUrl) notificationPayload.image = imageUrl;
+
+  const androidNotification: Record<string, string> = { channel_id: ANDROID_CHANNEL_ID };
+  if (imageUrl) androidNotification.image = imageUrl;
+
+  const aps: Record<string, unknown> = { sound: 'default' };
+  if (title || body) {
+    const alert: Record<string, string> = {};
+    if (title) alert.title = title;
+    if (body) alert.body = body;
+    if (Object.keys(alert).length) aps.alert = alert;
   }
+  if (hasLink) aps['content-available'] = 1;
+  if (imageUrl) aps['mutable-content'] = 1;
+
+  const apnsHeaders: Record<string, string> = {
+    'apns-push-type': 'alert',
+    'apns-priority': '10',
+  };
 
   const message: Record<string, unknown> = {
     token,
     data: dataPayload,
-    android: { priority: 'HIGH' },
+    android: {
+      priority: 'HIGH',
+      notification: androidNotification,
+    },
+    notification: notificationPayload,
+    apns: {
+      payload: { aps },
+      headers: apnsHeaders,
+    },
   };
 
-  if (isDataOnly) {
-    // data-only → OS 시스템 알림 생성 방지 + iOS 배경 수신 보장
-    message['apns'] = {
-      payload: { aps: { 'content-available': 1 } },
-      headers: { 'apns-push-type': 'background', 'apns-priority': '5' },
-    };
-  } else {
-    // 시스템 알림 1개만 (이미지 포함)
-    message['notification'] = {
-      title,
-      body,
-      ...(imageUrl ? { image: imageUrl } : {}),
-    };
-    (message['android'] as any).notification = {
-      channel_id: ANDROID_CHANNEL_ID,
-      ...(imageUrl ? { image: imageUrl } : {}),
-    };
-  }
+  if (!Object.keys(notificationPayload).length) delete message.notification;
 
   const FCM_URL = `https://fcm.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/messages:send`;
   const res = await fetch(FCM_URL, {
@@ -182,10 +192,21 @@ async function sendToToken(params: {
 Deno.serve(async req => {
   try {
     const payload = await req.json().catch(() => ({}));
-    const user_ids: string[] = Array.isArray(payload?.user_ids)
-      ? payload.user_ids
-      : [];
-    const audienceAll: boolean = !!payload?.audience?.all;
+
+    const rawTargetIds = (() => {
+      if (Array.isArray(payload?.user_ids)) return payload.user_ids;
+      if (Array.isArray(payload?.targetUserIds)) return payload.targetUserIds;
+      if (Array.isArray(payload?.target_user_ids)) return payload.target_user_ids;
+      return [];
+    })();
+
+    const user_ids: string[] = rawTargetIds
+      .map((id: unknown) => (typeof id === 'number' ? String(id) : id))
+      .filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0);
+
+    const audienceAll: boolean = Boolean(
+      payload?.audience?.all ?? payload?.audience_all ?? payload?.all,
+    );
     const title: string | undefined = payload?.title;
     const body: string | undefined = payload?.body;
     const imageUrl: string | undefined = payload?.imageUrl;
@@ -194,7 +215,8 @@ Deno.serve(async req => {
     if (!audienceAll && user_ids.length === 0) {
       return new Response(
         JSON.stringify({
-          error: 'Provide audience: { all: true } or user_ids',
+          error:
+            'Provide audience: { all: true } or user_ids/targetUserIds (non-empty array)',
         }),
         { status: 400 },
       );
