@@ -115,9 +115,9 @@ export async function displayOnce(remote, source = 'unknown') {
   }
 
   // 2) 디듀프
-  const key = getMessageKey(remote);
-  const dup = await markAndCheckSeen(key);
-  if (dup) return;
+  // const key = getMessageKey(remote);
+  // const dup = await markAndCheckSeen(key);
+  // if (dup) return;
 
   // 3) 표시
   await ensureNotificationChannel();
