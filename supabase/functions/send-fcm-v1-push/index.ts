@@ -1,8 +1,11 @@
+// supabase Edge Function (Deno) — platform 안전 폴백 + Android는 data-only(플랫폼 있을 때)
 // 목적:
-// - FCM v1으로 정확한 대상에게만 푸시 발송
-// - audience.all 이면 전체 발송, user_ids 있으면 특정 대상 발송
-// - 유저당 최신(last_seen/created_at) 1개 토큰만 사용 → 중복 알림 방지
-// - 링크가 있으면 data-only (앱이 1개만 표시), 없으면 notification 전송(이미지 포함 가능)
+// - 정확 타겟 FCM v1 발송
+// - audience.all 전체, user_ids 특정 대상
+// - 사용자별 최신(last_seen/created_at) 1개 토큰
+// - Android: platform이 확인되면 항상 data-only
+// - iOS: 링크 있으면 data-only, 없으면 notification
+// - platform 미존재/미기록시: 예전 로직으로 폴백(링크 없으면 notification)
 // - data 문자열화, 무효 토큰 비활성화
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -84,34 +87,81 @@ function normalizeDataPayload(
   return out;
 }
 
+type Platform = 'android' | 'ios' | null | undefined;
+
 type TokenRow = {
   token: string;
   user_id: string;
+  platform?: Platform; // 없을 수도 있음
   last_seen?: string | null;
   created_at?: string | null;
 };
 
-function latestPerUser(rows: TokenRow[]): string[] {
-  const byUser = new Map<string, { token: string; t: number }>();
+function latestPerUser(
+  rows: TokenRow[],
+): Array<{ token: string; platform: Platform }> {
+  const byUser = new Map<string, TokenRow>();
   for (const r of rows) {
     const t = new Date(r.last_seen ?? r.created_at ?? 0).getTime();
     const prev = byUser.get(r.user_id);
-    if (!prev || t > prev.t) byUser.set(r.user_id, { token: r.token, t });
+    if (!prev || t > new Date(prev.last_seen ?? prev.created_at ?? 0).getTime())
+      byUser.set(r.user_id, r);
   }
-  return Array.from(
-    new Set(Array.from(byUser.values()).map(v => v.token)),
-  ).filter(Boolean);
+  const uniq = new Map<string, { token: string; platform: Platform }>();
+  for (const v of byUser.values())
+    uniq.set(v.token, { token: v.token, platform: v.platform });
+  return Array.from(uniq.values());
+}
+
+// SELECT helper: platform 컬럼이 없으면 자동 폴백
+async function selectTokens(withUserIds: string[] | null) {
+  const colsWithPlatform = 'token, user_id, platform, last_seen, created_at';
+  const colsNoPlatform = 'token, user_id, last_seen, created_at';
+
+  // 1차: platform 포함 시도
+  let q = supabaseAdmin
+    .from('device_push_tokens')
+    .select(colsWithPlatform)
+    .eq('enabled', true);
+  if (withUserIds && withUserIds.length) q = q.in('user_id', withUserIds);
+  let { data, error } = await q;
+
+  // platform 컬럼이 없을 때(42703 등) → 폴백
+  if (
+    error &&
+    /column .*platform.* does not exist|42703/i.test(error.message || '')
+  ) {
+    let q2 = supabaseAdmin
+      .from('device_push_tokens')
+      .select(colsNoPlatform)
+      .eq('enabled', true);
+    if (withUserIds && withUserIds.length) q2 = q2.in('user_id', withUserIds);
+    const r2 = await q2;
+    if (r2.error) throw r2.error;
+    return { rows: (r2.data ?? []) as TokenRow[], platformAvailable: false };
+  }
+  if (error) throw error;
+  return { rows: (data ?? []) as TokenRow[], platformAvailable: true };
 }
 
 async function sendToToken(params: {
   accessToken: string;
   token: string;
+  platform: Platform; // 'android' | 'ios' | null | undefined
   title?: string;
   body?: string;
   data?: Record<string, string>;
   imageUrl?: string;
 }) {
-  const { accessToken, token, title, body, data = {}, imageUrl } = params;
+  const {
+    accessToken,
+    token,
+    platform,
+    title,
+    body,
+    data = {},
+    imageUrl,
+  } = params;
 
   const dataPayload: Record<string, string> = {
     ...data,
@@ -120,47 +170,69 @@ async function sendToToken(params: {
 
   if (!dataPayload.title && title) dataPayload.title = String(title);
   if (!dataPayload.body && body) dataPayload.body = String(body);
+  if (!dataPayload.nid) dataPayload.nid = String(Date.now()); // 클라 디듀프/업데이트용
 
-  const hasLink = typeof dataPayload.link_url === 'string' && dataPayload.link_url.length > 0;
+  const hasLink =
+    typeof dataPayload.link_url === 'string' && dataPayload.link_url.length > 0;
 
-  const notificationPayload: Record<string, string> = {};
-  if (title) notificationPayload.title = title;
-  if (body) notificationPayload.body = body;
-  if (imageUrl) notificationPayload.image = imageUrl;
+  // 플랫폼 판정: 문자열 소문자화
+  const p = (
+    typeof platform === 'string' ? platform.toLowerCase() : platform
+  ) as Platform;
 
-  const androidNotification: Record<string, string> = { channel_id: ANDROID_CHANNEL_ID };
-  if (imageUrl) androidNotification.image = imageUrl;
+  // wantDataOnly 규칙:
+  //  - android면 항상 data-only (포그라운드 onMessage 보장)
+  //  - ios면 링크 있을 때만 data-only (앱 하나만 표시)
+  //  - platform 모르면 예전 로직(링크 없으면 notification)으로 폴백
+  const isAndroid = p === 'android';
+  const isIos = p === 'ios';
+  const wantDataOnly = isAndroid ? true : isIos ? hasLink : hasLink;
 
-  const aps: Record<string, unknown> = { sound: 'default' };
-  if (title || body) {
+  // iOS APNs 설정 (Android에는 영향 없음)
+  const apns: Record<string, unknown> = {};
+  const apnsHeaders: Record<string, string> = {};
+  if (wantDataOnly) {
+    // iOS data-only (silent)
+    apnsHeaders['apns-push-type'] = 'background';
+    apnsHeaders['apns-priority'] = '5';
+    apns['payload'] = { aps: { 'content-available': 1 } };
+  } else {
+    // iOS notification
+    apnsHeaders['apns-push-type'] = 'alert';
+    apnsHeaders['apns-priority'] = '10';
+    const aps: Record<string, unknown> = { sound: 'default' };
     const alert: Record<string, string> = {};
     if (title) alert.title = title;
     if (body) alert.body = body;
-    if (Object.keys(alert).length) aps.alert = alert;
+    if (imageUrl) aps['mutable-content'] = 1;
+    if (Object.keys(alert).length) aps['alert'] = alert;
+    apns['payload'] = { aps };
   }
-  if (hasLink) aps['content-available'] = 1;
-  if (imageUrl) aps['mutable-content'] = 1;
 
-  const apnsHeaders: Record<string, string> = {
-    'apns-push-type': 'alert',
-    'apns-priority': '10',
-  };
+  // Android 설정
+  const android: Record<string, unknown> = { priority: 'HIGH' };
+  if (!wantDataOnly) {
+    // notification 메시지로 보낼 때만 채널/이미지 지정
+    android['notification'] = {
+      channel_id: ANDROID_CHANNEL_ID,
+      ...(imageUrl ? { image: imageUrl } : {}),
+    };
+  }
 
   const message: Record<string, unknown> = {
     token,
-    data: dataPayload,
-    android: {
-      priority: 'HIGH',
-      notification: androidNotification,
-    },
-    notification: notificationPayload,
-    apns: {
-      payload: { aps },
-      headers: apnsHeaders,
-    },
+    data: dataPayload, // ← data-only 가능
+    android,
+    apns: { ...apns, headers: apnsHeaders },
   };
 
-  if (!Object.keys(notificationPayload).length) delete message.notification;
+  if (!wantDataOnly) {
+    const notificationPayload: Record<string, string> = {};
+    if (title) notificationPayload.title = title;
+    if (body) notificationPayload.body = body;
+    if (imageUrl) notificationPayload.image = imageUrl;
+    message['notification'] = notificationPayload;
+  }
 
   const FCM_URL = `https://fcm.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/messages:send`;
   const res = await fetch(FCM_URL, {
@@ -196,13 +268,17 @@ Deno.serve(async req => {
     const rawTargetIds = (() => {
       if (Array.isArray(payload?.user_ids)) return payload.user_ids;
       if (Array.isArray(payload?.targetUserIds)) return payload.targetUserIds;
-      if (Array.isArray(payload?.target_user_ids)) return payload.target_user_ids;
+      if (Array.isArray(payload?.target_user_ids))
+        return payload.target_user_ids;
       return [];
     })();
 
     const user_ids: string[] = rawTargetIds
       .map((id: unknown) => (typeof id === 'number' ? String(id) : id))
-      .filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0);
+      .filter(
+        (id: unknown): id is string =>
+          typeof id === 'string' && id.trim().length > 0,
+      );
 
     const audienceAll: boolean = Boolean(
       payload?.audience?.all ?? payload?.audience_all ?? payload?.all,
@@ -222,40 +298,18 @@ Deno.serve(async req => {
       );
     }
 
-    let tokenRows: TokenRow[] = [];
-    if (audienceAll) {
-      const { data, error } = await supabaseAdmin
-        .from('device_push_tokens')
-        .select('token, user_id, last_seen, created_at')
-        .eq('enabled', true);
-      if (error) throw error;
-      tokenRows = (data ?? []) as TokenRow[];
-    } else {
-      for (let i = 0; i < user_ids.length; i += CHUNK_SIZE) {
-        const chunk = user_ids.slice(i, i + CHUNK_SIZE);
-        const { data, error } = await supabaseAdmin
-          .from('device_push_tokens')
-          .select('token, user_id, last_seen, created_at')
-          .in('user_id', chunk)
-          .eq('enabled', true);
-        if (error) {
-          console.error(
-            `[send-fcm-v1-push] fetch tokens chunk ${i / CHUNK_SIZE} error:`,
-            error.message,
-          );
-          continue;
-        }
-        if (data?.length) tokenRows.push(...(data as TokenRow[]));
-      }
-    }
+    // SELECT with safe fallback
+    const { rows, platformAvailable } = await selectTokens(
+      audienceAll ? null : user_ids,
+    );
 
-    if (!tokenRows.length) {
+    if (!rows.length) {
       return new Response(JSON.stringify({ message: 'No valid tokens' }), {
         status: 200,
       });
     }
 
-    const tokens = latestPerUser(tokenRows);
+    const tokens = latestPerUser(rows); // [{ token, platform? }]
     if (!tokens.length) {
       return new Response(
         JSON.stringify({ message: 'No tokens after dedup' }),
@@ -274,10 +328,11 @@ Deno.serve(async req => {
     for (let i = 0; i < tokens.length; i += BATCH) {
       const chunk = tokens.slice(i, i + BATCH);
       const results = await Promise.allSettled(
-        chunk.map(tkn =>
+        chunk.map(({ token, platform }) =>
           sendToToken({
             accessToken,
-            token: tkn,
+            token,
+            platform, // 있을 수도/없을 수도 있음 → 내부에서 안전 분기
             title,
             body,
             data: dataStr,
@@ -293,7 +348,7 @@ Deno.serve(async req => {
             const code = (r.value as any)?.code ?? '';
             const status = (r.value as any)?.status ?? 0;
             if (DEAD.test(String(code)) || status === 404)
-              deadTokens.push(chunk[idx]);
+              deadTokens.push(chunk[idx].token);
           }
         } else failed += 1;
       });
@@ -310,7 +365,8 @@ Deno.serve(async req => {
       JSON.stringify({
         success: true,
         audience: audienceAll ? 'all' : 'targeted',
-        total_tokens_found: tokenRows.length,
+        platform_available: platformAvailable,
+        total_tokens_found: rows.length,
         used_tokens: tokens.length,
         sent,
         failed,
