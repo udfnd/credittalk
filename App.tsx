@@ -31,7 +31,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   wireMessageHandlers,
-  openFromPayload,
+  openFromPayloadOnce,
   updatePushTokenOnLogin,
   setupTokenRefreshListener,
   requestNotificationPermissionAndroid,
@@ -606,7 +606,7 @@ function App(): React.JSX.Element {
     const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp(
       remoteMessage => {
         if (!remoteMessage) return;
-        openFromPayload(navigateToMaybeQueue, remoteMessage.data || {});
+        openFromPayloadOnce(navigateToMaybeQueue, remoteMessage.data || {});
       },
     );
 
@@ -618,7 +618,7 @@ function App(): React.JSX.Element {
 
       const initialNotifee = await notifee.getInitialNotification();
       if (initialNotifee) {
-        openFromPayload(
+        openFromPayloadOnce(
           navigateToMaybeQueue,
           initialNotifee.notification?.data || {},
         );
@@ -626,7 +626,7 @@ function App(): React.JSX.Element {
 
       const initialRemote = await messaging().getInitialNotification();
       if (initialRemote) {
-        openFromPayload(navigateToMaybeQueue, initialRemote.data || {});
+        openFromPayloadOnce(navigateToMaybeQueue, initialRemote.data || {});
       }
     })();
     return () => {
