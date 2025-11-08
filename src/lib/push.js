@@ -61,6 +61,15 @@ export function hasNotificationPayload(remoteMessage) {
 }
 
 /** 제목/본문 + data 병합, params JSON 파싱, 이미지 추출 */
+function sanitizeImageCandidate(raw) {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined') return undefined;
+  return trimmed;
+}
+
 export function pickTitleBody(remote) {
   const d = remote?.data || {};
   const n = remote?.notification || {};
@@ -85,7 +94,10 @@ export function pickTitleBody(remote) {
       ...parsedParams,
     },
     // 서버에서 data.image/notification.image 둘 다 보낼 수 있으므로 병합
-    image: d.image || d.imageUrl || n.image,
+    image:
+      sanitizeImageCandidate(d.image) ||
+      sanitizeImageCandidate(d.imageUrl) ||
+      sanitizeImageCandidate(n.image),
   };
 }
 
