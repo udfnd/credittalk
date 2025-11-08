@@ -87,9 +87,22 @@ function normalizeDataPayload(data: unknown): Record<string, string> {
   if (!data || typeof data !== 'object') return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
-    out[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    if (v === null || typeof v === 'undefined') continue;
+    const str =
+      typeof v === 'string' ? v : JSON.stringify(v);
+    if (!str || str === 'null' || str === 'undefined') continue;
+    out[k] = str;
   }
   return out;
+}
+
+function sanitizeImageUrl(value?: string | null) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined') return undefined;
+  return trimmed;
 }
 
 type TokenRow = {
@@ -173,6 +186,7 @@ function buildMessage(params: {
   silent?: boolean;
 }) {
   const { token, title, body, data, imageUrl, silent } = params;
+  const cleanImage = sanitizeImageUrl(imageUrl);
 
   // data에는 title/body를 (주어졌을 때만) 포함 → 클라 표시에 활용
   // image는 있을 때만 포함
@@ -180,7 +194,7 @@ function buildMessage(params: {
     ...data,
     ...(title ? { title: data.title ?? String(title) } : {}),
     ...(body ? { body: data.body ?? String(body) } : {}),
-    ...(imageUrl ? { image: imageUrl } : {}),
+    ...(cleanImage ? { image: cleanImage } : {}),
     nid: data.nid ?? String(Date.now()), // 디듀프 키
   };
 
@@ -197,13 +211,13 @@ function buildMessage(params: {
     message.notification = {
       ...(title ? { title } : {}),
       ...(body ? { body } : {}),
-      ...(imageUrl ? { image: imageUrl } : {}),
+      ...(cleanImage ? { image: cleanImage } : {}),
     };
     message.android = {
       priority: 'HIGH',
       notification: {
         channel_id: ANDROID_CHANNEL_ID,
-        ...(imageUrl ? { image: imageUrl } : {}),
+        ...(cleanImage ? { image: cleanImage } : {}),
       },
     };
     message.apns = {
@@ -218,7 +232,7 @@ function buildMessage(params: {
                 },
               }
             : {}),
-          ...(imageUrl ? { 'mutable-content': 1 } : {}),
+          ...(cleanImage ? { 'mutable-content': 1 } : {}),
         },
       },
     };
@@ -330,7 +344,7 @@ Deno.serve(async req => {
 
     const title: string | undefined = payload?.title;
     const body: string | undefined = payload?.body;
-    const imageUrl: string | undefined = payload?.imageUrl;
+    const imageUrl = sanitizeImageUrl(payload?.imageUrl);
 
     // data-only 강제 플래그(요청이 명시적으로 지정했을 때 우선)
     const forcedByPayload =
