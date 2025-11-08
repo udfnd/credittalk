@@ -12,7 +12,9 @@ import { supabase } from '../lib/supabaseClient';
 
 export const CHANNEL_ID = 'push_default_v2';
 
-/** Android 채널 보장 */
+/* --------------------------------- 채널/권한 --------------------------------- */
+
+/** Android 채널 보장 (id 변경 시 서버와 일치해야 함) */
 export async function ensureNotificationChannel() {
   if (Platform.OS !== 'android') return;
   await notifee.createChannel({
@@ -22,7 +24,7 @@ export async function ensureNotificationChannel() {
   });
 }
 
-/** Android 13+ 권한 요청 */
+/** Android 13+ POST_NOTIFICATIONS 권한 요청 */
 export const requestNotificationPermissionAndroid = async () => {
   if (Platform.OS !== 'android') return;
   try {
@@ -37,7 +39,9 @@ export const requestNotificationPermissionAndroid = async () => {
   }
 };
 
-/** (선택) 외부 URL 열기 */
+/* --------------------------------- 헬퍼들 --------------------------------- */
+
+/** (선택) 외부 URL 열기 (best-effort) */
 async function openExternalUrlBestEffort(url) {
   if (!url) return;
   try {
@@ -56,7 +60,7 @@ export function hasNotificationPayload(remoteMessage) {
   return Object.values(notif).some(Boolean);
 }
 
-/** 제목/본문 + data 병합(pick) */
+/** 제목/본문 + data 병합, params JSON 파싱, 이미지 추출 */
 export function pickTitleBody(remote) {
   const d = remote?.data || {};
   const n = remote?.notification || {};
@@ -80,6 +84,8 @@ export function pickTitleBody(remote) {
       ...d,
       ...parsedParams,
     },
+    // 서버에서 data.image/notification.image 둘 다 보낼 수 있으므로 병합
+    image: d.image || d.imageUrl || n.image,
   };
 }
 
@@ -94,7 +100,7 @@ function getMessageKey(remote) {
   );
 }
 
-/** 디듀프 체크 & 마킹 */
+/** 디듀프 체크 & 마킹 (표시 디듀프: 현재 기본 비활성화) */
 async function markAndCheckSeen(key) {
   if (!key) return false;
   const k = `noti_seen:${key}`;
@@ -104,24 +110,46 @@ async function markAndCheckSeen(key) {
   return false;
 }
 
+/** 탭 디듀프 키 (nid/collapse_key 우선) */
+function getTapKeyFromData(data = {}) {
+  return (
+    data?.nid ||
+    data?.collapse_key ||
+    data?.messageId ||
+    JSON.stringify({ t: data?.title, b: data?.body })
+  );
+}
+
+/** 동일 알림 탭을 최초 1회만 처리 */
+async function markTapHandledIfFirst(key) {
+  if (!key) return true;
+  const k = `noti_tap:${key}`;
+  const seen = await AsyncStorage.getItem(k);
+  if (seen) return false;
+  await AsyncStorage.setItem(k, String(Date.now()));
+  return true;
+}
+
+/* ------------------------------ 표시/탭 처리 ------------------------------ */
+
 /**
  * “한 번만 표시” 규칙을 강제하는 공통 표시 함수
  * @param {'foreground'|'background'|'unknown'} source
  */
 export async function displayOnce(remote, source = 'unknown') {
-  // 1) 백그라/종료 + notification payload → OS가 이미 표시했으니 우리는 스킵
+  // 1) 백그라운드/종료 + notification payload → OS가 이미 표시했으니 우리는 스킵
   if (source !== 'foreground' && hasNotificationPayload(remote)) {
     return;
   }
 
-  // 2) 디듀프
+  // 2) (선택) 디듀프 — 필요시 주석 해제
   // const key = getMessageKey(remote);
   // const dup = await markAndCheckSeen(key);
   // if (dup) return;
 
   // 3) 표시
   await ensureNotificationChannel();
-  const { title, body, data } = pickTitleBody(remote);
+  const { title, body, data, image } = pickTitleBody(remote);
 
   await notifee.displayNotification({
     // 동일 id면 업데이트/병합
@@ -134,7 +162,14 @@ export async function displayOnce(remote, source = 'unknown') {
     android: {
       channelId: CHANNEL_ID,
       pressAction: { id: 'default' },
-      style: body ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
+      smallIcon: 'ic_launcher',
+      style: image
+        ? { type: AndroidStyle.BIGPICTURE, picture: image }
+        : body
+          ? { type: AndroidStyle.BIGTEXT, text: body }
+          : undefined,
+      // 큰 아이콘도 이미지로 (가능할 때만)
+      largeIcon: image || undefined,
     },
     ios: {
       sound: 'default',
@@ -143,6 +178,8 @@ export async function displayOnce(remote, source = 'unknown') {
         sound: true,
         badge: true,
       },
+      // iOS 포그라운드 표시 시 이미지 첨부(알림 확장)
+      attachments: image ? [{ url: image }] : undefined,
     },
   });
 }
@@ -177,6 +214,14 @@ export function openFromPayload(navigateTo, data = {}) {
   }
 }
 
+/** 탭 처리: 동일 알림은 한 번만 열기 */
+export async function openFromPayloadOnce(navigateTo, data = {}) {
+  const key = getTapKeyFromData(data);
+  const first = await markTapHandledIfFirst(key);
+  if (!first) return;
+  return openFromPayload(navigateTo, data);
+}
+
 /** 런타임 와이어링 (App.tsx에서 호출) — 포그라운드만 바인딩 */
 export async function wireMessageHandlers(navigateTo) {
   // Fast Refresh/중복 호출 방지
@@ -195,12 +240,12 @@ export async function wireMessageHandlers(navigateTo) {
   // 포그라운드 탭 이벤트만 처리 (백그라운드 탭은 index.js 전담)
   notifee.onForegroundEvent(({ type, detail }) => {
     if (type === EventType.PRESS) {
-      openFromPayload(navigateTo, detail?.notification?.data || {});
+      openFromPayloadOnce(navigateTo, detail?.notification?.data || {});
     }
   });
 }
 
-// ===== 토큰 등록/갱신 & 해제 =====
+/* ---------------------------- 토큰 등록/갱신/해제 ---------------------------- */
 
 /** 로그인 직후 토큰 등록 */
 export const updatePushTokenOnLogin = async userId => {
@@ -233,6 +278,7 @@ export const updatePushTokenOnLogin = async userId => {
     });
 
     if (error) {
+      // 함수 미존재/버전 차이 방어
       if (error.code === '42883') {
         console.error('[Push] RPC "register_push_token" not found.');
       }
@@ -250,17 +296,21 @@ export const updatePushTokenOnLogin = async userId => {
 export const setupTokenRefreshListener = userId => {
   if (!userId) return () => {};
   return messaging().onTokenRefresh(async newFcmToken => {
-    console.log('[Push] FCM token refreshed:', newFcmToken);
-    const { error } = await supabase.rpc('register_push_token', {
-      fcm_token: newFcmToken,
-      p_platform: Platform.OS,
-    });
-    if (error)
-      console.error('[Push] Failed to register refreshed token:', error);
+    try {
+      console.log('[Push] FCM token refreshed:', newFcmToken);
+      const { error } = await supabase.rpc('register_push_token', {
+        fcm_token: newFcmToken,
+        p_platform: Platform.OS,
+      });
+      if (error)
+        console.error('[Push] Failed to register refreshed token:', error);
+    } catch (e) {
+      console.warn('[Push] onTokenRefresh error:', e?.message || e);
+    }
   });
 };
 
-/** 토큰 해제 */
+/** 토큰 해제 (로그아웃 등) */
 export async function unregisterPushToken() {
   try {
     const token = await messaging().getToken();
