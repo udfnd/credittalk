@@ -1,6 +1,4 @@
-/**
- * @format
- */
+// index.js
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
@@ -15,7 +13,7 @@ import { name as appName } from './app.json';
 import {
   displayOnce,
   ensureNotificationChannel,
-  openFromPayload, // 외부 링크/딥링크 열기
+  openFromPayloadOnce, // 외부 링크/딥링크 열기
 } from './src/lib/push';
 
 // Fast Refresh 대비: 중복 등록 방지
@@ -39,7 +37,7 @@ if (!global.__PUSH_BG_BOUND__) {
     try {
       if (type === EventType.PRESS) {
         // headless 컨텍스트라 내비게이션은 생략, 링크/딥링크만 처리
-        await openFromPayload(undefined, detail?.notification?.data || {});
+        await openFromPayloadOnce(undefined, detail?.notification?.data || {});
       }
     } catch (e) {
       // no-op
