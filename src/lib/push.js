@@ -123,6 +123,11 @@ export async function displayOnce(remote, source = 'unknown') {
   await ensureNotificationChannel();
   const { title, body, data } = pickTitleBody(remote);
 
+  const image =
+    typeof data.image === 'string' && data.image.trim().length > 0
+      ? data.image
+      : undefined;
+
   await notifee.displayNotification({
     // 동일 id면 업데이트/병합
     id:
@@ -134,7 +139,12 @@ export async function displayOnce(remote, source = 'unknown') {
     android: {
       channelId: CHANNEL_ID,
       pressAction: { id: 'default' },
-      style: body ? { type: AndroidStyle.BIGTEXT, text: body } : undefined,
+      largeIcon: image,
+      style: image
+        ? { type: AndroidStyle.BIGPICTURE, picture: image }
+        : body
+        ? { type: AndroidStyle.BIGTEXT, text: body }
+        : undefined,
     },
     ios: {
       sound: 'default',
@@ -143,11 +153,38 @@ export async function displayOnce(remote, source = 'unknown') {
         sound: true,
         badge: true,
       },
+      attachments: image ? [{ url: image }] : undefined,
     },
   });
 }
 
 /** 페이로드 기반 라우팅/외부링크 */
+function tryParseJson(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object') return parsed;
+    return parsed;
+  } catch (error) {
+    console.warn('[Push] Failed to parse params JSON:', error);
+    return null;
+  }
+}
+
+function sanitizeRest(rest) {
+  const clone = { ...rest };
+  delete clone.params;
+  delete clone.title;
+  delete clone.body;
+  delete clone.image;
+  delete clone.imageUrl;
+  delete clone.nid;
+  delete clone.collapse_key;
+  delete clone.link_url;
+  delete clone.url;
+  return clone;
+}
+
 export function openFromPayload(navigateTo, data = {}) {
   try {
     const ALLOWED_SCREENS = new Set([
@@ -159,9 +196,24 @@ export function openFromPayload(navigateTo, data = {}) {
       'ReviewDetail',
     ]);
 
-    const { screen, link_url, url, ...rest } = data || {};
-    const finalParams =
-      rest.params && typeof rest.params === 'object' ? rest.params : rest;
+    const { screen, link_url, url, params, ...rest } = data || {};
+    const restPayload = sanitizeRest(rest);
+
+    let finalParams;
+    if (params !== undefined) {
+      if (typeof params === 'object' && params !== null) {
+        finalParams = params;
+      } else {
+        const parsed = tryParseJson(params);
+        if (parsed && typeof parsed === 'object') {
+          finalParams = parsed;
+        }
+      }
+    }
+
+    if (!finalParams && Object.keys(restPayload).length > 0) {
+      finalParams = restPayload;
+    }
 
     if (screen && ALLOWED_SCREENS.has(screen)) {
       navigateTo?.(screen, finalParams);
@@ -169,8 +221,8 @@ export function openFromPayload(navigateTo, data = {}) {
     }
 
     const externalUrl = link_url || url;
-    if (typeof externalUrl === 'string') {
-      openExternalUrlBestEffort(externalUrl);
+    if (typeof externalUrl === 'string' && externalUrl.trim().length > 0) {
+      openExternalUrlBestEffort(externalUrl.trim());
     }
   } catch (e) {
     console.warn('[Push] openFromPayload error:', e?.message || e);
