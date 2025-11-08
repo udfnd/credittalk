@@ -19,7 +19,6 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
 const ANDROID_CHANNEL_ID = 'push_default_v2';
-const CHUNK_SIZE = 100;
 
 const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
@@ -82,8 +81,10 @@ function normalizeDataPayload(
 ): Record<string, string> {
   if (!data || typeof data !== 'object') return {};
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(data))
+  for (const [k, v] of Object.entries(data)) {
+    if (v === undefined || v === null) continue;
     out[k] = typeof v === 'string' ? v : JSON.stringify(v);
+  }
   return out;
 }
 
@@ -153,15 +154,7 @@ async function sendToToken(params: {
   data?: Record<string, string>;
   imageUrl?: string;
 }) {
-  const {
-    accessToken,
-    token,
-    platform,
-    title,
-    body,
-    data = {},
-    imageUrl,
-  } = params;
+  const { accessToken, token, title, body, data = {}, imageUrl } = params;
 
   const dataPayload: Record<string, string> = {
     ...data,
@@ -170,69 +163,59 @@ async function sendToToken(params: {
 
   if (!dataPayload.title && title) dataPayload.title = String(title);
   if (!dataPayload.body && body) dataPayload.body = String(body);
-  if (!dataPayload.nid) dataPayload.nid = String(Date.now()); // 클라 디듀프/업데이트용
+  if (!dataPayload.nid)
+    dataPayload.nid = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
 
-  const hasLink =
-    typeof dataPayload.link_url === 'string' && dataPayload.link_url.length > 0;
+  // 플랫폼 정보는 현재 즉시 사용하지 않지만 dataPayload에 포함되어 있을 수 있음
 
-  // 플랫폼 판정: 문자열 소문자화
-  const p = (
-    typeof platform === 'string' ? platform.toLowerCase() : platform
-  ) as Platform;
-
-  // wantDataOnly 규칙:
-  //  - android면 항상 data-only (포그라운드 onMessage 보장)
-  //  - ios면 링크 있을 때만 data-only (앱 하나만 표시)
-  //  - platform 모르면 예전 로직(링크 없으면 notification)으로 폴백
-  const isAndroid = p === 'android';
-  const isIos = p === 'ios';
-  const wantDataOnly = isAndroid ? true : isIos ? hasLink : hasLink;
-
-  // iOS APNs 설정 (Android에는 영향 없음)
-  const apns: Record<string, unknown> = {};
-  const apnsHeaders: Record<string, string> = {};
-  if (wantDataOnly) {
-    // iOS data-only (silent)
-    apnsHeaders['apns-push-type'] = 'background';
-    apnsHeaders['apns-priority'] = '5';
-    apns['payload'] = { aps: { 'content-available': 1 } };
-  } else {
-    // iOS notification
-    apnsHeaders['apns-push-type'] = 'alert';
-    apnsHeaders['apns-priority'] = '10';
-    const aps: Record<string, unknown> = { sound: 'default' };
-    const alert: Record<string, string> = {};
-    if (title) alert.title = title;
-    if (body) alert.body = body;
-    if (imageUrl) aps['mutable-content'] = 1;
-    if (Object.keys(alert).length) aps['alert'] = alert;
-    apns['payload'] = { aps };
+  // iOS APNs 설정
+  const apnsHeaders: Record<string, string> = {
+    'apns-push-type': 'alert',
+    'apns-priority': '10',
+  };
+  const aps: Record<string, unknown> = {
+    sound: 'default',
+    ...(imageUrl ? { 'mutable-content': 1 } : {}),
+  };
+  const alert: Record<string, string> = {};
+  if (title) alert.title = title;
+  if (body) alert.body = body;
+  if (Object.keys(alert).length) aps.alert = alert;
+  const apns = {
+    headers: apnsHeaders,
+    payload: { aps },
+  };
+  if (!Object.keys(alert).length) {
+    // 제목/본문이 비어있으면 백그라운드 알림으로 전환
+    apns.headers['apns-push-type'] = 'background';
+    apns.headers['apns-priority'] = '5';
+    (apns.payload.aps as Record<string, unknown>)['content-available'] = 1;
   }
 
-  // Android 설정
-  const android: Record<string, unknown> = { priority: 'HIGH' };
-  if (!wantDataOnly) {
-    // notification 메시지로 보낼 때만 채널/이미지 지정
-    android['notification'] = {
+  // Android 설정 (항상 notification 포함)
+  const android: Record<string, unknown> = {
+    priority: 'HIGH',
+    notification: {
       channel_id: ANDROID_CHANNEL_ID,
+      sound: 'default',
       ...(imageUrl ? { image: imageUrl } : {}),
-    };
-  }
+    },
+  };
+
+  const notificationPayload: Record<string, string> = {};
+  if (title) notificationPayload.title = title;
+  if (body) notificationPayload.body = body;
+  if (imageUrl) notificationPayload.image = imageUrl;
 
   const message: Record<string, unknown> = {
     token,
-    data: dataPayload, // ← data-only 가능
+    data: dataPayload,
     android,
-    apns: { ...apns, headers: apnsHeaders },
+    apns,
+    ...(Object.keys(notificationPayload).length
+      ? { notification: notificationPayload }
+      : {}),
   };
-
-  if (!wantDataOnly) {
-    const notificationPayload: Record<string, string> = {};
-    if (title) notificationPayload.title = title;
-    if (body) notificationPayload.body = body;
-    if (imageUrl) notificationPayload.image = imageUrl;
-    message['notification'] = notificationPayload;
-  }
 
   const FCM_URL = `https://fcm.googleapis.com/v1/projects/${SERVICE_ACCOUNT.project_id}/messages:send`;
   const res = await fetch(FCM_URL, {
@@ -280,15 +263,16 @@ Deno.serve(async req => {
           typeof id === 'string' && id.trim().length > 0,
       );
 
-    const audienceAll: boolean = Boolean(
-      payload?.audience?.all ?? payload?.audience_all ?? payload?.all,
-    );
+    const rawAudienceAll = payload?.audience?.all ?? payload?.audience_all ?? payload?.all;
+    const hasTargetIds = user_ids.length > 0;
+    const audienceAll: boolean =
+      rawAudienceAll === true || (!hasTargetIds && rawAudienceAll !== false);
     const title: string | undefined = payload?.title;
     const body: string | undefined = payload?.body;
     const imageUrl: string | undefined = payload?.imageUrl;
     const dataStr = normalizeDataPayload(payload?.data);
 
-    if (!audienceAll && user_ids.length === 0) {
+    if (!audienceAll && !hasTargetIds) {
       return new Response(
         JSON.stringify({
           error:
