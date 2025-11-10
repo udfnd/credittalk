@@ -1,5 +1,3 @@
-// src/lib/push.js
-
 import { Platform, PermissionsAndroid, Linking, Alert } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import notifee, {
@@ -14,7 +12,6 @@ export const CHANNEL_ID = 'push_default_v2';
 
 /* --------------------------------- 채널/권한 --------------------------------- */
 
-/** Android 채널 보장 (id 변경 시 서버와 일치해야 함) */
 export async function ensureNotificationChannel() {
   if (Platform.OS !== 'android') return;
   await notifee.createChannel({
@@ -24,7 +21,6 @@ export async function ensureNotificationChannel() {
   });
 }
 
-/** Android 13+ POST_NOTIFICATIONS 권한 요청 */
 export const requestNotificationPermissionAndroid = async () => {
   if (Platform.OS !== 'android') return;
   try {
@@ -41,7 +37,6 @@ export const requestNotificationPermissionAndroid = async () => {
 
 /* --------------------------------- 헬퍼들 --------------------------------- */
 
-/** (선택) 외부 URL 열기 (best-effort) */
 async function openExternalUrlBestEffort(url) {
   if (!url) return;
   try {
@@ -53,20 +48,26 @@ async function openExternalUrlBestEffort(url) {
   }
 }
 
-/** notification payload 존재 여부 */
 export function hasNotificationPayload(remoteMessage) {
   const notif = remoteMessage?.notification;
   if (!notif) return false;
   return Object.values(notif).some(Boolean);
 }
 
-/** 제목/본문 + data 병합, params JSON 파싱, 이미지 추출 */
+function isValidAndroidImageString(uri) {
+  if (typeof uri !== 'string') return false;
+  const u = uri.trim();
+  if (!u) return false;
+  return /^(https?:|content:|file:|asset:|android\.resource:)/i.test(u);
+}
+
 function sanitizeImageCandidate(raw) {
   if (typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
   const lowered = trimmed.toLowerCase();
   if (lowered === 'null' || lowered === 'undefined') return undefined;
+  if (!isValidAndroidImageString(trimmed)) return undefined;
   return trimmed;
 }
 
@@ -74,7 +75,6 @@ export function pickTitleBody(remote) {
   const d = remote?.data || {};
   const n = remote?.notification || {};
 
-  // data.params(JSON) → 펼치기
   let parsedParams = {};
   if (d.params && typeof d.params === 'string') {
     try {
@@ -89,11 +89,7 @@ export function pickTitleBody(remote) {
   return {
     title: d.title || n.title || '알림',
     body: d.body || n.body || '',
-    data: {
-      ...d,
-      ...parsedParams,
-    },
-    // 서버에서 data.image/notification.image 둘 다 보낼 수 있으므로 병합
+    data: { ...d, ...parsedParams },
     image:
       sanitizeImageCandidate(d.image) ||
       sanitizeImageCandidate(d.imageUrl) ||
@@ -101,28 +97,6 @@ export function pickTitleBody(remote) {
   };
 }
 
-/** 디듀프 키 생성: messageId → data.nid → fallback 조합 */
-function getMessageKey(remote) {
-  const d = remote?.data || {};
-  const n = remote?.notification || {};
-  return (
-    remote?.messageId ||
-    d.nid ||
-    `${d.threadId || ''}:${d.ts || ''}:${d.title || n.title || ''}:${d.body || n.body || ''}`
-  );
-}
-
-/** 디듀프 체크 & 마킹 (표시 디듀프: 현재 기본 비활성화) */
-async function markAndCheckSeen(key) {
-  if (!key) return false;
-  const k = `noti_seen:${key}`;
-  const seen = await AsyncStorage.getItem(k);
-  if (seen) return true;
-  await AsyncStorage.setItem(k, String(Date.now()));
-  return false;
-}
-
-/** 탭 디듀프 키 (nid/collapse_key 우선) */
 function getTapKeyFromData(data = {}) {
   return (
     data?.nid ||
@@ -132,7 +106,6 @@ function getTapKeyFromData(data = {}) {
   );
 }
 
-/** 동일 알림 탭을 최초 1회만 처리 */
 async function markTapHandledIfFirst(key) {
   if (!key) return true;
   const k = `noti_tap:${key}`;
@@ -144,59 +117,46 @@ async function markTapHandledIfFirst(key) {
 
 /* ------------------------------ 표시/탭 처리 ------------------------------ */
 
-/**
- * “한 번만 표시” 규칙을 강제하는 공통 표시 함수
- * @param {'foreground'|'background'|'unknown'} source
- */
 export async function displayOnce(remote, source = 'unknown') {
-  // 1) 백그라운드/종료 + notification payload → OS가 이미 표시했으니 우리는 스킵
-  if (source !== 'foreground' && hasNotificationPayload(remote)) {
+  const expectOs = remote?.data?.expect_os_alert === '1';
+
+  // OS가 표시할 예정이면(서버가 명시) 또는 notification payload가 붙어왔고,
+  // 현재 포그라운드가 아니라면 → 중복 표기를 스킵
+  if (source !== 'foreground' && (expectOs || hasNotificationPayload(remote))) {
     return;
   }
 
-  // 2) (선택) 디듀프 — 필요시 주석 해제
-  // const key = getMessageKey(remote);
-  // const dup = await markAndCheckSeen(key);
-  // if (dup) return;
-
-  // 3) 표시
   await ensureNotificationChannel();
   const { title, body, data, image } = pickTitleBody(remote);
 
+  const androidOptions = {
+    channelId: CHANNEL_ID,
+    pressAction: { id: 'default' },
+    smallIcon: 'ic_launcher',
+    ...(image
+      ? { style: { type: AndroidStyle.BIGPICTURE, picture: image } }
+      : body
+        ? { style: { type: AndroidStyle.BIGTEXT, text: body } }
+        : {}),
+    ...(image ? { largeIcon: image } : {}), // 유효한 URL/리소스일 때만
+  };
+
   await notifee.displayNotification({
-    // 동일 id면 업데이트/병합
     id:
       (remote?.data && (remote.data.nid || remote.data.collapse_key)) ||
       undefined,
     title,
     body,
     data,
-    android: {
-      channelId: CHANNEL_ID,
-      pressAction: { id: 'default' },
-      smallIcon: 'ic_launcher',
-      style: image
-        ? { type: AndroidStyle.BIGPICTURE, picture: image }
-        : body
-          ? { type: AndroidStyle.BIGTEXT, text: body }
-          : undefined,
-      // 큰 아이콘도 이미지로 (가능할 때만)
-      largeIcon: image || undefined,
-    },
+    android: androidOptions,
     ios: {
       sound: 'default',
-      foregroundPresentationOptions: {
-        alert: true,
-        sound: true,
-        badge: true,
-      },
-      // iOS 포그라운드 표시 시 이미지 첨부(알림 확장)
+      foregroundPresentationOptions: { alert: true, sound: true, badge: true },
       attachments: image ? [{ url: image }] : undefined,
     },
   });
 }
 
-/** 페이로드 기반 라우팅/외부링크 */
 export function openFromPayload(navigateTo, data = {}) {
   try {
     const ALLOWED_SCREENS = new Set([
@@ -226,7 +186,6 @@ export function openFromPayload(navigateTo, data = {}) {
   }
 }
 
-/** 탭 처리: 동일 알림은 한 번만 열기 */
 export async function openFromPayloadOnce(navigateTo, data = {}) {
   const key = getTapKeyFromData(data);
   const first = await markTapHandledIfFirst(key);
@@ -234,32 +193,8 @@ export async function openFromPayloadOnce(navigateTo, data = {}) {
   return openFromPayload(navigateTo, data);
 }
 
-/** 런타임 와이어링 (App.tsx에서 호출) — 포그라운드만 바인딩 */
-export async function wireMessageHandlers(navigateTo) {
-  // Fast Refresh/중복 호출 방지
-  if (global.__PUSH_FG_BOUND__) return;
-  global.__PUSH_FG_BOUND__ = true;
-
-  // 포그라운드 수신 → 우리가 1회 표시
-  messaging().onMessage(async remoteMessage => {
-    try {
-      await displayOnce(remoteMessage, 'foreground');
-    } catch (e) {
-      console.warn('[FCM] onMessage display error:', e?.message || e);
-    }
-  });
-
-  // 포그라운드 탭 이벤트만 처리 (백그라운드 탭은 index.js 전담)
-  notifee.onForegroundEvent(({ type, detail }) => {
-    if (type === EventType.PRESS) {
-      openFromPayloadOnce(navigateTo, detail?.notification?.data || {});
-    }
-  });
-}
-
 /* ---------------------------- 토큰 등록/갱신/해제 ---------------------------- */
 
-/** 로그인 직후 토큰 등록 */
 export const updatePushTokenOnLogin = async userId => {
   if (!userId) return;
 
@@ -290,7 +225,6 @@ export const updatePushTokenOnLogin = async userId => {
     });
 
     if (error) {
-      // 함수 미존재/버전 차이 방어
       if (error.code === '42883') {
         console.error('[Push] RPC "register_push_token" not found.');
       }
@@ -304,7 +238,6 @@ export const updatePushTokenOnLogin = async userId => {
   }
 };
 
-/** 토큰 갱신 리스너 */
 export const setupTokenRefreshListener = userId => {
   if (!userId) return () => {};
   return messaging().onTokenRefresh(async newFcmToken => {
@@ -322,7 +255,6 @@ export const setupTokenRefreshListener = userId => {
   });
 };
 
-/** 토큰 해제 (로그아웃 등) */
 export async function unregisterPushToken() {
   try {
     const token = await messaging().getToken();
