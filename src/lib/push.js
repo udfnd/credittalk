@@ -9,8 +9,35 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabaseClient';
 
 export const CHANNEL_ID = 'push_default_v2';
+const PENDING_TAP_KEY = 'noti:pending_tap:v1';
 
 /* --------------------------------- 채널/권한 --------------------------------- */
+
+export async function queueTapPayload(data = {}) {
+  try {
+    // nid/키 기반으로 마지막 것만 보관 (중복방지)
+    const tapKey = getTapKeyFromData(data);
+    const payload = { key: tapKey, at: Date.now(), data };
+    await AsyncStorage.setItem(PENDING_TAP_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // no-op
+  }
+}
+
+// 추가: 큐 비우며 1회 라우팅
+export async function drainQueuedTap(navigateTo) {
+  try {
+    const raw = await AsyncStorage.getItem(PENDING_TAP_KEY);
+    if (!raw) return;
+    await AsyncStorage.removeItem(PENDING_TAP_KEY);
+    const parsed = JSON.parse(raw);
+    if (parsed?.data) {
+      await openFromPayloadOnce(navigateTo, parsed.data);
+    }
+  } catch (e) {
+    // no-op
+  }
+}
 
 export async function ensureNotificationChannel() {
   if (Platform.OS !== 'android') return;

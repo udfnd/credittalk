@@ -91,7 +91,7 @@ serve(async req => {
     };
 
     // 원글 작성자
-    if (postAuthorUuid && !notifiedUserUuids.has(postAuthorUuid)) {
+    if (postAuthorUuid) {
       await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
         body: {
           user_ids: [postAuthorUuid],
@@ -120,7 +120,7 @@ serve(async req => {
           .single();
 
         const parentUuid = parentAuthor?.auth_user_id;
-        if (parentUuid && !notifiedUserUuids.has(parentUuid)) {
+        if (parentUuid) {
           await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
             body: {
               user_ids: [parentUuid],
