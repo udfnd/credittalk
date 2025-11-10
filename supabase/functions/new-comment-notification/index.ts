@@ -87,6 +87,7 @@ serve(async req => {
     const notificationData = {
       screen: mapping.screen,
       params: { [mapping.idParamName]: comment.post_id },
+      [mapping.idParamName]: comment.post_id,
       nid, // 클라/서버 모두 동일 키 사용
     };
 
