@@ -97,6 +97,7 @@ Deno.serve(async req => {
               data: {
                 screen,
                 params: { [idParamKey]: post.id },
+                [idParamKey]: post.id,
                 nid, // ✅ 관리자용도 동일 nid로 수렴
               },
             },
@@ -148,6 +149,7 @@ Deno.serve(async req => {
             data: {
               screen,
               params: { [idParamKey]: post.id },
+              [idParamKey]: post.id,
               nid,
             },
           },
