@@ -184,6 +184,14 @@ export async function displayOnce(remote, source = 'unknown') {
   });
 }
 
+function isPlainObject(value) {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
 export function openFromPayload(navigateTo, data = {}) {
   try {
     const ALLOWED_SCREENS = new Set([
@@ -195,9 +203,25 @@ export function openFromPayload(navigateTo, data = {}) {
       'ReviewDetail',
     ]);
 
-    const { screen, link_url, url, ...rest } = data || {};
-    const finalParams =
-      rest.params && typeof rest.params === 'object' ? rest.params : rest;
+    const { screen, link_url, url, params: rawParams, ...rest } = data || {};
+
+    let parsedParams = {};
+    if (typeof rawParams === 'string') {
+      try {
+        const parsed = JSON.parse(rawParams);
+        if (isPlainObject(parsed)) {
+          parsedParams = parsed;
+        }
+      } catch (e) {
+        console.warn('[Push] Failed to parse params payload:', e);
+      }
+    } else if (isPlainObject(rawParams)) {
+      parsedParams = rawParams;
+    }
+
+    const finalParams = Object.keys(parsedParams).length
+      ? { ...rest, ...parsedParams }
+      : rest;
 
     if (screen && ALLOWED_SCREENS.has(screen)) {
       navigateTo?.(screen, finalParams);
