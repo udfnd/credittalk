@@ -1,9 +1,16 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 const supabaseAdmin = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  {
+    global: {
+      headers: {
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`,
+      },
+    },
+    auth: { autoRefreshToken: false, persistSession: false },
+  },
 );
 
 const BOARD_TYPE_MAP = {
@@ -44,7 +51,7 @@ const BOARD_TYPE_MAP = {
   },
 } as const;
 
-serve(async req => {
+Deno.serve(async req => {
   try {
     const { record: comment } = await req.json();
     const mapping =
@@ -54,12 +61,13 @@ serve(async req => {
       const message = !mapping
         ? `Board type mapping not found for ${comment?.board_type}`
         : 'No comment data or post_id';
-      return new Response(JSON.stringify({ message }), { status: 400 });
+      return new Response(JSON.stringify({ message }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // 모든 발송에서 동일 nid 사용 → 재시도/중복 트리거에도 하나로 수렴
     const nid = `comment_${String(comment.id)}`;
-
     const notifiedUserUuids = new Set<string>();
 
     const { data: post, error: postError } = await supabaseAdmin
@@ -82,29 +90,31 @@ serve(async req => {
 
     const commentAuthorNickname = commentAuthor?.nickname || '익명';
     const commentAuthorUuid = commentAuthor?.auth_user_id;
-    if (commentAuthorUuid) notifiedUserUuids.add(commentAuthorUuid); // 자기 자신 중복 방지
+    if (commentAuthorUuid) notifiedUserUuids.add(String(commentAuthorUuid));
 
-    const notificationData = {
-      screen: mapping.screen,
-      params: { [mapping.idParamName]: comment.post_id },
-      [mapping.idParamName]: comment.post_id,
-      nid, // 클라/서버 모두 동일 키 사용
+    const idParamKey = mapping.idParamName;
+    const screen = mapping.screen;
+
+    const dataPayload = {
+      type: 'NAV',
+      screen: String(screen),
+      params: JSON.stringify({ [idParamKey]: String(comment.post_id) }),
+      nid: String(nid),
+      [idParamKey]: String(comment.post_id),
     };
 
-    // 원글 작성자
     if (postAuthorUuid) {
       await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
         body: {
-          user_ids: [postAuthorUuid],
+          user_ids: [String(postAuthorUuid)],
           title: '새로운 댓글 알림',
           body: `${commentAuthorNickname}님이 회원님의 게시물에 댓글을 남겼습니다.`,
-          data: notificationData,
+          data: dataPayload,
         },
       });
-      notifiedUserUuids.add(postAuthorUuid);
+      notifiedUserUuids.add(String(postAuthorUuid));
     }
 
-    // 부모 댓글 작성자(대댓글 시)
     if (comment.parent_comment_id) {
       const { data: parentComment } = await supabaseAdmin
         .from('comments')
@@ -121,25 +131,25 @@ serve(async req => {
           .single();
 
         const parentUuid = parentAuthor?.auth_user_id;
-        if (parentUuid) {
+        if (parentUuid && !notifiedUserUuids.has(String(parentUuid))) {
           await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
             body: {
-              user_ids: [parentUuid],
+              user_ids: [String(parentUuid)],
               title: '새로운 답글 알림',
               body: `${commentAuthorNickname}님이 회원님의 댓글에 답글을 남겼습니다.`,
-              data: notificationData, // 같은 nid
+              data: dataPayload,
             },
           });
-          notifiedUserUuids.add(parentUuid);
+          notifiedUserUuids.add(String(parentUuid));
         }
       }
     }
 
-    // 관리자 전체(작성자/부모댓글 작성자와 중복 방지)
     const { data: admins, error: adminError } = await supabaseAdmin
       .from('users')
       .select('auth_user_id')
       .eq('is_admin', true);
+
     if (!adminError && admins?.length) {
       const adminUuids = admins
         .map(a => a.auth_user_id)
@@ -147,13 +157,14 @@ serve(async req => {
           (uuid): uuid is string =>
             typeof uuid === 'string' && uuid && !notifiedUserUuids.has(uuid),
         );
+
       if (adminUuids.length) {
         await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
           body: {
-            user_ids: adminUuids,
-            title: `[관리자] 새 댓글 알림`,
+            user_ids: adminUuids.map(String),
+            title: '[관리자] 새 댓글 알림',
             body: `'${postTitle}' 게시물에 ${commentAuthorNickname}님이 새 댓글을 작성했습니다.`,
-            data: notificationData, // 같은 nid
+            data: dataPayload,
           },
         });
       }
@@ -164,7 +175,6 @@ serve(async req => {
       status: 200,
     });
   } catch (error: any) {
-    console.error('Error processing request:', error);
     return new Response(
       JSON.stringify({ error: error?.message ?? String(error) }),
       {
