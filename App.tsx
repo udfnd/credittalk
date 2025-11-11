@@ -1,5 +1,3 @@
-// App.tsx
-
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
@@ -40,7 +38,6 @@ import {
   drainQueuedTap,
 } from './src/lib/push';
 
-// Screens (생략 없이 원문 그대로)
 import HomeScreen from './src/screens/HomeScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import UnifiedSearchScreen from './src/screens/UnifiedSearchScreen';
@@ -89,16 +86,13 @@ import SafetyPolicyScreen from './src/screens/SafetyPolicyScreen';
 import SafetyAgreementModal from './src/components/SafetyAgreementModal';
 import { SAFETY_AGREEMENT_STORAGE_KEY } from './src/lib/contentSafety';
 
-/* ------------------------------ Debug Helpers ------------------------------ */
 const LOG = (...args: any[]) => console.log(...args);
-// 간단 포매터
 const L_APP = (...a: any[]) => LOG('[APP]', ...a);
 const L_PUSH = (...a: any[]) => LOG('[PUSH→APP]', ...a);
 const L_NAV = (...a: any[]) => LOG('[NAV]', ...a);
 const L_INTENT = (...a: any[]) => LOG('[NAV:INTENT]', ...a);
 const L_AUTH = (...a: any[]) => LOG('[AUTH]', ...a);
 
-/* -------------------------------- Linking --------------------------------- */
 const linking = {
   prefixes: ['credittalk://'],
   config: {
@@ -123,7 +117,6 @@ function needsAuth(screen: string) {
   return PROTECTED_SCREENS.has(screen);
 }
 
-/* ----------------------------- Navigator Types ----------------------------- */
 export type CommunityStackParamList = {
   CommunityList: undefined;
   CommunityPostDetail: { postId: number; postTitle?: string };
@@ -189,7 +182,6 @@ export type RootStackParamList = {
   SafetyPolicy: undefined;
 };
 
-/* --------------------------------- Stacks --------------------------------- */
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const CommunityNativeStack =
   createNativeStackNavigator<CommunityStackParamList>();
@@ -321,7 +313,6 @@ function MainTabs() {
   );
 }
 
-/* ----------------------------- App Navigator ------------------------------- */
 function AppNavigator() {
   const { user, profile, isLoading } = useAuth();
 
@@ -548,7 +539,6 @@ function AppNavigator() {
   );
 }
 
-/* -------- Auth 준비 감지 + 보류 의도 소화 (Provider 하위에서 실행) -------- */
 function NavIntentReplayer({
   navRef,
   pendingNavRef,
@@ -592,12 +582,11 @@ function NavIntentReplayer({
     } else {
       L_INTENT('pending exists, but auth not ready yet');
     }
-  }, [user, profile, navRef, navigateToScreen]);
+  }, [user, profile, navRef, navigateToScreen, pendingNavRef]);
 
   return null;
 }
 
-/* ---------------------------------- App ----------------------------------- */
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
   const pendingNavRef = useRef<{ screen: string; params?: any } | null>(null);
@@ -605,20 +594,6 @@ function App(): React.JSX.Element {
 
   const [hasAcceptedSafety, setHasAcceptedSafety] = useState(false);
   const [isCheckingSafety, setIsCheckingSafety] = useState(true);
-
-  const onAuthReadyChange = useCallback(
-    (ready: boolean) => {
-      L_AUTH('onAuthReadyChange', { ready });
-      authReadyRef.current = ready;
-      if (ready && navRef.isReady() && pendingNavRef.current) {
-        const { screen, params } = pendingNavRef.current;
-        L_INTENT('auth ready & nav ready → flush pending', { screen, params });
-        pendingNavRef.current = null;
-        navigateToScreen(screen, params);
-      }
-    },
-    [navRef],
-  );
 
   const navigateToScreen = useCallback(
     (screen: string, params?: any) => {
@@ -692,6 +667,20 @@ function App(): React.JSX.Element {
     [navRef, navigateToScreen],
   );
 
+  const onAuthReadyChange = useCallback(
+    (ready: boolean) => {
+      L_AUTH('onAuthReadyChange', { ready });
+      authReadyRef.current = ready;
+      if (ready && navRef.isReady() && pendingNavRef.current) {
+        const { screen, params } = pendingNavRef.current;
+        L_INTENT('auth ready & nav ready → flush pending', { screen, params });
+        pendingNavRef.current = null;
+        navigateToScreen(screen, params);
+      }
+    },
+    [navRef, navigateToScreen],
+  );
+
   useEffect(() => {
     L_APP('NaverLogin.initialize');
     NaverLogin.initialize({
@@ -731,18 +720,24 @@ function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    // 1) 앱이 OS 배너 탭으로 열렸을 때(FG/BG 상태에서) FCM가 직접 주는 콜백
     const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp(
       remoteMessage => {
         L_PUSH('onNotificationOpenedApp', {
           hasMsg: !!remoteMessage,
           data: remoteMessage?.data,
         });
-        if (!remoteMessage) return;
-        openFromPayloadOnce(navigateToMaybeQueue, remoteMessage.data || {});
+        if (remoteMessage?.data) {
+          openFromPayloadOnce(navigateToMaybeQueue, remoteMessage.data);
+        }
       },
     );
 
+    // ⚠️ App.tsx에서는 notifee.onForegroundEvent 등록 금지!
+    //    (중복 네비게이션 방지: 포그라운드 탭 핸들러는 push.js: wireMessageHandlers에서만 등록)
+
     (async () => {
+      // 2) 권한/채널 준비
       await requestNotificationPermissionAndroid().then(() =>
         L_APP('Android notification permission requested'),
       );
@@ -750,20 +745,21 @@ function App(): React.JSX.Element {
         L_APP('ensureNotificationChannel done'),
       );
 
+      // 3) 포그라운드 핸들러 및 AppState 복귀 drain을 "정확히 한 번"만 바인딩
       await wireMessageHandlers(navigateToMaybeQueue).then(() =>
         L_PUSH('wireMessageHandlers bound (foreground listeners)'),
       );
 
-      // 앱을 알림으로 '시작'했을 때 (Notifee/FCM 초기 페이로드)
+      // 4) 콜드/웜 스타트: 초기 알림(배너 탭으로 진입) 처리
       const initialNotifee = await notifee.getInitialNotification();
       L_PUSH('notifee.getInitialNotification', {
         exists: !!initialNotifee,
         data: initialNotifee?.notification?.data,
       });
-      if (initialNotifee) {
-        openFromPayloadOnce(
+      if (initialNotifee?.notification?.data) {
+        await openFromPayloadOnce(
           navigateToMaybeQueue,
-          initialNotifee.notification?.data || {},
+          initialNotifee.notification.data,
         );
       }
 
@@ -772,14 +768,12 @@ function App(): React.JSX.Element {
         exists: !!initialRemote,
         data: initialRemote?.data,
       });
-      if (initialRemote) {
-        openFromPayloadOnce(navigateToMaybeQueue, initialRemote.data || {});
+      if (initialRemote?.data) {
+        await openFromPayloadOnce(navigateToMaybeQueue, initialRemote.data);
       }
 
-      // 헤드리스에서 큐잉된 탭 의도 소비
-      L_PUSH('drainQueuedTap start');
+      // 5) BG 컨텍스트에서 큐에 적재해 둔 탭을 한 번만 소진
       await drainQueuedTap(navigateToMaybeQueue);
-      L_PUSH('drainQueuedTap done');
     })();
 
     return () => {
@@ -795,7 +789,6 @@ function App(): React.JSX.Element {
           ref={navRef}
           onReady={() => {
             L_NAV('NavigationContainer onReady');
-            // nav 준비 시점에, 인증 필요 없거나 이미 인증 준비된 경우만 보류 의도 소화
             if (pendingNavRef.current) {
               const { screen, params } = pendingNavRef.current;
               L_INTENT('onReady pending found', {
@@ -823,7 +816,6 @@ function App(): React.JSX.Element {
           <AppNavigator />
         </NavigationContainer>
 
-        {/* Provider 하위: 인증 준비 변화 감지 & 보류 의도 소화 */}
         <NavIntentReplayer
           navRef={
             navRef as NavigationContainerRefWithCurrent<RootStackParamList>
@@ -844,7 +836,6 @@ function App(): React.JSX.Element {
   );
 }
 
-/* --------------------------------- Styles --------------------------------- */
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,

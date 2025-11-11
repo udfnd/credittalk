@@ -1,8 +1,7 @@
-// index.js
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import { AppRegistry } from 'react-native';
+import { AppRegistry, Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import notifee, { EventType } from '@notifee/react-native';
 
@@ -12,14 +11,18 @@ import { name as appName } from './app.json';
 import {
   displayOnce,
   ensureNotificationChannel,
-  queueTapPayload,
+  queueTapIntent,
 } from './src/lib/push';
 
 if (!global.__PUSH_BG_BOUND__) {
   global.__PUSH_BG_BOUND__ = true;
 
-  // 백그라운드 수신 → 표시(데이터 only면 우리가 표시, notification이면 스킵)
   messaging().setBackgroundMessageHandler(async remoteMessage => {
+    console.log('[BG] setBackgroundMessageHandler fired', {
+      platform: Platform.OS,
+      hasData: !!remoteMessage?.data,
+      hasNotif: !!remoteMessage?.notification,
+    });
     try {
       await ensureNotificationChannel();
       await displayOnce(remoteMessage, 'background');
@@ -28,15 +31,15 @@ if (!global.__PUSH_BG_BOUND__) {
     }
   });
 
-  // 백그라운드/종료 탭 → ❗네비게이션은 하지 않고 '큐에 저장'만
   notifee.onBackgroundEvent(async ({ type, detail }) => {
-    try {
-      if (type === EventType.PRESS) {
-        const data = detail?.notification?.data || {};
-        await queueTapPayload(data);
-        // 여기서 딥링크 열지 마세요. (앱 포어그라운드 전환 후 App.tsx가 일괄 처리)
+    if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+      await queueTapIntent(detail?.notification?.data || {});
+      if (detail?.notification?.id) {
+        try {
+          await notifee.cancelNotification(detail.notification.id);
+        } catch {}
       }
-    } catch {}
+    }
   });
 }
 
