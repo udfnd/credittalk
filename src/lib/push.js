@@ -1,4 +1,10 @@
-import { Platform, PermissionsAndroid, Linking, Alert } from 'react-native';
+import {
+  Platform,
+  PermissionsAndroid,
+  Linking,
+  Alert,
+  AppState,
+} from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import notifee, {
   AndroidImportance,
@@ -9,35 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabaseClient';
 
 export const CHANNEL_ID = 'push_default_v2';
-const PENDING_TAP_KEY = 'noti:pending_tap:v1';
-
-/* --------------------------------- 채널/권한 --------------------------------- */
-
-export async function queueTapPayload(data = {}) {
-  try {
-    // nid/키 기반으로 마지막 것만 보관 (중복방지)
-    const tapKey = getTapKeyFromData(data);
-    const payload = { key: tapKey, at: Date.now(), data };
-    await AsyncStorage.setItem(PENDING_TAP_KEY, JSON.stringify(payload));
-  } catch (e) {
-    // no-op
-  }
-}
-
-// 추가: 큐 비우며 1회 라우팅
-export async function drainQueuedTap(navigateTo) {
-  try {
-    const raw = await AsyncStorage.getItem(PENDING_TAP_KEY);
-    if (!raw) return;
-    await AsyncStorage.removeItem(PENDING_TAP_KEY);
-    const parsed = JSON.parse(raw);
-    if (parsed?.data) {
-      await openFromPayloadOnce(navigateTo, parsed.data);
-    }
-  } catch (e) {
-    // no-op
-  }
-}
+const TAP_QUEUE_KEY = 'noti_tap_queue';
 
 export async function ensureNotificationChannel() {
   if (Platform.OS !== 'android') return;
@@ -51,18 +29,14 @@ export async function ensureNotificationChannel() {
 export const requestNotificationPermissionAndroid = async () => {
   if (Platform.OS !== 'android') return;
   try {
-    const result = await PermissionsAndroid.request(
+    await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
     );
-    console.log(
-      `[Push] Android permission: ${result === 'granted' ? 'granted' : result}`,
-    );
+    console.log('[APP]', 'Android notification permission requested');
   } catch (err) {
     console.warn('[Push] request permission failed', err);
   }
 };
-
-/* --------------------------------- 헬퍼들 --------------------------------- */
 
 async function openExternalUrlBestEffort(url) {
   if (!url) return;
@@ -75,8 +49,8 @@ async function openExternalUrlBestEffort(url) {
   }
 }
 
-export function hasNotificationPayload(remoteMessage) {
-  const notif = remoteMessage?.notification;
+export function hasNotificationPayload(remote) {
+  const notif = remote?.notification;
   if (!notif) return false;
   return Object.values(notif).some(Boolean);
 }
@@ -106,9 +80,7 @@ export function pickTitleBody(remote) {
   if (d.params && typeof d.params === 'string') {
     try {
       parsedParams = JSON.parse(d.params);
-    } catch (e) {
-      console.warn('[Push] Failed to parse data.params:', e);
-    }
+    } catch {}
   } else if (d.params && typeof d.params === 'object') {
     parsedParams = d.params;
   }
@@ -124,6 +96,25 @@ export function pickTitleBody(remote) {
   };
 }
 
+function getMessageKey(remote) {
+  const d = remote?.data || {};
+  const n = remote?.notification || {};
+  return (
+    remote?.messageId ||
+    d.nid ||
+    `${d.threadId || ''}:${d.ts || ''}:${d.title || n.title || ''}:${d.body || n.body || ''}`
+  );
+}
+
+async function markAndCheckSeen(key) {
+  if (!key) return false;
+  const k = `noti_seen:${key}`;
+  const seen = await AsyncStorage.getItem(k);
+  if (seen) return true;
+  await AsyncStorage.setItem(k, String(Date.now()));
+  return false;
+}
+
 function getTapKeyFromData(data = {}) {
   return (
     data?.nid ||
@@ -133,28 +124,36 @@ function getTapKeyFromData(data = {}) {
   );
 }
 
-async function markTapHandledIfFirst(key) {
-  if (!key) return true;
-  const k = `noti_tap:${key}`;
-  const seen = await AsyncStorage.getItem(k);
-  if (seen) return false;
-  await AsyncStorage.setItem(k, String(Date.now()));
-  return true;
-}
-
-/* ------------------------------ 표시/탭 처리 ------------------------------ */
-
 export async function displayOnce(remote, source = 'unknown') {
-  const expectOs = remote?.data?.expect_os_alert === '1';
+  console.log('[PUSH] displayOnce enter', { source, platform: Platform.OS });
 
-  // OS가 표시할 예정이면(서버가 명시) 또는 notification payload가 붙어왔고,
-  // 현재 포그라운드가 아니라면 → 중복 표기를 스킵
-  if (source !== 'foreground' && (expectOs || hasNotificationPayload(remote))) {
+  // 1) 동일 메시지 재표시 방지
+  const key = getMessageKey(remote);
+  if (await markAndCheckSeen(key)) {
+    console.log('[PUSH] displayOnce dedup skip', { key });
+    return;
+  }
+
+  // 2) iOS: 서버가 OS 배너 표시를 예고하면 앱 표시 스킵
+  const picked = pickTitleBody(remote);
+  if (Platform.OS === 'ios' && picked?.data?.expect_os_alert === '1') {
+    console.log('[PUSH] iOS expect_os_alert=1 → skip app display');
+    return;
+  }
+
+  // 3) OS가 이미 표시한(notification payload) 케이스는 스킵
+  if (source !== 'foreground' && hasNotificationPayload(remote)) {
+    console.log('[PUSH] displayOnce skip: OS already displayed');
     return;
   }
 
   await ensureNotificationChannel();
-  const { title, body, data, image } = pickTitleBody(remote);
+
+  const { title, body, data, image } = picked;
+
+  // 4) 같은 메시지는 같은 id로 '교체'되도록 보장 (nid 없으면 key로 fallback)
+  const stableId =
+    (remote?.data && (remote.data.nid || remote.data.collapse_key)) || key;
 
   const androidOptions = {
     channelId: CHANNEL_ID,
@@ -165,34 +164,41 @@ export async function displayOnce(remote, source = 'unknown') {
       : body
         ? { style: { type: AndroidStyle.BIGTEXT, text: body } }
         : {}),
-    ...(image ? { largeIcon: image } : {}), // 유효한 URL/리소스일 때만
+    ...(image ? { largeIcon: image } : {}),
   };
 
-  await notifee.displayNotification({
-    id:
-      (remote?.data && (remote.data.nid || remote.data.collapse_key)) ||
-      undefined,
+  const notif = {
+    id: stableId,
     title,
     body,
     data,
-    android: androidOptions,
-    ios: {
-      sound: 'default',
-      foregroundPresentationOptions: { alert: true, sound: true, badge: true },
-      attachments: image ? [{ url: image }] : undefined,
-    },
+    ...(Platform.OS === 'android' ? { android: androidOptions } : {}),
+    ...(Platform.OS === 'ios'
+      ? {
+          ios: {
+            sound: 'default',
+            foregroundPresentationOptions: {
+              alert: true,
+              sound: true,
+              badge: true,
+            },
+            ...(image ? { attachments: [{ url: image }] } : {}),
+          },
+        }
+      : {}),
+  };
+
+  console.log('[PUSH] displayOnce payload summary', {
+    id: stableId,
+    hasAndroid: !!notif.android,
+    hasIos: !!notif.ios,
   });
+
+  await notifee.displayNotification(notif);
+  console.log('[PUSH] displayOnce done');
 }
 
-function isPlainObject(value) {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-}
-
-export function openFromPayload(navigateTo, data = {}) {
+export async function openFromPayload(navigateTo, data = {}) {
   try {
     const ALLOWED_SCREENS = new Set([
       'CommunityPostDetail',
@@ -201,36 +207,28 @@ export function openFromPayload(navigateTo, data = {}) {
       'NewCrimeCaseDetail',
       'NoticeDetail',
       'ReviewDetail',
+      'HelpDeskDetail',
     ]);
 
-    const { screen, link_url, url, params: rawParams, ...rest } = data || {};
-
-    let parsedParams = {};
-    if (typeof rawParams === 'string') {
-      try {
-        const parsed = JSON.parse(rawParams);
-        if (isPlainObject(parsed)) {
-          parsedParams = parsed;
-        }
-      } catch (e) {
-        console.warn('[Push] Failed to parse params payload:', e);
-      }
-    } else if (isPlainObject(rawParams)) {
-      parsedParams = rawParams;
-    }
-
-    const finalParams = Object.keys(parsedParams).length
-      ? { ...rest, ...parsedParams }
-      : rest;
+    const { screen, link_url, url, ...rest } = data || {};
+    const finalParams =
+      rest?.params && typeof rest.params === 'object' ? rest.params : rest;
 
     if (screen && ALLOWED_SCREENS.has(screen)) {
+      console.log('[NAV:INTENT] openFromPayload navigate', {
+        screen,
+        params: finalParams,
+      });
       navigateTo?.(screen, finalParams);
       return;
     }
 
     const externalUrl = link_url || url;
     if (typeof externalUrl === 'string') {
-      openExternalUrlBestEffort(externalUrl);
+      console.log('[NAV:INTENT] open external url', externalUrl);
+      await openExternalUrlBestEffort(externalUrl);
+    } else {
+      console.log('[NAV:INTENT] nothing to open, payload=', data);
     }
   } catch (e) {
     console.warn('[Push] openFromPayload error:', e?.message || e);
@@ -239,16 +237,89 @@ export function openFromPayload(navigateTo, data = {}) {
 
 export async function openFromPayloadOnce(navigateTo, data = {}) {
   const key = getTapKeyFromData(data);
-  const first = await markTapHandledIfFirst(key);
-  if (!first) return;
+  const marker = `noti_tap:${key}`;
+  const seen = key ? await AsyncStorage.getItem(marker) : null;
+  if (seen) {
+    console.log('[PUSH] openFromPayloadOnce dedup (tap already handled)', {
+      key,
+    });
+    return;
+  }
+  if (key) await AsyncStorage.setItem(marker, String(Date.now()));
   return openFromPayload(navigateTo, data);
 }
 
-/* ---------------------------- 토큰 등록/갱신/해제 ---------------------------- */
+export async function queueTapIntent(data = {}) {
+  try {
+    const raw = (await AsyncStorage.getItem(TAP_QUEUE_KEY)) || '[]';
+    const arr = JSON.parse(raw);
+    arr.push({ ts: Date.now(), data });
+    await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(arr));
+    console.log('[PUSH] queueTapIntent stored', arr.length);
+  } catch (e) {
+    console.warn('[PUSH] queueTapIntent error', e?.message || e);
+  }
+}
+
+export async function drainQueuedTap(navigateTo) {
+  try {
+    const raw = (await AsyncStorage.getItem(TAP_QUEUE_KEY)) || '[]';
+    let arr = [];
+    try {
+      arr = JSON.parse(raw) || [];
+    } catch {
+      arr = [];
+    }
+    if (!Array.isArray(arr) || arr.length === 0) {
+      console.log('[NAV:INTENT] drainQueuedTap: empty');
+      return;
+    }
+    console.log('[NAV:INTENT] drainQueuedTap start', { count: arr.length });
+
+    await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify([]));
+    for (const item of arr) {
+      const data = item?.data || {};
+      console.log('[NAV:INTENT] draining one', data);
+      await openFromPayloadOnce(navigateTo, data);
+    }
+    console.log('[NAV:INTENT] drainQueuedTap done');
+  } catch (e) {
+    console.warn('[NAV:INTENT] drainQueuedTap error:', e?.message || e);
+  }
+}
+
+export async function wireMessageHandlers(navigateTo) {
+  if (global.__PUSH_FG_BOUND__) return;
+  global.__PUSH_FG_BOUND__ = true;
+
+  messaging().onMessage(async remoteMessage => {
+    try {
+      await displayOnce(remoteMessage, 'foreground');
+    } catch (e) {
+      console.warn('[FCM] onMessage display error:', e?.message || e);
+    }
+  });
+
+  notifee.onForegroundEvent(async ({ type, detail }) => {
+    if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+      console.log(
+        '[FG] onForegroundEvent PRESS/ACTION_PRESS, queue & open once',
+      );
+      await queueTapIntent(detail?.notification?.data || {});
+      await drainQueuedTap(navigateTo);
+    }
+  });
+
+  AppState.addEventListener('change', state => {
+    if (state === 'active') {
+      console.log('[NAV:INTENT] AppState active → drainQueuedTap');
+      drainQueuedTap(navigateTo);
+    }
+  });
+}
 
 export const updatePushTokenOnLogin = async userId => {
   if (!userId) return;
-
   try {
     if (Platform.OS === 'ios') {
       const authStatus = await messaging().requestPermission();
@@ -263,27 +334,18 @@ export const updatePushTokenOnLogin = async userId => {
         return;
       }
     }
-
     const fcmToken = await messaging().getToken();
     if (!fcmToken) {
       console.log('[Push] Could not get FCM token.');
       return;
     }
-
     const { error } = await supabase.rpc('register_push_token', {
       fcm_token: fcmToken,
       p_platform: Platform.OS,
     });
-
-    if (error) {
-      if (error.code === '42883') {
-        console.error('[Push] RPC "register_push_token" not found.');
-      }
+    if (error)
       console.error('[Push] register_push_token RPC error:', error.message);
-      throw error;
-    }
-
-    console.log('[Push] Token registered for user:', userId);
+    else console.log('[Push] Token registered for user:', userId);
   } catch (error) {
     console.error('[Push] updatePushTokenOnLogin error:', error);
   }
