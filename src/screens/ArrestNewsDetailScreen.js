@@ -34,11 +34,40 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [reportCount, setReportCount] = useState(0);
+  const [hasReported, setHasReported] = useState(false);
+  const [isReportUpdating, setIsReportUpdating] = useState(false);
 
   const isAuthor = useMemo(() => {
     if (!user || !news) return false;
     return user.id === news.user_id;
   }, [user, news]);
+
+  const fetchReportStatus = useCallback(async () => {
+    try {
+      const { count, error: countError } = await supabase
+        .from('arrest_news_reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('arrest_news_id', newsId);
+      if (countError) throw countError;
+      setReportCount(count ?? 0);
+
+      if (user) {
+        const { data: existing, error: existingError } = await supabase
+          .from('arrest_news_reports')
+          .select('id')
+          .eq('arrest_news_id', newsId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (existingError && existingError.code !== 'PGRST116') throw existingError;
+        setHasReported(Boolean(existing));
+      } else {
+        setHasReported(false);
+      }
+    } catch (err) {
+      console.error('Failed to load report status:', err);
+    }
+  }, [newsId, user]);
 
   const fetchNewsDetail = useCallback(async () => {
     setIsLoading(true);
@@ -46,9 +75,10 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select(
-          'id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views, user_id',
-        )
+        .select(`
+          id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views, user_id,
+          arrest_status, reported_to_police, police_station_name
+        `)
         .eq('id', newsId)
         .eq('is_published', true)
         .single();
@@ -71,14 +101,19 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     fetchNewsDetail();
   }, [fetchNewsDetail]);
 
+  useEffect(() => {
+    fetchReportStatus();
+  }, [fetchReportStatus]);
+
   // 수정 로직 추가
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       fetchNewsDetail();
+      fetchReportStatus();
     });
 
     return unsubscribe;
-  }, [navigation, fetchNewsDetail]);
+  }, [navigation, fetchNewsDetail, fetchReportStatus]);
 
   useEffect(() => {
     if (news) {
@@ -132,6 +167,40 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         },
       ],
     );
+  };
+
+  const handleToggleReport = async () => {
+    if (!user) {
+      Alert.alert('로그인이 필요합니다', '누적신고 기능은 로그인 후 이용 가능합니다.');
+      return;
+    }
+
+    setIsReportUpdating(true);
+    try {
+      if (hasReported) {
+        const { error } = await supabase
+          .from('arrest_news_reports')
+          .delete()
+          .eq('arrest_news_id', newsId)
+          .eq('user_id', user.id);
+        if (error) throw error;
+        setHasReported(false);
+        setReportCount(prev => Math.max(prev - 1, 0));
+      } else {
+        const { error } = await supabase.from('arrest_news_reports').insert({
+          arrest_news_id: newsId,
+          user_id: user.id,
+        });
+        if (error) throw error;
+        setHasReported(true);
+        setReportCount(prev => prev + 1);
+      }
+    } catch (err) {
+      console.error('Failed to toggle accumulated report:', err);
+      Alert.alert('오류', err.message || '누적신고 처리 중 오류가 발생했습니다.');
+    } finally {
+      setIsReportUpdating(false);
+    }
   };
 
   useEffect(() => {
@@ -246,6 +315,44 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           </View>
         </View>
 
+        <View style={styles.statusSection}>
+          <Text style={styles.label}>현재 상태</Text>
+          <View
+            style={[
+              styles.statusBadge,
+              news.arrest_status === 'active'
+                ? styles.statusBadgeActive
+                : styles.statusBadgeArrested,
+            ]}>
+            <Text
+              style={[
+                styles.statusBadgeText,
+                news.arrest_status === 'active'
+                  ? styles.statusBadgeTextActive
+                  : styles.statusBadgeTextArrested,
+              ]}>
+              {news.arrest_status === 'active' ? '활동' : '검거'}
+            </Text>
+          </View>
+          <Text style={styles.statusDescription}>
+            {news.arrest_status === 'active'
+              ? '해당 범죄자는 아직 검거되지 않고 활동 중입니다.'
+              : '해당 범죄자는 이미 검거되었습니다.'}
+          </Text>
+          <View style={styles.statusInfoRow}>
+            <Text style={styles.statusInfoLabel}>경찰 신고 여부</Text>
+            <Text style={styles.statusInfoValue}>
+              {news.reported_to_police ? '예' : '아니오'}
+            </Text>
+          </View>
+          {news.reported_to_police && news.police_station_name ? (
+            <View style={styles.statusInfoRow}>
+              <Text style={styles.statusInfoLabel}>신고 경찰서</Text>
+              <Text style={styles.statusInfoValue}>{news.police_station_name}</Text>
+            </View>
+          ) : null}
+        </View>
+
         <View style={styles.contentContainer}>
           <Text style={styles.content}>
             {news.content || '내용이 없습니다.'}
@@ -262,6 +369,27 @@ function ArrestNewsDetailScreen({ route, navigation }) {
             <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
           </TouchableOpacity>
         )}
+
+        <View style={styles.accumulatedReportSection}>
+          <TouchableOpacity
+            style={[
+              styles.reportButton,
+              hasReported && styles.reportButtonActive,
+              isReportUpdating && styles.reportButtonDisabled,
+            ]}
+            onPress={handleToggleReport}
+            disabled={isReportUpdating}
+            activeOpacity={0.85}>
+            {isReportUpdating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.reportButtonText}>
+                누적신고 {reportCount}
+              </Text>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.reportHelperText}>신고하지 않았으면 누르지 마세요.</Text>
+        </View>
 
         <CommentsSection postId={newsId} boardType="arrest_news" />
       </ScrollView>
@@ -340,6 +468,90 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2c3e50',
     marginBottom: 8,
+  },
+  statusSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: '#f8f9fa',
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  statusBadgeArrested: {
+    backgroundColor: '#e8f5e9',
+  },
+  statusBadgeActive: {
+    backgroundColor: '#fff3cd',
+  },
+  statusBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statusBadgeTextArrested: {
+    color: '#1b5e20',
+  },
+  statusBadgeTextActive: {
+    color: '#b36b00',
+  },
+  statusDescription: {
+    fontSize: 14,
+    color: '#495057',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  statusInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  statusInfoLabel: {
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
+  statusInfoValue: {
+    fontSize: 14,
+    color: '#2c3e50',
+    fontWeight: '600',
+    textAlign: 'right',
+    flexShrink: 1,
+    marginLeft: 12,
+  },
+  accumulatedReportSection: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 10,
+    backgroundColor: '#f1f3f5',
+  },
+  reportButton: {
+    backgroundColor: '#3d5afe',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  reportButtonActive: {
+    backgroundColor: '#1b5e20',
+  },
+  reportButtonDisabled: {
+    opacity: 0.7,
+  },
+  reportButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  reportHelperText: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#868e96',
   },
   image: {
     width: '100%',
