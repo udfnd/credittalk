@@ -51,9 +51,9 @@ import ArrestNewsListScreen from './src/screens/ArrestNewsListScreen';
 import ArrestNewsCreateScreen from './src/screens/ArrestNewsCreateScreen';
 import ArrestNewsDetailScreen from './src/screens/ArrestNewsDetailScreen';
 import ArrestNewsEditScreen from './src/screens/ArrestNewsEditScreen';
-import ChatListScreen from './src/screens/ChatListScreen';
-import ChatMessageScreen from './src/screens/ChatMessageScreen';
-import NewChatScreen from './src/screens/NewChatScreen';
+// import ChatListScreen from './src/screens/ChatListScreen';
+// import ChatMessageScreen from './src/screens/ChatMessageScreen';
+// import NewChatScreen from './src/screens/NewChatScreen';
 import CommunityListScreen from './src/screens/CommunityListScreen';
 import CommunityPostDetailScreen from './src/screens/CommunityPostDetailScreen';
 import CommunityPostCreateScreen from './src/screens/CommunityPostCreateScreen';
@@ -289,11 +289,11 @@ function MainTabs() {
         component={HomeScreen}
         options={{ title: '검색' }}
       />
-      <Tab.Screen
-        name="ChatTab"
-        component={ChatListScreen}
-        options={{ title: '채팅', headerShown: true }}
-      />
+      {/*<Tab.Screen*/}
+      {/*  name="ChatTab"*/}
+      {/*  component={ChatListScreen}*/}
+      {/*  options={{ title: '채팅', headerShown: true }}*/}
+      {/*/>*/}
       <Tab.Screen
         name="CommunityTab"
         component={CommunityStack}
@@ -499,20 +499,20 @@ function AppNavigator() {
             component={IncidentPhotoEditScreen}
             options={{ title: '사진자료 수정' }}
           />
-          <RootStack.Screen
-            name="ChatList"
-            component={ChatListScreen}
-            options={{ title: '채팅 목록' }}
-          />
-          <RootStack.Screen
-            name="ChatMessageScreen"
-            component={ChatMessageScreen}
-          />
-          <RootStack.Screen
-            name="NewChatScreen"
-            component={NewChatScreen}
-            options={{ title: '새 채팅 시작' }}
-          />
+          {/*<RootStack.Screen*/}
+          {/*  name="ChatList"*/}
+          {/*  component={ChatListScreen}*/}
+          {/*  options={{ title: '채팅 목록' }}*/}
+          {/*/>*/}
+          {/*<RootStack.Screen*/}
+          {/*  name="ChatMessageScreen"*/}
+          {/*  component={ChatMessageScreen}*/}
+          {/*/>*/}
+          {/*<RootStack.Screen*/}
+          {/*  name="NewChatScreen"*/}
+          {/*  component={NewChatScreen}*/}
+          {/*  options={{ title: '새 채팅 시작' }}*/}
+          {/*/>*/}
           <RootStack.Screen
             name="VoiceAnalysis"
             component={VoiceAnalysisScreen}
