@@ -12,7 +12,6 @@ import {
   Image,
   Platform,
   Button,
-  FlatList,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -117,9 +116,9 @@ const POLICE_STATION_OPTIONS = [
   '성남수정경찰서',
   '성남중원경찰서',
   '분당경찰서',
-  '부천소사 경찰서',
-  '부천원미 경찰서',
-  '부천오정 경찰서',
+  '부천소사경찰서',
+  '부천원미경찰서',
+  '부천오정경찰서',
   '광명경찰서',
   '안산단원경찰서',
   '안산상록경찰서',
@@ -272,7 +271,6 @@ const POLICE_STATION_OPTIONS = [
   '거창경찰서',
   '합천경찰서',
   '창녕경찰서',
-  '고성경찰서',
   '하동경찰서',
   '남해경찰서',
   '함양경찰서',
@@ -434,36 +432,72 @@ export default function ArrestNewsCreateScreen() {
       <Text style={styles.label}>검거/활동 상태 *</Text>
       <View style={styles.toggleRow}>
         <TouchableOpacity
-          style={[styles.toggleButton, arrestStatus === 'arrested' && styles.toggleButtonActive]}
+          style={[
+            styles.toggleButton,
+            arrestStatus === 'arrested' && styles.toggleButtonActive,
+          ]}
           onPress={() => setArrestStatus('arrested')}>
           <Text
-            style={[styles.toggleButtonText, arrestStatus === 'arrested' && styles.toggleButtonTextActive]}>검거</Text>
+            style={[
+              styles.toggleButtonText,
+              arrestStatus === 'arrested' && styles.toggleButtonTextActive,
+            ]}>
+            검거
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toggleButton, arrestStatus === 'active' && styles.toggleButtonActive]}
+          style={[
+            styles.toggleButton,
+            arrestStatus === 'active' && styles.toggleButtonActive,
+          ]}
           onPress={() => setArrestStatus('active')}>
           <Text
-            style={[styles.toggleButtonText, arrestStatus === 'active' && styles.toggleButtonTextActive]}>활동</Text>
+            style={[
+              styles.toggleButtonText,
+              arrestStatus === 'active' && styles.toggleButtonTextActive,
+            ]}>
+            활동
+          </Text>
         </TouchableOpacity>
       </View>
       <View style={styles.helperList}>
-        <Text style={styles.helperText}>- 검거 : 해당 범죄자가 이미 검거됨</Text>
-        <Text style={styles.helperText}>- 활동 : 해당 범죄자가 검거되지 않고 활동 중임</Text>
+        <Text style={styles.helperText}>
+          - 검거 : 해당 범죄자가 이미 검거됨
+        </Text>
+        <Text style={styles.helperText}>
+          - 활동 : 해당 범죄자가 검거되지 않고 활동 중임
+        </Text>
       </View>
 
       <Text style={styles.label}>경찰에 신고하셨습니까? *</Text>
       <View style={styles.toggleRow}>
         <TouchableOpacity
-          style={[styles.toggleButton, reportedToPolice === true && styles.toggleButtonActive]}
+          style={[
+            styles.toggleButton,
+            reportedToPolice === true && styles.toggleButtonActive,
+          ]}
           onPress={() => setReportedToPolice(true)}>
           <Text
-            style={[styles.toggleButtonText, reportedToPolice === true && styles.toggleButtonTextActive]}>예</Text>
+            style={[
+              styles.toggleButtonText,
+              reportedToPolice === true && styles.toggleButtonTextActive,
+            ]}>
+            예
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toggleButton, reportedToPolice === false && styles.toggleButtonActive]}
+          style={[
+            styles.toggleButton,
+            reportedToPolice === false && styles.toggleButtonActive,
+          ]}
           onPress={() => setReportedToPolice(false)}>
           <Text
-            style={[styles.toggleButtonText, reportedToPolice === false && styles.toggleButtonTextActive]}>아니오</Text>
+            style={[
+              styles.toggleButtonText,
+              reportedToPolice === false && styles.toggleButtonTextActive,
+            ]}>
+            아니오
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -476,30 +510,35 @@ export default function ArrestNewsCreateScreen() {
             placeholder="경찰서 이름 또는 지역 검색"
             placeholderTextColor="#6c757d"
           />
-          <FlatList
-            data={filteredStations}
-            keyExtractor={(item, index) => `${item}-${index}`}
-            nestedScrollEnabled
+
+          <ScrollView
             style={styles.policeList}
-            ListEmptyComponent={() => (
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled">
+            {filteredStations.length === 0 ? (
               <Text style={styles.emptyPoliceText}>검색 결과가 없습니다.</Text>
+            ) : (
+              filteredStations.map(item => {
+                const isSelected = selectedStation === item;
+                return (
+                  <TouchableOpacity
+                    key={item}
+                    style={[
+                      styles.policeItem,
+                      isSelected && styles.policeItemSelected,
+                    ]}
+                    onPress={() => setSelectedStation(item)}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.policeName}>{item}</Text>
+                    </View>
+                    {isSelected && (
+                      <Icon name="check-circle" size={22} color="#3d5afe" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
             )}
-            renderItem={({ item }) => {
-              const isSelected = selectedStation === item;
-              return (
-                <TouchableOpacity
-                  style={[styles.policeItem, isSelected && styles.policeItemSelected]}
-                  onPress={() => setSelectedStation(item)}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.policeName}>{item}</Text>
-                  </View>
-                  {isSelected && (
-                    <Icon name="check-circle" size={22} color="#3d5afe" />
-                  )}
-                </TouchableOpacity>
-              );
-            }}
-          />
+          </ScrollView>
         </View>
       )}
 
