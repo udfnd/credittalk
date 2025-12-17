@@ -4,4 +4,6 @@
     <string name="kakao_app_key">a5721065cc212efd0cecafc66e4fe14a</string>
     <string name="client_name">크레딧톡</string>
     <string name="app_name">credittalk</string>
+    <string name="supabase_url">https://lmwtidqrmfclrbapmtdm.supabase.co</string>
+    <string name="supabase_anon_key">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxtd3RpZHFybWZjbHJiYXBtdGRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMzODEzODksImV4cCI6MjA1ODk1NzM4OX0.szoKxYxIiYGdzsOJoaXlZMHG6UuS5C4cLZkyw3Z9qVA</string>
 </resources>

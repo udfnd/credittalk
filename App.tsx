@@ -8,6 +8,7 @@ import {
   Text,
   ActivityIndicator,
   Platform,
+  Linking,
 } from 'react-native';
 import {
   NavigationContainer,
@@ -98,6 +99,7 @@ const linking = {
   config: {
     screens: {
       UpdatePassword: 'update-password',
+      // UnifiedSearch는 수동 Deep Link 처리로 인증 로직과 통합됨 (App 컴포넌트의 useEffect에서 처리)
     },
   },
 };
@@ -111,6 +113,7 @@ const PROTECTED_SCREENS = new Set([
   'IncidentPhotoDetail',
   'NewCrimeCaseDetail',
   'NoticeDetail',
+  'UnifiedSearch', // Deep Link로 접근 시에도 인증 필요
 ]);
 
 function needsAuth(screen: string) {
@@ -145,9 +148,10 @@ export type RootStackParamList = {
   Report: undefined;
   MyReports: undefined;
   UnifiedSearch: {
-    searchType: string;
-    title: string;
+    searchType?: string;
+    title?: string;
     initialSearchTerm?: string;
+    phoneNumber?: string; // Deep Link에서 전달되는 전화번호
   };
   NoticeList: undefined;
   NoticeDetail: { noticeId: number; noticeTitle: string };
@@ -779,6 +783,55 @@ function App(): React.JSX.Element {
     return () => {
       L_PUSH('unsubscribe onNotificationOpenedApp');
       unsubscribeNotificationOpened();
+    };
+  }, [navigateToMaybeQueue]);
+
+  // Deep Link 처리 (알림 클릭 시 credittalk://search?phoneNumber=xxx 형태)
+  useEffect(() => {
+    const parseDeepLink = (url: string | null) => {
+      if (!url) return null;
+      try {
+        // credittalk://search?phoneNumber=xxx 형태의 URL 파싱
+        const parsed = new URL(url);
+        if (parsed.protocol === 'credittalk:') {
+          const path = parsed.host || parsed.pathname?.replace(/^\//, '');
+          if (path === 'search') {
+            const phoneNumber = parsed.searchParams.get('phoneNumber');
+            return {
+              screen: 'UnifiedSearch',
+              params: { phoneNumber },
+            };
+          }
+        }
+      } catch (e) {
+        L_NAV('Deep link parse error:', e);
+      }
+      return null;
+    };
+
+    // 앱이 실행 중일 때 들어오는 Deep Link 처리
+    const handleDeepLink = (event: { url: string }) => {
+      L_NAV('Deep link received (foreground):', event.url);
+      const parsed = parseDeepLink(event.url);
+      if (parsed) {
+        navigateToMaybeQueue(parsed.screen, parsed.params);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    // 초기 Deep Link (앱이 꺼진 상태에서 열릴 때)
+    (async () => {
+      const initialUrl = await Linking.getInitialURL();
+      L_NAV('Initial deep link URL:', initialUrl);
+      const parsed = parseDeepLink(initialUrl);
+      if (parsed) {
+        navigateToMaybeQueue(parsed.screen, parsed.params);
+      }
+    })();
+
+    return () => {
+      subscription.remove();
     };
   }, [navigateToMaybeQueue]);
 

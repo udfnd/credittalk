@@ -12,6 +12,7 @@ import {
   Image,
   Platform,
   Button,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -19,7 +20,17 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
-import { useAuth } from '../context/AuthContext'; // useAuth hook
+import { useAuth } from '../context/AuthContext';
+
+const individualCategories = [
+  '보이스피싱, 전기통신금융사기, 로맨스 스캠 사기',
+  '불법사금융',
+  '중고물품 사기',
+  '알바 사기',
+  '부동산 사기 (전, 월세 사기)',
+  '암호화폐',
+  '기타',
+];
 
 const POLICE_STATION_OPTIONS = [
   '서울중부경찰서',
@@ -295,6 +306,11 @@ export default function ArrestNewsCreateScreen() {
   const [reportedToPolice, setReportedToPolice] = useState(null);
   const [policeSearch, setPoliceSearch] = useState('');
   const [selectedStation, setSelectedStation] = useState(null);
+  const [scammerNickname, setScammerNickname] = useState('');
+  const [scammerAccount, setScammerAccount] = useState('');
+  const [scammerPhone, setScammerPhone] = useState('');
+  const [fraudCategory, setFraudCategory] = useState('');
+  const [customFraudCategory, setCustomFraudCategory] = useState('');
 
   useEffect(() => {
     if (reportedToPolice !== true) {
@@ -410,6 +426,13 @@ export default function ArrestNewsCreateScreen() {
         arrest_status: arrestStatus,
         reported_to_police: reportedToPolice,
         police_station_name: reportedToPolice ? selectedStation : null,
+        fraud_category:
+          fraudCategory === '기타'
+            ? customFraudCategory.trim() || null
+            : fraudCategory || null,
+        scammer_nickname: scammerNickname.trim() || null,
+        scammer_account_number: scammerAccount.trim() || null,
+        scammer_phone_number: scammerPhone.trim() || null,
       });
       if (insertError) throw insertError;
 
@@ -427,189 +450,265 @@ export default function ArrestNewsCreateScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.pageTitle}>새 검거소식 작성</Text>
-      <Text style={styles.label}>검거/활동 상태 *</Text>
-      <View style={styles.toggleRow}>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            arrestStatus === 'arrested' && styles.toggleButtonActive,
-          ]}
-          onPress={() => setArrestStatus('arrested')}>
-          <Text
-            style={[
-              styles.toggleButtonText,
-              arrestStatus === 'arrested' && styles.toggleButtonTextActive,
-            ]}>
-            검거
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            arrestStatus === 'active' && styles.toggleButtonActive,
-          ]}
-          onPress={() => setArrestStatus('active')}>
-          <Text
-            style={[
-              styles.toggleButtonText,
-              arrestStatus === 'active' && styles.toggleButtonTextActive,
-            ]}>
-            활동
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.helperList}>
-        <Text style={styles.helperText}>
-          - 검거 : 해당 범죄자가 이미 검거됨
-        </Text>
-        <Text style={styles.helperText}>
-          - 활동 : 해당 범죄자가 검거되지 않고 활동 중임
-        </Text>
-      </View>
-
-      <Text style={styles.label}>경찰에 신고하셨습니까? *</Text>
-      <View style={styles.toggleRow}>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            reportedToPolice === true && styles.toggleButtonActive,
-          ]}
-          onPress={() => setReportedToPolice(true)}>
-          <Text
-            style={[
-              styles.toggleButtonText,
-              reportedToPolice === true && styles.toggleButtonTextActive,
-            ]}>
-            예
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.toggleButton,
-            reportedToPolice === false && styles.toggleButtonActive,
-          ]}
-          onPress={() => setReportedToPolice(false)}>
-          <Text
-            style={[
-              styles.toggleButtonText,
-              reportedToPolice === false && styles.toggleButtonTextActive,
-            ]}>
-            아니오
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {reportedToPolice === true && (
-        <View style={styles.policeSearchContainer}>
-          <TextInput
-            style={styles.input}
-            value={policeSearch}
-            onChangeText={setPoliceSearch}
-            placeholder="경찰서 이름 또는 지역 검색"
-            placeholderTextColor="#6c757d"
-          />
-
-          <ScrollView
-            style={styles.policeList}
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled">
-            {filteredStations.length === 0 ? (
-              <Text style={styles.emptyPoliceText}>검색 결과가 없습니다.</Text>
-            ) : (
-              filteredStations.map(item => {
-                const isSelected = selectedStation === item;
-                return (
-                  <TouchableOpacity
-                    key={item}
-                    style={[
-                      styles.policeItem,
-                      isSelected && styles.policeItemSelected,
-                    ]}
-                    onPress={() => setSelectedStation(item)}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.policeName}>{item}</Text>
-                    </View>
-                    {isSelected && (
-                      <Icon name="check-circle" size={22} color="#3d5afe" />
-                    )}
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </ScrollView>
-        </View>
-      )}
-
-      <TextInput
-        style={styles.input}
-        placeholder="제목 *"
-        placeholderTextColor="#6c757d"
-        value={title}
-        onChangeText={setTitle}
-        maxLength={100}
-      />
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="내용"
-        placeholderTextColor="#6c757d"
-        value={content}
-        onChangeText={setContent}
-        multiline
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="카테고리"
-        placeholderTextColor="#6c757d"
-        value={category}
-        onChangeText={setCategory}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="관련 링크 URL"
-        placeholderTextColor="#6c757d"
-        value={linkUrl}
-        onChangeText={setLinkUrl}
-        keyboardType="url"
-        autoCapitalize="none"
-      />
-
-      <Text style={styles.label}>사진 첨부 (최대 3장)</Text>
-      <View style={styles.photoContainer}>
-        {photos.map(p => (
-          <View key={p.uri} style={styles.photoWrapper}>
-            <Image source={{ uri: p.uri }} style={styles.thumbnail} />
-            <TouchableOpacity
-              style={styles.removeButton}
-              onPress={() => handleRemovePhoto(p.uri)}>
-              <Icon name="close-circle" size={24} color="#e74c3c" />
-            </TouchableOpacity>
-          </View>
-        ))}
-        {photos.length < 3 && (
+    <SafeAreaView style={styles.container}>
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <Text style={styles.pageTitle}>새 검거소식 작성</Text>
+        <Text style={styles.label}>검거/활동 상태 *</Text>
+        <View style={styles.toggleRow}>
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleChoosePhotos}>
-            <Icon name="camera-plus" size={30} color="#868e96" />
-            <Text style={styles.addButtonText}>사진 추가</Text>
+            style={[
+              styles.toggleButton,
+              arrestStatus === 'arrested' && styles.toggleButtonActive,
+            ]}
+            onPress={() => setArrestStatus('arrested')}>
+            <Text
+              style={[
+                styles.toggleButtonText,
+                arrestStatus === 'arrested' && styles.toggleButtonTextActive,
+              ]}>
+              검거
+            </Text>
           </TouchableOpacity>
-        )}
-      </View>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              arrestStatus === 'active' && styles.toggleButtonActive,
+            ]}
+            onPress={() => setArrestStatus('active')}>
+            <Text
+              style={[
+                styles.toggleButtonText,
+                arrestStatus === 'active' && styles.toggleButtonTextActive,
+              ]}>
+              활동
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.helperList}>
+          <Text style={styles.helperText}>
+            - 검거 : 해당 범죄자가 이미 검거됨
+          </Text>
+          <Text style={styles.helperText}>
+            - 활동 : 해당 범죄자가 검거되지 않고 활동 중임
+          </Text>
+        </View>
 
-      <View style={styles.buttonContainer}>
-        {isLoading ? (
-          <ActivityIndicator size="large" color="#3d5afe" />
-        ) : (
-          <Button title="등록하기" onPress={handleSubmit} color="#3d5afe" />
+        <Text style={styles.label}>경찰에 신고하셨습니까? *</Text>
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              reportedToPolice === true && styles.toggleButtonActive,
+            ]}
+            onPress={() => setReportedToPolice(true)}>
+            <Text
+              style={[
+                styles.toggleButtonText,
+                reportedToPolice === true && styles.toggleButtonTextActive,
+              ]}>
+              예
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.toggleButton,
+              reportedToPolice === false && styles.toggleButtonActive,
+            ]}
+            onPress={() => setReportedToPolice(false)}>
+            <Text
+              style={[
+                styles.toggleButtonText,
+                reportedToPolice === false && styles.toggleButtonTextActive,
+              ]}>
+              아니오
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {reportedToPolice === true && (
+          <View style={styles.policeSearchContainer}>
+            <TextInput
+              style={styles.input}
+              value={policeSearch}
+              onChangeText={setPoliceSearch}
+              placeholder="경찰서 이름 또는 지역 검색"
+              placeholderTextColor="#6c757d"
+            />
+
+            <ScrollView
+              style={styles.policeList}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled">
+              {filteredStations.length === 0 ? (
+                <Text style={styles.emptyPoliceText}>
+                  검색 결과가 없습니다.
+                </Text>
+              ) : (
+                filteredStations.map(item => {
+                  const isSelected = selectedStation === item;
+                  return (
+                    <TouchableOpacity
+                      key={item}
+                      style={[
+                        styles.policeItem,
+                        isSelected && styles.policeItemSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedStation(item);
+                        setPoliceSearch(item);
+                      }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.policeName}>{item}</Text>
+                      </View>
+                      {isSelected && (
+                        <Icon name="check-circle" size={22} color="#3d5afe" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
         )}
-      </View>
-    </ScrollView>
+
+        <TextInput
+          style={styles.input}
+          placeholder="제목 *"
+          placeholderTextColor="#6c757d"
+          value={title}
+          onChangeText={setTitle}
+          maxLength={100}
+        />
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="내용"
+          placeholderTextColor="#6c757d"
+          value={content}
+          onChangeText={setContent}
+          multiline
+        />
+
+        <Text style={styles.label}>사기 카테고리</Text>
+        <ScrollView
+          style={styles.categoryList}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled">
+          {individualCategories.map(cat => {
+            const isSelected = fraudCategory === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryItem,
+                  isSelected && styles.categoryItemSelected,
+                ]}
+                onPress={() => setFraudCategory(cat)}>
+                <Text
+                  style={[
+                    styles.categoryText,
+                    isSelected && styles.categoryTextSelected,
+                  ]}>
+                  {cat}
+                </Text>
+                {isSelected && (
+                  <Icon name="check-circle" size={20} color="#3d5afe" />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {fraudCategory === '기타' && (
+          <TextInput
+            style={[styles.input, styles.customCategoryInput]}
+            placeholder="사기 카테고리를 직접 입력하세요"
+            placeholderTextColor="#6c757d"
+            value={customFraudCategory}
+            onChangeText={setCustomFraudCategory}
+          />
+        )}
+        <TextInput
+          style={styles.input}
+          placeholder="사기꾼이 쓰는 닉네임"
+          placeholderTextColor="#6c757d"
+          value={scammerNickname}
+          onChangeText={setScammerNickname}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="사기꾼이 쓰는 계좌번호"
+          placeholderTextColor="#6c757d"
+          value={scammerAccount}
+          onChangeText={setScammerAccount}
+          keyboardType="number-pad"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="사기꾼이 쓰는 전화번호 (- 없이 숫자만)"
+          placeholderTextColor="#6c757d"
+          value={scammerPhone}
+          onChangeText={setScammerPhone}
+          keyboardType="phone-pad"
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="카테고리"
+          placeholderTextColor="#6c757d"
+          value={category}
+          onChangeText={setCategory}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="관련 링크 URL"
+          placeholderTextColor="#6c757d"
+          value={linkUrl}
+          onChangeText={setLinkUrl}
+          keyboardType="url"
+          autoCapitalize="none"
+        />
+
+        <Text style={styles.label}>사진 첨부 (최대 3장)</Text>
+        <View style={styles.photoContainer}>
+          {photos.map(p => (
+            <View key={p.uri} style={styles.photoWrapper}>
+              <Image source={{ uri: p.uri }} style={styles.thumbnail} />
+              <TouchableOpacity
+                style={styles.removeButton}
+                onPress={() => handleRemovePhoto(p.uri)}>
+                <Icon name="close-circle" size={24} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          {photos.length < 3 && (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleChoosePhotos}>
+              <Icon name="camera-plus" size={30} color="#868e96" />
+              <Text style={styles.addButtonText}>사진 추가</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.buttonContainer}>
+          {isLoading ? (
+            <ActivityIndicator size="large" color="#3d5afe" />
+          ) : (
+            <Button title="등록하기" onPress={handleSubmit} color="#3d5afe" />
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#f8f9fa' },
+  container: {
+    flex: 1,
+    padding: 20,
+    paddingBottom: 60,
+    backgroundColor: '#f8f9fa',
+  },
   pageTitle: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -706,6 +805,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 20,
     color: '#868e96',
+  },
+  categoryList: {
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    marginBottom: 15,
+  },
+  categoryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f3f5',
+  },
+  categoryItemSelected: {
+    backgroundColor: '#edf2ff',
+    borderLeftWidth: 3,
+    borderLeftColor: '#3d5afe',
+  },
+  categoryText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#212529',
+    flex: 1,
+  },
+  categoryTextSelected: {
+    fontWeight: '600',
+    color: '#3d5afe',
+  },
+  customCategoryInput: {
+    marginTop: 10,
+    borderColor: '#3d5afe',
+    borderWidth: 2,
   },
   photoContainer: {
     flexDirection: 'row',
