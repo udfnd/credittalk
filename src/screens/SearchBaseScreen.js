@@ -234,10 +234,11 @@ const SearchStatistics = ({ stats }) => {
 
 const RESULTS_PER_PAGE = 5;
 
-const SearchBaseScreen = ({ title }) => {
+const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
   const route = useRoute();
   const navigation = useNavigation();
-  const initialSearchTerm = route.params?.searchTerm ?? '';
+  // props로 전달된 searchTerm 또는 route params의 searchTerm 사용
+  const initialSearchTerm = propSearchTerm || route.params?.searchTerm || '';
 
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [isLoading, setIsLoading] = useState(!!initialSearchTerm);
