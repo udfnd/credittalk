@@ -24,12 +24,43 @@ import { useAuth } from '../context/AuthContext'; // useAuth hook 추가
 
 const { width } = Dimensions.get('window');
 
+// 계좌번호 마스킹 함수 (뒤 2자리)
+const maskAccountNumber = accountNumber => {
+  if (!accountNumber || accountNumber.length < 2) return accountNumber;
+  return accountNumber.slice(0, -2) + '**';
+};
+
+// 전화번호 마스킹 함수 (가운데 2자리)
+const maskPhoneNumber = phoneNumber => {
+  if (!phoneNumber || phoneNumber.length < 4) return phoneNumber;
+  const cleaned = phoneNumber.replace(/\D/g, '');
+  if (cleaned.length === 11) {
+    // 010-1234-5678 형식
+    return (
+      cleaned.slice(0, 3) +
+      '-' +
+      cleaned.slice(3, 5) +
+      '**' +
+      '-' +
+      cleaned.slice(7)
+    );
+  } else if (cleaned.length === 10) {
+    // 010-123-4567 형식
+    return (
+      cleaned.slice(0, 3) + '-' + cleaned.slice(3, 5) + '*-' + cleaned.slice(6)
+    );
+  }
+  // 기본적으로 가운데 2자리만 마스킹
+  const mid = Math.floor(cleaned.length / 2);
+  return cleaned.slice(0, mid - 1) + '**' + cleaned.slice(mid + 1);
+};
+
 function ArrestNewsDetailScreen({ route, navigation }) {
   const { newsId, newsTitle } = route.params;
   const [news, setNews] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { user } = useAuth(); // 현재 사용자 정보
+  const { user, profile } = useAuth(); // 현재 사용자 정보
   useIncrementView('arrest_news', newsId);
 
   const [isViewerVisible, setViewerVisible] = useState(false);
@@ -42,6 +73,14 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     if (!user || !news) return false;
     return user.id === news.user_id;
   }, [user, news]);
+
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  // 검거여부 및 경찰신고 여부 수정 가능 여부
+  const canEditStatus = isAuthor || isAdmin;
+
+  // 검거여부/경찰신고여부 수정 상태
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   const fetchReportStatus = useCallback(async () => {
     try {
@@ -59,7 +98,8 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           .eq('arrest_news_id', newsId)
           .eq('user_id', user.id)
           .maybeSingle();
-        if (existingError && existingError.code !== 'PGRST116') throw existingError;
+        if (existingError && existingError.code !== 'PGRST116')
+          throw existingError;
         setHasReported(Boolean(existing));
       } else {
         setHasReported(false);
@@ -75,10 +115,13 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     try {
       const { data, error: fetchError } = await supabase
         .from('arrest_news')
-        .select(`
+        .select(
+          `
           id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views, user_id,
-          arrest_status, reported_to_police, police_station_name
-        `)
+          arrest_status, reported_to_police, police_station_name,
+          fraud_category, scammer_nickname, scammer_account_number, scammer_phone_number
+        `,
+        )
         .eq('id', newsId)
         .eq('is_published', true)
         .single();
@@ -171,7 +214,10 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   const handleToggleReport = async () => {
     if (!user) {
-      Alert.alert('로그인이 필요합니다', '누적신고 기능은 로그인 후 이용 가능합니다.');
+      Alert.alert(
+        '로그인이 필요합니다',
+        '누적신고 기능은 로그인 후 이용 가능합니다.',
+      );
       return;
     }
 
@@ -197,10 +243,86 @@ function ArrestNewsDetailScreen({ route, navigation }) {
       }
     } catch (err) {
       console.error('Failed to toggle accumulated report:', err);
-      Alert.alert('오류', err.message || '누적신고 처리 중 오류가 발생했습니다.');
+      Alert.alert(
+        '오류',
+        err.message || '누적신고 처리 중 오류가 발생했습니다.',
+      );
     } finally {
       setIsReportUpdating(false);
     }
+  };
+
+  // 검거여부 수정 핸들러
+  const handleUpdateArrestStatus = async newStatus => {
+    if (!canEditStatus) return;
+
+    Alert.alert(
+      '검거여부 변경',
+      `검거여부를 "${newStatus === 'arrested' ? '검거' : '활동'}"으로 변경하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '변경',
+          onPress: async () => {
+            setIsUpdatingStatus(true);
+            try {
+              const { error } = await supabase
+                .from('arrest_news')
+                .update({ arrest_status: newStatus })
+                .eq('id', newsId);
+              if (error) throw error;
+              setNews(prev => ({ ...prev, arrest_status: newStatus }));
+              Alert.alert('완료', '검거여부가 변경되었습니다.');
+            } catch (err) {
+              Alert.alert('오류', err.message || '변경에 실패했습니다.');
+            } finally {
+              setIsUpdatingStatus(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // 경찰신고 여부 수정 핸들러
+  const handleUpdatePoliceReport = async newValue => {
+    if (!canEditStatus) return;
+
+    Alert.alert(
+      '경찰신고 여부 변경',
+      `경찰신고 여부를 "${newValue ? '예' : '아니오'}"로 변경하시겠습니까?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '변경',
+          onPress: async () => {
+            setIsUpdatingStatus(true);
+            try {
+              const updateData = { reported_to_police: newValue };
+              // 신고 안함으로 변경 시 경찰서 정보 삭제
+              if (!newValue) {
+                updateData.police_station_name = null;
+              }
+              const { error } = await supabase
+                .from('arrest_news')
+                .update(updateData)
+                .eq('id', newsId);
+              if (error) throw error;
+              setNews(prev => ({
+                ...prev,
+                reported_to_police: newValue,
+                ...(newValue ? {} : { police_station_name: null }),
+              }));
+              Alert.alert('완료', '경찰신고 여부가 변경되었습니다.');
+            } catch (err) {
+              Alert.alert('오류', err.message || '변경에 실패했습니다.');
+            } finally {
+              setIsUpdatingStatus(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   useEffect(() => {
@@ -316,42 +438,101 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         </View>
 
         <View style={styles.statusSection}>
-          <Text style={styles.label}>현재 상태</Text>
-          <View
-            style={[
-              styles.statusBadge,
-              news.arrest_status === 'active'
-                ? styles.statusBadgeActive
-                : styles.statusBadgeArrested,
-            ]}>
-            <Text
-              style={[
-                styles.statusBadgeText,
-                news.arrest_status === 'active'
-                  ? styles.statusBadgeTextActive
-                  : styles.statusBadgeTextArrested,
-              ]}>
-              {news.arrest_status === 'active' ? '활동' : '검거'}
-            </Text>
+          <View style={styles.statusHeaderRow}>
+            <Text style={styles.label}>현재 상태</Text>
+            {canEditStatus && (
+              <Text style={styles.editableHint}>수정 가능</Text>
+            )}
           </View>
+
+          {/* 검거여부 */}
+          <View style={styles.statusRowWithEdit}>
+            <View
+              style={[
+                styles.statusBadge,
+                news.arrest_status === 'active'
+                  ? styles.statusBadgeActive
+                  : styles.statusBadgeArrested,
+              ]}>
+              <Text
+                style={[
+                  styles.statusBadgeText,
+                  news.arrest_status === 'active'
+                    ? styles.statusBadgeTextActive
+                    : styles.statusBadgeTextArrested,
+                ]}>
+                {news.arrest_status === 'active' ? '활동' : '검거'}
+              </Text>
+            </View>
+            {canEditStatus && (
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() =>
+                  handleUpdateArrestStatus(
+                    news.arrest_status === 'active' ? 'arrested' : 'active',
+                  )
+                }
+                disabled={isUpdatingStatus}>
+                <Icon name="pencil" size={16} color="#3d5afe" />
+                <Text style={styles.editButtonText}>
+                  {news.arrest_status === 'active' ? '검거로 변경' : '활동으로 변경'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           <Text style={styles.statusDescription}>
             {news.arrest_status === 'active'
               ? '해당 범죄자는 아직 검거되지 않고 활동 중입니다.'
               : '해당 범죄자는 이미 검거되었습니다.'}
           </Text>
-          <View style={styles.statusInfoRow}>
-            <Text style={styles.statusInfoLabel}>경찰 신고 여부</Text>
-            <Text style={styles.statusInfoValue}>
-              {news.reported_to_police ? '예' : '아니오'}
-            </Text>
+
+          {/* 경찰 신고 여부 */}
+          <View style={styles.statusInfoRowWithEdit}>
+            <View style={styles.statusInfoRow}>
+              <Text style={[styles.statusInfoLabel, styles.policeReportLabel]}>
+                경찰 신고 여부
+              </Text>
+              <Text style={styles.statusInfoValue}>
+                {news.reported_to_police ? '예' : '아니오'}
+              </Text>
+            </View>
+            {canEditStatus && (
+              <TouchableOpacity
+                style={styles.editButtonSmall}
+                onPress={() =>
+                  handleUpdatePoliceReport(!news.reported_to_police)
+                }
+                disabled={isUpdatingStatus}>
+                <Icon name="pencil" size={14} color="#3d5afe" />
+              </TouchableOpacity>
+            )}
           </View>
           {news.reported_to_police && news.police_station_name ? (
             <View style={styles.statusInfoRow}>
               <Text style={styles.statusInfoLabel}>신고 경찰서</Text>
-              <Text style={styles.statusInfoValue}>{news.police_station_name}</Text>
+              <Text style={styles.statusInfoValue}>
+                {news.police_station_name}
+              </Text>
             </View>
           ) : null}
+
+          {isUpdatingStatus && (
+            <View style={styles.updatingOverlay}>
+              <ActivityIndicator size="small" color="#3d5afe" />
+              <Text style={styles.updatingText}>업데이트 중...</Text>
+            </View>
+          )}
         </View>
+
+        {news.fraud_category && (
+          <View style={styles.scammerInfoSection}>
+            <Text style={styles.label}>사기 카테고리</Text>
+            <View style={styles.statusInfoRow}>
+              <Text style={styles.statusInfoValue}>{news.fraud_category}</Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.contentContainer}>
           <Text style={styles.content}>
@@ -388,8 +569,46 @@ function ArrestNewsDetailScreen({ route, navigation }) {
               </Text>
             )}
           </TouchableOpacity>
-          <Text style={styles.reportHelperText}>신고하지 않았으면 누르지 마세요.</Text>
+          <Text style={styles.reportHelperText}>
+            신고하지 않았으면 누르지 마세요.
+          </Text>
         </View>
+
+        {/* 사기꾼 정보 (누적신고 버튼 아래) */}
+        {(news.scammer_nickname ||
+          news.scammer_account_number ||
+          news.scammer_phone_number) && (
+          <View style={styles.scammerDetailSection}>
+            <Text style={styles.scammerDetailTitle}>사기꾼 정보</Text>
+            {news.scammer_nickname && (
+              <View style={styles.scammerDetailRow}>
+                <Icon name="account" size={18} color="#495057" />
+                <Text style={styles.scammerDetailLabel}>닉네임</Text>
+                <Text style={styles.scammerDetailValue}>
+                  {news.scammer_nickname}
+                </Text>
+              </View>
+            )}
+            {news.scammer_account_number && (
+              <View style={styles.scammerDetailRow}>
+                <Icon name="bank" size={18} color="#495057" />
+                <Text style={styles.scammerDetailLabel}>계좌번호</Text>
+                <Text style={styles.scammerDetailValue}>
+                  {maskAccountNumber(news.scammer_account_number)}
+                </Text>
+              </View>
+            )}
+            {news.scammer_phone_number && (
+              <View style={styles.scammerDetailRow}>
+                <Icon name="phone" size={18} color="#495057" />
+                <Text style={styles.scammerDetailLabel}>전화번호</Text>
+                <Text style={styles.scammerDetailValue}>
+                  {maskPhoneNumber(news.scammer_phone_number)}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <CommentsSection postId={newsId} boardType="arrest_news" />
       </ScrollView>
@@ -475,6 +694,15 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     backgroundColor: '#f8f9fa',
   },
+  scammerInfoSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: '#fff9e6',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#ffe066',
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     borderRadius: 20,
@@ -483,7 +711,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statusBadgeArrested: {
-    backgroundColor: '#e8f5e9',
+    backgroundColor: '#ffebee',
   },
   statusBadgeActive: {
     backgroundColor: '#fff3cd',
@@ -493,7 +721,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusBadgeTextArrested: {
-    color: '#1b5e20',
+    color: '#c62828',
   },
   statusBadgeTextActive: {
     color: '#b36b00',
@@ -513,6 +741,10 @@ const styles = StyleSheet.create({
   statusInfoLabel: {
     fontSize: 14,
     color: '#7f8c8d',
+  },
+  policeReportLabel: {
+    color: '#d32f2f',
+    fontWeight: '600',
   },
   statusInfoValue: {
     fontSize: 14,
@@ -606,6 +838,99 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   viewerCloseBtn: { padding: 8 },
+  // 상태 수정 관련 스타일
+  statusHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  editableHint: {
+    fontSize: 12,
+    color: '#3d5afe',
+    fontWeight: '600',
+  },
+  statusRowWithEdit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#e8f0ff',
+    borderRadius: 6,
+  },
+  editButtonText: {
+    fontSize: 12,
+    color: '#3d5afe',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  statusInfoRowWithEdit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  editButtonSmall: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  updatingOverlay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    marginTop: 8,
+    backgroundColor: '#e8f0ff',
+    borderRadius: 6,
+  },
+  updatingText: {
+    fontSize: 12,
+    color: '#3d5afe',
+    marginLeft: 8,
+  },
+  // 사기꾼 정보 섹션 스타일
+  scammerDetailSection: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 10,
+    backgroundColor: '#fff9e6',
+    borderWidth: 1,
+    borderColor: '#ffe066',
+  },
+  scammerDetailTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#b36b00',
+    marginBottom: 12,
+  },
+  scammerDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe066',
+  },
+  scammerDetailLabel: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    marginLeft: 8,
+    width: 70,
+  },
+  scammerDetailValue: {
+    flex: 1,
+    fontSize: 14,
+    color: '#2c3e50',
+    fontWeight: '600',
+  },
 });
 
 export default ArrestNewsDetailScreen;

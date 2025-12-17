@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,61 @@ import {
   Alert,
   Platform,
   Button,
+  Switch,
+  NativeModules,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
+const { VoicePhishingModule } = NativeModules;
+
 function SettingsScreen() {
   const { user, profile, signOutUser, isLoading: authIsLoading } = useAuth();
   const navigation = useNavigation();
+  const [isVoiceDetectionEnabled, setIsVoiceDetectionEnabled] = useState(false);
+
+  useEffect(() => {
+    loadVoiceDetectionSetting();
+  }, []);
+
+  const loadVoiceDetectionSetting = async () => {
+    try {
+      const setting = await AsyncStorage.getItem('voiceDetectionEnabled');
+      if (setting !== null) {
+        const enabled = setting === 'true';
+        setIsVoiceDetectionEnabled(enabled);
+      }
+    } catch (error) {
+      console.error('설정 불러오기 실패:', error);
+    }
+  };
+
+  const handleToggleVoiceDetection = async (value) => {
+    if (Platform.OS !== 'android') {
+      Alert.alert('안내', '이 기능은 Android에서만 사용 가능합니다.');
+      return;
+    }
+
+    try {
+      if (value) {
+        await VoicePhishingModule.startKeywordDetection();
+        Alert.alert(
+          '보이스피싱 실시간 감지 시작',
+          '통화 중 보이스피싱 키워드를 감지하면 진동과 알림으로 경고합니다.'
+        );
+      } else {
+        await VoicePhishingModule.stopKeywordDetection();
+        Alert.alert('보이스피싱 실시간 감지 중지', '서비스가 중지되었습니다.');
+      }
+      setIsVoiceDetectionEnabled(value);
+      await AsyncStorage.setItem('voiceDetectionEnabled', value.toString());
+    } catch (error) {
+      Alert.alert('오류', error.message || '서비스 제어 실패');
+      console.error('VoicePhishing 서비스 제어 실패:', error);
+    }
+  };
 
   const handleHelpCenterLink = () => {
     Alert.alert(
@@ -145,6 +192,28 @@ function SettingsScreen() {
 
         <View style={styles.menuGroup}>
           <Text style={styles.menuGroupTitle}>보안 도구</Text>
+
+          <View style={styles.menuItem}>
+            <Icon
+              name="phone-alert"
+              size={24}
+              color="#555"
+              style={styles.menuIcon}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuText}>보이스피싱 실시간 감지</Text>
+              <Text style={styles.menuSubText}>
+                통화 중 키워드 감지 시 즉시 경고
+              </Text>
+            </View>
+            <Switch
+              value={isVoiceDetectionEnabled}
+              onValueChange={handleToggleVoiceDetection}
+              trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
+              thumbColor={isVoiceDetectionEnabled ? '#3b82f6' : '#f4f3f4'}
+            />
+          </View>
+
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => navigation.navigate('VoiceAnalysis')}>
@@ -290,6 +359,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#333',
+  },
+  menuSubText: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
   },
   logoutButton: {
     marginTop: 30,
