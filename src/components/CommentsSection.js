@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -428,38 +429,78 @@ const CommentsSection = ({ postId, boardType }) => {
     }
 
     const isAuthor = user.id === comment.users?.auth_user_id;
-    const options = ['취소'];
-    const actions = {};
 
-    if (isAuthor) {
-      options.push('수정하기', '삭제하기');
-      actions[1] = () => setEditingComment(comment);
-      actions[2] = () => handleDeleteComment(comment.id);
+    if (Platform.OS === 'ios') {
+      const options = ['취소'];
+      const actions = {};
+
+      if (isAuthor) {
+        options.push('수정하기', '삭제하기');
+        actions[1] = () => setEditingComment(comment);
+        actions[2] = () => handleDeleteComment(comment.id);
+      } else {
+        options.push('댓글 신고하기', '이 사용자 차단하기');
+        actions[1] = () => {
+          setSelectedComment(comment);
+          setReportModalVisible(true);
+        };
+        actions[2] = () =>
+          handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
+      }
+
+      const destructiveButtonIndex = isAuthor ? 2 : 2;
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex,
+          title: '댓글 옵션',
+        },
+        buttonIndex => {
+          if (actions[buttonIndex]) {
+            actions[buttonIndex]();
+          }
+        },
+      );
     } else {
-      options.push('댓글 신고하기', '이 사용자 차단하기');
-      actions[1] = () => {
-        setSelectedComment(comment);
-        setReportModalVisible(true);
-      };
-      actions[2] = () =>
-        handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
+      // Android: Alert 사용
+      const buttons = [];
+
+      if (isAuthor) {
+        buttons.push(
+          { text: '수정하기', onPress: () => setEditingComment(comment) },
+          {
+            text: '삭제하기',
+            style: 'destructive',
+            onPress: () => handleDeleteComment(comment.id),
+          },
+        );
+      } else {
+        buttons.push(
+          {
+            text: '댓글 신고하기',
+            onPress: () => {
+              setSelectedComment(comment);
+              setReportModalVisible(true);
+            },
+          },
+          {
+            text: '이 사용자 차단하기',
+            style: 'destructive',
+            onPress: () =>
+              handleBlockUser(
+                comment.users.auth_user_id,
+                comment.users.nickname,
+              ),
+          },
+        );
+      }
+
+      buttons.push({ text: '취소', style: 'cancel' });
+
+      Alert.alert('댓글 옵션', '', buttons);
     }
-
-    const destructiveButtonIndex = isAuthor ? 2 : 2;
-
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: 0,
-        destructiveButtonIndex,
-        title: '댓글 옵션',
-      },
-      buttonIndex => {
-        if (actions[buttonIndex]) {
-          actions[buttonIndex]();
-        }
-      },
-    );
   };
 
   return (
