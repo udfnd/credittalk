@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [isReportModalVisible, setReportModalVisible] = useState(false);
+  const scrollViewRef = useRef(null);
 
   useIncrementView('incident_photos', photoId);
 
@@ -291,6 +292,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={{ paddingBottom: 8 }}
         keyboardShouldPersistTaps="always">
         <View style={styles.header}>
@@ -341,7 +343,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
 
-        <CommentsSection postId={photoId} boardType="incident_photos" />
+        <CommentsSection postId={photoId} boardType="incident_photos" scrollViewRef={scrollViewRef} />
       </ScrollView>
 
       <ImageViewing

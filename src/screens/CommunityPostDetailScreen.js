@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ function CommunityPostDetailScreen({ route }) {
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [isReportModalVisible, setReportModalVisible] = useState(false); // ReportModal 상태 추가
+  const scrollViewRef = useRef(null);
 
   useIncrementView('community_posts', postId);
 
@@ -294,6 +295,7 @@ function CommunityPostDetailScreen({ route }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
@@ -322,7 +324,7 @@ function CommunityPostDetailScreen({ route }) {
             <Text style={styles.linkButtonText}>관련 링크 바로가기</Text>
           </TouchableOpacity>
         )}
-        <CommentsSection postId={postId} boardType="community_posts" />
+        <CommentsSection postId={postId} boardType="community_posts" scrollViewRef={scrollViewRef} />
       </ScrollView>
       <ImageViewing
         images={viewerImages}

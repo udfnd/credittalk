@@ -308,9 +308,36 @@ export default function ArrestNewsCreateScreen() {
   const [selectedStation, setSelectedStation] = useState(null);
   const [scammerNickname, setScammerNickname] = useState('');
   const [scammerAccount, setScammerAccount] = useState('');
-  const [scammerPhone, setScammerPhone] = useState('');
+  const [scammerPhones, setScammerPhones] = useState(['']); // 전화번호 배열
   const [fraudCategory, setFraudCategory] = useState('');
   const [customFraudCategory, setCustomFraudCategory] = useState('');
+
+  // 전화번호 추가
+  const handleAddPhone = () => {
+    if (scammerPhones.length >= 5) {
+      Alert.alert('알림', '전화번호는 최대 5개까지 입력할 수 있습니다.');
+      return;
+    }
+    setScammerPhones([...scammerPhones, '']);
+  };
+
+  // 전화번호 수정
+  const handlePhoneChange = (index, value) => {
+    const newPhones = [...scammerPhones];
+    newPhones[index] = value;
+    setScammerPhones(newPhones);
+  };
+
+  // 전화번호 삭제
+  const handleRemovePhone = index => {
+    if (scammerPhones.length <= 1) {
+      // 최소 1개는 유지 (빈 값으로)
+      setScammerPhones(['']);
+      return;
+    }
+    const newPhones = scammerPhones.filter((_, i) => i !== index);
+    setScammerPhones(newPhones);
+  };
 
   useEffect(() => {
     if (reportedToPolice !== true) {
@@ -432,7 +459,9 @@ export default function ArrestNewsCreateScreen() {
             : fraudCategory || null,
         scammer_nickname: scammerNickname.trim() || null,
         scammer_account_number: scammerAccount.trim() || null,
-        scammer_phone_number: scammerPhone.trim() || null,
+        scammer_phone_numbers: scammerPhones
+          .map(p => p.trim())
+          .filter(p => p.length > 0),
       });
       if (insertError) throw insertError;
 
@@ -642,14 +671,30 @@ export default function ArrestNewsCreateScreen() {
           onChangeText={setScammerAccount}
           keyboardType="number-pad"
         />
-        <TextInput
-          style={styles.input}
-          placeholder="사기꾼이 쓰는 전화번호 (- 없이 숫자만)"
-          placeholderTextColor="#6c757d"
-          value={scammerPhone}
-          onChangeText={setScammerPhone}
-          keyboardType="phone-pad"
-        />
+        <Text style={styles.label}>사기꾼이 쓰는 전화번호</Text>
+        {scammerPhones.map((phone, index) => (
+          <View key={index} style={styles.phoneInputRow}>
+            <TextInput
+              style={[styles.input, styles.phoneInput]}
+              placeholder={`전화번호 ${index + 1} (- 없이 숫자만)`}
+              placeholderTextColor="#6c757d"
+              value={phone}
+              onChangeText={value => handlePhoneChange(index, value)}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity
+              style={styles.removePhoneButton}
+              onPress={() => handleRemovePhone(index)}>
+              <Icon name="close-circle" size={24} color="#e74c3c" />
+            </TouchableOpacity>
+          </View>
+        ))}
+        {scammerPhones.length < 5 && (
+          <TouchableOpacity style={styles.addPhoneButton} onPress={handleAddPhone}>
+            <Icon name="plus-circle" size={20} color="#3d5afe" />
+            <Text style={styles.addPhoneButtonText}>전화번호 추가 입력</Text>
+          </TouchableOpacity>
+        )}
 
         <TextInput
           style={styles.input}
@@ -887,5 +932,36 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginTop: 30,
     marginBottom: 40,
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  phoneInput: {
+    flex: 1,
+    marginBottom: 0,
+    marginRight: 10,
+  },
+  removePhoneButton: {
+    padding: 5,
+  },
+  addPhoneButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#3d5afe',
+    borderRadius: 8,
+    borderStyle: 'dashed',
+    backgroundColor: '#f8f9ff',
+  },
+  addPhoneButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#3d5afe',
+    fontWeight: '600',
   },
 });

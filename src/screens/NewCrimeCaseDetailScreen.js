@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ function NewCrimeCaseDetailScreen({ route }) {
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [isReportModalVisible, setReportModalVisible] = useState(false);
+  const scrollViewRef = useRef(null);
 
   useIncrementView('new_crime_cases', caseId);
 
@@ -290,6 +291,7 @@ function NewCrimeCaseDetailScreen({ route }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={{ paddingBottom: 8 }}
         keyboardShouldPersistTaps="always">
         <View style={styles.header}>
@@ -335,7 +337,7 @@ function NewCrimeCaseDetailScreen({ route }) {
           </TouchableOpacity>
         )}
 
-        <CommentsSection postId={caseId} boardType="new_crime_cases" />
+        <CommentsSection postId={caseId} boardType="new_crime_cases" scrollViewRef={scrollViewRef} />
       </ScrollView>
 
       <ImageViewing
