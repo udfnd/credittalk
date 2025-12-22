@@ -2,13 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(./gradlew clean:*)",
-      "Bash(npx react-native:*)"
+      "Bash(npx react-native:*)",
+      "mcp__supabase__apply_migration"
     ],
     "deny": [],
     "ask": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

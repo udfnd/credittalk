@@ -1,6 +1,6 @@
 // src/screens/ArrestNewsDetailScreen.js
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -68,6 +68,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   const [reportCount, setReportCount] = useState(0);
   const [hasReported, setHasReported] = useState(false);
   const [isReportUpdating, setIsReportUpdating] = useState(false);
+  const scrollViewRef = useRef(null);
 
   const isAuthor = useMemo(() => {
     if (!user || !news) return false;
@@ -119,7 +120,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           `
           id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views, user_id,
           arrest_status, reported_to_police, police_station_name,
-          fraud_category, scammer_nickname, scammer_account_number, scammer_phone_number
+          fraud_category, scammer_nickname, scammer_account_number, scammer_phone_number, scammer_phone_numbers
         `,
         )
         .eq('id', newsId)
@@ -416,6 +417,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={{ paddingBottom: 8 }}
         keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
@@ -577,7 +579,8 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         {/* 사기꾼 정보 (누적신고 버튼 아래) */}
         {(news.scammer_nickname ||
           news.scammer_account_number ||
-          news.scammer_phone_number) && (
+          news.scammer_phone_number ||
+          (news.scammer_phone_numbers && news.scammer_phone_numbers.length > 0)) && (
           <View style={styles.scammerDetailSection}>
             <Text style={styles.scammerDetailTitle}>사기꾼 정보</Text>
             {news.scammer_nickname && (
@@ -598,7 +601,21 @@ function ArrestNewsDetailScreen({ route, navigation }) {
                 </Text>
               </View>
             )}
-            {news.scammer_phone_number && (
+            {/* 새로운 배열 형식 전화번호 표시 */}
+            {news.scammer_phone_numbers && news.scammer_phone_numbers.length > 0 ? (
+              news.scammer_phone_numbers.map((phone, index) => (
+                <View key={index} style={styles.scammerDetailRow}>
+                  <Icon name="phone" size={18} color="#495057" />
+                  <Text style={styles.scammerDetailLabel}>
+                    전화번호{news.scammer_phone_numbers.length > 1 ? ` ${index + 1}` : ''}
+                  </Text>
+                  <Text style={styles.scammerDetailValue}>
+                    {maskPhoneNumber(phone)}
+                  </Text>
+                </View>
+              ))
+            ) : news.scammer_phone_number ? (
+              // 기존 단일 전화번호 (하위 호환성)
               <View style={styles.scammerDetailRow}>
                 <Icon name="phone" size={18} color="#495057" />
                 <Text style={styles.scammerDetailLabel}>전화번호</Text>
@@ -606,11 +623,11 @@ function ArrestNewsDetailScreen({ route, navigation }) {
                   {maskPhoneNumber(news.scammer_phone_number)}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
         )}
 
-        <CommentsSection postId={newsId} boardType="arrest_news" />
+        <CommentsSection postId={newsId} boardType="arrest_news" scrollViewRef={scrollViewRef} />
       </ScrollView>
 
       <ImageViewing

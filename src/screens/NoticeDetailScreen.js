@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ const NoticeDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const scrollViewRef = useRef(null);
 
   useIncrementView('notices', noticeId);
 
@@ -180,6 +181,7 @@ const NoticeDetailScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="always">
         <View style={styles.postContainer}>
@@ -222,7 +224,7 @@ const NoticeDetailScreen = () => {
           )}
         </View>
 
-        <CommentsSection postId={noticeId} boardType="notices" />
+        <CommentsSection postId={noticeId} boardType="notices" scrollViewRef={scrollViewRef} />
       </ScrollView>
 
       <ImageViewing
