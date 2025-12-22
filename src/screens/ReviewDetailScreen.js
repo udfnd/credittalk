@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -54,6 +54,7 @@ function ReviewDetailScreen({ route }) {
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [isReportModalVisible, setReportModalVisible] = useState(false);
+  const scrollViewRef = useRef(null);
 
   const isAuthor = useMemo(() => {
     if (!user || !review) return false;
@@ -334,6 +335,7 @@ function ReviewDetailScreen({ route }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="always">
         <View style={styles.headerContainer}>
@@ -361,7 +363,7 @@ function ReviewDetailScreen({ route }) {
           </Text>
         </View>
 
-        <CommentsSection postId={reviewId} boardType="reviews" />
+        <CommentsSection postId={reviewId} boardType="reviews" scrollViewRef={scrollViewRef} />
       </ScrollView>
 
       <ImageViewing
