@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   ActionSheetIOS,
   Platform,
+  findNodeHandle,
+  UIManager,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -34,13 +36,36 @@ const CommentInput = ({
   loading = false,
   isEdit = false,
   depth = 0, // ✅ 추가: 현재 깊이
+  scrollViewRef, // 부모 ScrollView ref
 }) => {
   const [text, setText] = useState(initialContent);
   const disabled = loading;
+  const inputContainerRef = useRef(null);
+
+  // 입력창이 마운트될 때 해당 위치로 스크롤
+  useEffect(() => {
+    if (inputContainerRef.current && scrollViewRef?.current) {
+      const timer = setTimeout(() => {
+        const nodeHandle = findNodeHandle(inputContainerRef.current);
+        if (nodeHandle) {
+          UIManager.measureInWindow(nodeHandle, (x, y, width, height) => {
+            // 입력창이 화면 하단에 가깝도록 스크롤
+            scrollViewRef.current?.scrollTo?.({
+              y: y - 150, // 입력창 위에 여유 공간 확보
+              animated: true,
+            });
+          });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [scrollViewRef]);
 
   return (
     <AvoidSoftInputView avoidOffset={8}>
       <View
+        ref={inputContainerRef}
+        collapsable={false}
         style={
           isEdit
             ? styles.editInputContainer
@@ -111,6 +136,7 @@ const CommentItem = ({
   replyingToId,
   submittingReplyId,
   depth = 0, // ✅ 추가: 현재 댓글의 깊이
+  scrollViewRef, // 부모 ScrollView ref
 }) => {
   const isEditingThis = editingComment?.id === comment.id;
   const isReplyingToThis = replyingToId === comment.id;
@@ -143,6 +169,7 @@ const CommentItem = ({
             loading={submittingReplyId === comment.id}
             isEdit
             depth={depth}
+            scrollViewRef={scrollViewRef}
           />
         ) : (
           <Text style={styles.commentContent}>{comment.content}</Text>
@@ -169,6 +196,7 @@ const CommentItem = ({
           onSubmit={replyText => onReplySubmit(replyText, comment.id)}
           loading={submittingReplyId === comment.id}
           depth={depth} // 루트에서만 들여쓰기 1회, 그 이상은 flat
+          scrollViewRef={scrollViewRef}
         />
       )}
 
@@ -194,6 +222,7 @@ const CommentItem = ({
               submittingReplyId={submittingReplyId}
               onReplySubmit={onReplySubmit}
               depth={depth + 1} // 재귀적으로 뎁스 증가
+              scrollViewRef={scrollViewRef}
             />
           ))}
         </View>
@@ -205,7 +234,7 @@ const CommentItem = ({
 /**
  * 메인 섹션
  */
-const CommentsSection = ({ postId, boardType }) => {
+const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -528,6 +557,7 @@ const CommentsSection = ({ postId, boardType }) => {
               submittingReplyId={submittingReplyId}
               onReplySubmit={handleAddComment}
               depth={0} // ✅ 루트는 0
+              scrollViewRef={scrollViewRef}
             />
           )}
           ListEmptyComponent={
