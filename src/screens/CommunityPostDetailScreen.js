@@ -17,7 +17,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
@@ -182,14 +182,16 @@ function CommunityPostDetailScreen({ route }) {
     }
   });
 
-  useEffect(() => {
-    AvoidSoftInput.setEnabled(true);
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setEnabled(false);
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   const handleEditPost = () => {
     navigation.navigate('CommunityPostEdit', { postId: post.id });
