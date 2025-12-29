@@ -12,6 +12,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
+CREATE EXTENSION IF NOT EXISTS "pg_cron" WITH SCHEMA "pg_catalog";
+
+
+
+
+
+
 CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
 
 
@@ -1515,9 +1522,14 @@ CREATE TABLE IF NOT EXISTS "public"."arrest_news" (
     "category" "text",
     "views" bigint DEFAULT 0,
     "user_id" "uuid",
-    "arrest_status" "text" DEFAULT 'arrested'::text NOT NULL,
+    "arrest_status" "text" DEFAULT 'arrested'::"text" NOT NULL,
     "reported_to_police" boolean DEFAULT false NOT NULL,
-    "police_station_name" "text"
+    "police_station_name" "text",
+    "fraud_category" "text",
+    "scammer_nickname" "text",
+    "scammer_account_number" "text",
+    "scammer_phone_number" "text",
+    "scammer_phone_numbers" "text"[] DEFAULT '{}'::"text"[]
 );
 
 
@@ -1553,6 +1565,26 @@ COMMENT ON COLUMN "public"."arrest_news"."reported_to_police" IS '경찰 신고 
 
 
 COMMENT ON COLUMN "public"."arrest_news"."police_station_name" IS '신고한 경찰서 이름 (텍스트)';
+
+
+
+COMMENT ON COLUMN "public"."arrest_news"."fraud_category" IS '사기 카테고리 (보이스피싱, 불법사금융, 중고물품 사기 등)';
+
+
+
+COMMENT ON COLUMN "public"."arrest_news"."scammer_nickname" IS '사기꾼이 쓰는 닉네임';
+
+
+
+COMMENT ON COLUMN "public"."arrest_news"."scammer_account_number" IS '사기꾼이 쓰는 계좌번호';
+
+
+
+COMMENT ON COLUMN "public"."arrest_news"."scammer_phone_number" IS '사기꾼이 쓰는 전화번호';
+
+
+
+COMMENT ON COLUMN "public"."arrest_news"."scammer_phone_numbers" IS '사기꾼 전화번호 목록 (배열)';
 
 
 
@@ -2485,13 +2517,15 @@ ALTER TABLE ONLY "public"."push_jobs" ALTER COLUMN "id" SET DEFAULT "nextval"('"
 ALTER TABLE ONLY "public"."arrest_news"
     ADD CONSTRAINT "arrest_news_pkey" PRIMARY KEY ("id");
 
-ALTER TABLE ONLY "public"."arrest_news_reports"
-    ADD CONSTRAINT "arrest_news_reports_pkey" PRIMARY KEY ("id");
-
 
 
 ALTER TABLE ONLY "public"."arrest_news_reports"
     ADD CONSTRAINT "arrest_news_reports_arrest_news_id_user_id_key" UNIQUE ("arrest_news_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."arrest_news_reports"
+    ADD CONSTRAINT "arrest_news_reports_pkey" PRIMARY KEY ("id");
 
 
 
@@ -2650,6 +2684,14 @@ ALTER TABLE ONLY "public"."users"
 
 
 
+CREATE INDEX "arrest_news_reports_news_id_idx" ON "public"."arrest_news_reports" USING "btree" ("arrest_news_id");
+
+
+
+CREATE INDEX "arrest_news_reports_user_id_idx" ON "public"."arrest_news_reports" USING "btree" ("user_id");
+
+
+
 CREATE INDEX "idx_comments_parent_comment_id" ON "public"."comments" USING "btree" ("parent_comment_id");
 
 
@@ -2659,14 +2701,6 @@ CREATE INDEX "idx_comments_post_board_type" ON "public"."comments" USING "btree"
 
 
 CREATE INDEX "idx_comments_user_id" ON "public"."comments" USING "btree" ("user_id");
-
-
-
-CREATE INDEX "arrest_news_reports_news_id_idx" ON "public"."arrest_news_reports" USING "btree" ("arrest_news_id");
-
-
-
-CREATE INDEX "arrest_news_reports_user_id_idx" ON "public"."arrest_news_reports" USING "btree" ("user_id");
 
 
 
@@ -2754,11 +2788,6 @@ CREATE OR REPLACE TRIGGER "trg_help_desk_notices_updated" BEFORE UPDATE ON "publ
 
 
 
-ALTER TABLE ONLY "public"."arrest_news"
-    ADD CONSTRAINT "arrest_news_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
-
-
-
 ALTER TABLE ONLY "public"."arrest_news_reports"
     ADD CONSTRAINT "arrest_news_reports_arrest_news_id_fkey" FOREIGN KEY ("arrest_news_id") REFERENCES "public"."arrest_news"("id") ON DELETE CASCADE;
 
@@ -2766,6 +2795,11 @@ ALTER TABLE ONLY "public"."arrest_news_reports"
 
 ALTER TABLE ONLY "public"."arrest_news_reports"
     ADD CONSTRAINT "arrest_news_reports_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."arrest_news"
+    ADD CONSTRAINT "arrest_news_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
 
 
 
@@ -2921,17 +2955,6 @@ CREATE POLICY "Admin full access" ON "public"."new_crime_cases" TO "service_role
 CREATE POLICY "Admins can manage arrest news." ON "public"."arrest_news" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
 
 
-CREATE POLICY "Public can read arrest news reports" ON "public"."arrest_news_reports" FOR SELECT USING (true);
-
-
-
-CREATE POLICY "Authenticated users can insert arrest news reports" ON "public"."arrest_news_reports" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
-
-
-
-CREATE POLICY "Authenticated users can delete arrest news reports" ON "public"."arrest_news_reports" FOR DELETE TO "authenticated" USING (("auth"."uid"() = "user_id"));
-
-
 
 CREATE POLICY "Admins can manage incident photos." ON "public"."incident_photos" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
 
@@ -3035,7 +3058,15 @@ CREATE POLICY "Authenticated users can create reviews." ON "public"."reviews" FO
 
 
 
+CREATE POLICY "Authenticated users can delete arrest news reports" ON "public"."arrest_news_reports" FOR DELETE TO "authenticated" USING (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Authenticated users can insert arrest news" ON "public"."arrest_news" FOR INSERT TO "authenticated" WITH CHECK (true);
+
+
+
+CREATE POLICY "Authenticated users can insert arrest news reports" ON "public"."arrest_news_reports" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -3064,6 +3095,10 @@ CREATE POLICY "Enable read access for all users" ON "public"."search_logs" FOR S
 
 
 CREATE POLICY "Public can read arrest news" ON "public"."arrest_news" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Public can read arrest news reports" ON "public"."arrest_news_reports" FOR SELECT USING (true);
 
 
 
@@ -3220,7 +3255,11 @@ CREATE POLICY "allow_update_only_before_admin_comment" ON "public"."help_questio
 
 
 ALTER TABLE "public"."arrest_news" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."arrest_news_reports" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."audio_analysis_results" ENABLE ROW LEVEL SECURITY;
 
 
@@ -3377,10 +3416,34 @@ ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."comments";
 
 
 
+
+
+
 GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -3856,6 +3919,12 @@ GRANT ALL ON FUNCTION "public"."update_room_last_message_at"() TO "service_role"
 
 
 
+
+
+
+
+
+
 GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "anon";
 GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "authenticated";
 GRANT ALL ON TABLE "public"."decrypted_scammer_reports" TO "service_role";
@@ -3883,6 +3952,7 @@ GRANT ALL ON SEQUENCE "public"."arrest_news_id_seq" TO "service_role";
 GRANT ALL ON TABLE "public"."arrest_news_reports" TO "anon";
 GRANT ALL ON TABLE "public"."arrest_news_reports" TO "authenticated";
 GRANT ALL ON TABLE "public"."arrest_news_reports" TO "service_role";
+
 
 
 GRANT ALL ON SEQUENCE "public"."arrest_news_reports_id_seq" TO "anon";
