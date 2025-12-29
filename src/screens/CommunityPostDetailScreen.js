@@ -12,6 +12,7 @@ import {
   Dimensions,
   Linking,
   ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -28,7 +29,7 @@ const { width } = Dimensions.get('window');
 function CommunityPostDetailScreen({ route }) {
   const navigation = useNavigation();
   const { postId, postTitle } = route.params;
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [post, setPost] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +45,11 @@ function CommunityPostDetailScreen({ route }) {
     if (!user || !post) return false;
     return user.id === post.author_auth_id;
   }, [user, post]);
+
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  // 작성자이거나 관리자인 경우 수정/삭제 권한
+  const canEditOrDelete = isAuthor || isAdmin;
 
   const fetchPostDetail = useCallback(async () => {
     setError(null);
@@ -111,26 +117,39 @@ function CommunityPostDetailScreen({ route }) {
   };
 
   const showPostOptions = () => {
-    const options = ['취소', '게시물 신고하기', '이 사용자 차단하기'];
-    const destructiveButtonIndex = 2;
-    const cancelButtonIndex = 0;
+    if (Platform.OS === 'ios') {
+      const options = ['취소', '게시물 신고하기', '이 사용자 차단하기'];
+      const destructiveButtonIndex = 2;
+      const cancelButtonIndex = 0;
 
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex,
-        destructiveButtonIndex,
-        title: '게시물 옵션',
-        message: '원하는 작업을 선택해주세요.',
-      },
-      buttonIndex => {
-        if (buttonIndex === 1) {
-          setReportModalVisible(true);
-        } else if (buttonIndex === 2) {
-          handleBlockUser();
-        }
-      },
-    );
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          destructiveButtonIndex,
+          title: '게시물 옵션',
+          message: '원하는 작업을 선택해주세요.',
+        },
+        buttonIndex => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (buttonIndex === 2) {
+            handleBlockUser();
+          }
+        },
+      );
+    } else {
+      // Android
+      Alert.alert('게시물 옵션', '원하는 작업을 선택해주세요.', [
+        { text: '게시물 신고하기', onPress: () => setReportModalVisible(true) },
+        {
+          text: '이 사용자 차단하기',
+          style: 'destructive',
+          onPress: handleBlockUser,
+        },
+        { text: '취소', style: 'cancel' },
+      ]);
+    }
   };
 
   useEffect(() => {
@@ -139,7 +158,7 @@ function CommunityPostDetailScreen({ route }) {
         title: post.title,
         headerRight: () => (
           <View style={{ flexDirection: 'row', paddingRight: 8 }}>
-            {isAuthor ? (
+            {canEditOrDelete ? (
               <>
                 <TouchableOpacity
                   onPress={handleEditPost}

@@ -11,6 +11,7 @@ import {
   Image,
   Dimensions,
   ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -43,7 +44,7 @@ const StarRating = ({ rating }) => {
 function ReviewDetailScreen({ route }) {
   const navigation = useNavigation();
   const { reviewId, reviewTitle } = route.params;
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   useIncrementView('reviews', reviewId);
 
@@ -60,6 +61,11 @@ function ReviewDetailScreen({ route }) {
     if (!user || !review) return false;
     return user.id === review.author_auth_id;
   }, [user, review]);
+
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  // 작성자이거나 관리자인 경우 수정/삭제 권한
+  const canEditOrDelete = isAuthor || isAdmin;
 
   const fetchReviewDetail = useCallback(async () => {
     setError(null);
@@ -130,27 +136,45 @@ function ReviewDetailScreen({ route }) {
   const showReviewOptions = useCallback(() => {
     if (!review) return;
 
-    const options = ['취소', '게시물 신고하기'];
     const blockAvailable = user && review.author_auth_id && user.id !== review.author_auth_id;
-    if (blockAvailable) {
-      options.push('이 사용자 차단하기');
-    }
 
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: 0,
-        destructiveButtonIndex: blockAvailable ? 2 : undefined,
-        title: '게시물 옵션',
-      },
-      buttonIndex => {
-        if (buttonIndex === 1) {
-          setReportModalVisible(true);
-        } else if (blockAvailable && buttonIndex === 2) {
-          handleBlockUser();
-        }
-      },
-    );
+    if (Platform.OS === 'ios') {
+      const options = ['취소', '게시물 신고하기'];
+      if (blockAvailable) {
+        options.push('이 사용자 차단하기');
+      }
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: blockAvailable ? 2 : undefined,
+          title: '게시물 옵션',
+        },
+        buttonIndex => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (blockAvailable && buttonIndex === 2) {
+            handleBlockUser();
+          }
+        },
+      );
+    } else {
+      // Android
+      const buttons = [
+        { text: '게시물 신고하기', onPress: () => setReportModalVisible(true) },
+      ];
+      if (blockAvailable) {
+        buttons.push({
+          text: '이 사용자 차단하기',
+          style: 'destructive',
+          onPress: handleBlockUser,
+        });
+      }
+      buttons.push({ text: '취소', style: 'cancel' });
+
+      Alert.alert('게시물 옵션', '', buttons);
+    }
   }, [handleBlockUser, review, user]);
 
   const handleEdit = useCallback(() => {
@@ -208,7 +232,7 @@ function ReviewDetailScreen({ route }) {
       navigation.setOptions({
         title: review.title,
         headerRight: () => {
-          if (isAuthor) {
+          if (canEditOrDelete) {
             return (
               <View style={{ flexDirection: 'row', paddingRight: 8 }}>
                 <TouchableOpacity

@@ -13,6 +13,8 @@ import {
   TouchableOpacity,
   Linking,
   Alert,
+  ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -20,7 +22,8 @@ import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
-import { useAuth } from '../context/AuthContext'; // useAuth hook 추가
+import { useAuth } from '../context/AuthContext';
+import ReportModal from '../components/ReportModal';
 
 const { width } = Dimensions.get('window');
 
@@ -77,11 +80,15 @@ function ArrestNewsDetailScreen({ route, navigation }) {
 
   const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
 
+  // 작성자이거나 관리자인 경우 수정/삭제 권한
+  const canEditOrDelete = isAuthor || isAdmin;
+
   // 검거여부 및 경찰신고 여부 수정 가능 여부
   const canEditStatus = isAuthor || isAdmin;
 
   // 검거여부/경찰신고여부 수정 상태
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
 
   const fetchReportStatus = useCallback(async () => {
     try {
@@ -163,19 +170,30 @@ function ArrestNewsDetailScreen({ route, navigation }) {
     if (news) {
       navigation.setOptions({
         title: news.title,
-        headerRight: () =>
-          isAuthor ? (
-            <View style={{ flexDirection: 'row' }}>
-              <TouchableOpacity
-                onPress={handleEdit}
-                style={{ marginRight: 15 }}>
-                <Icon name="pencil" size={24} color="#3d5afe" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleDelete}>
-                <Icon name="delete" size={24} color="#e74c3c" />
-              </TouchableOpacity>
-            </View>
-          ) : null,
+        headerRight: () => {
+          if (canEditOrDelete) {
+            return (
+              <View style={{ flexDirection: 'row', paddingRight: 8 }}>
+                <TouchableOpacity
+                  onPress={handleEdit}
+                  style={{ marginRight: 20 }}>
+                  <Icon name="pencil" size={24} color="#3d5afe" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDelete}>
+                  <Icon name="delete" size={24} color="#e74c3c" />
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
+          if (!news.user_id) return null;
+
+          return (
+            <TouchableOpacity onPress={showNewsOptions} style={{ marginRight: 12 }}>
+              <Icon name="dots-vertical" size={24} color="#333" />
+            </TouchableOpacity>
+          );
+        },
       });
     } else if (newsTitle) {
       navigation.setOptions({ title: newsTitle });
@@ -211,6 +229,83 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         },
       ],
     );
+  };
+
+  const handleBlockUser = async () => {
+    if (!user || !news || !news.user_id || user.id === news.user_id) return;
+
+    Alert.alert(
+      '사용자 차단',
+      `이 게시글의 작성자를 차단하시겠습니까?\n차단한 사용자의 게시물과 댓글은 더 이상 보이지 않습니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '차단',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('blocked_users').insert({
+                user_id: user.id,
+                blocked_user_id: news.user_id,
+              });
+              if (error && error.code !== '23505') throw error;
+              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              navigation.goBack();
+            } catch (err) {
+              console.error('Block user error:', err);
+              Alert.alert(
+                '차단 실패',
+                err.message || '사용자 차단 중 오류가 발생했습니다.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const showNewsOptions = () => {
+    if (!news) return;
+
+    const blockAvailable = user && news.user_id && user.id !== news.user_id;
+
+    if (Platform.OS === 'ios') {
+      const options = ['취소', '게시물 신고하기'];
+      if (blockAvailable) {
+        options.push('이 사용자 차단하기');
+      }
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: blockAvailable ? 2 : undefined,
+          title: '게시물 옵션',
+        },
+        buttonIndex => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (blockAvailable && buttonIndex === 2) {
+            handleBlockUser();
+          }
+        },
+      );
+    } else {
+      // Android
+      const buttons = [
+        { text: '게시물 신고하기', onPress: () => setReportModalVisible(true) },
+      ];
+      if (blockAvailable) {
+        buttons.push({
+          text: '이 사용자 차단하기',
+          style: 'destructive',
+          onPress: handleBlockUser,
+        });
+      }
+      buttons.push({ text: '취소', style: 'cancel' });
+
+      Alert.alert('게시물 옵션', '', buttons);
+    }
   };
 
   const handleToggleReport = async () => {
@@ -646,6 +741,16 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           </View>
         )}
       />
+
+      {news && (
+        <ReportModal
+          isVisible={isReportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+          contentId={news.id}
+          contentType="arrest_news"
+          authorId={news.user_id}
+        />
+      )}
     </SafeAreaView>
   );
 }

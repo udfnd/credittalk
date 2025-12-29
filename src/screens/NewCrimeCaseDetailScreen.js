@@ -12,6 +12,7 @@ import {
   Linking,
   Alert,
   ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -28,7 +29,7 @@ const { width } = Dimensions.get('window');
 function NewCrimeCaseDetailScreen({ route }) {
   const navigation = useNavigation();
   const { caseId } = route.params;
-  const { user } = useAuth(); // ✅ 추가
+  const { user, profile } = useAuth();
 
   const [caseDetail, setCaseDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +45,11 @@ function NewCrimeCaseDetailScreen({ route }) {
     if (!user || !caseDetail) return false;
     return user.id === caseDetail.user_id;
   }, [user, caseDetail]);
+
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  // 작성자이거나 관리자인 경우 수정/삭제 권한
+  const canEditOrDelete = isAuthor || isAdmin;
 
   const fetchCaseDetail = useCallback(async () => {
     setError(null);
@@ -119,27 +125,45 @@ function NewCrimeCaseDetailScreen({ route }) {
   const showCaseOptions = useCallback(() => {
     if (!caseDetail) return;
 
-    const options = ['취소', '게시물 신고하기'];
     const blockAvailable = user && caseDetail.user_id && user.id !== caseDetail.user_id;
-    if (blockAvailable) {
-      options.push('이 사용자 차단하기');
-    }
 
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: 0,
-        destructiveButtonIndex: blockAvailable ? 2 : undefined,
-        title: '게시물 옵션',
-      },
-      buttonIndex => {
-        if (buttonIndex === 1) {
-          setReportModalVisible(true);
-        } else if (blockAvailable && buttonIndex === 2) {
-          handleBlockUser();
-        }
-      },
-    );
+    if (Platform.OS === 'ios') {
+      const options = ['취소', '게시물 신고하기'];
+      if (blockAvailable) {
+        options.push('이 사용자 차단하기');
+      }
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: blockAvailable ? 2 : undefined,
+          title: '게시물 옵션',
+        },
+        buttonIndex => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (blockAvailable && buttonIndex === 2) {
+            handleBlockUser();
+          }
+        },
+      );
+    } else {
+      // Android
+      const buttons = [
+        { text: '게시물 신고하기', onPress: () => setReportModalVisible(true) },
+      ];
+      if (blockAvailable) {
+        buttons.push({
+          text: '이 사용자 차단하기',
+          style: 'destructive',
+          onPress: handleBlockUser,
+        });
+      }
+      buttons.push({ text: '취소', style: 'cancel' });
+
+      Alert.alert('게시물 옵션', '', buttons);
+    }
   }, [caseDetail, handleBlockUser, user]);
 
   const handleEdit = useCallback(() => {
@@ -200,7 +224,7 @@ function NewCrimeCaseDetailScreen({ route }) {
     navigation.setOptions({
       title: caseDetail.title || '사례 상세 정보',
       headerRight: () => {
-        if (isAuthor) {
+        if (canEditOrDelete) {
           return (
             <View style={{ flexDirection: 'row', paddingRight: 8 }}>
               <TouchableOpacity
@@ -224,7 +248,7 @@ function NewCrimeCaseDetailScreen({ route }) {
         );
       },
     });
-  }, [caseDetail, handleDelete, handleEdit, isAuthor, navigation, showCaseOptions]);
+  }, [canEditOrDelete, caseDetail, handleDelete, handleEdit, navigation, showCaseOptions]);
 
   useEffect(() => {
     AvoidSoftInput.setShouldMimicIOSBehavior(true);

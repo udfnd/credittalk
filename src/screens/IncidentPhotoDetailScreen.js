@@ -12,6 +12,7 @@ import {
   Linking,
   Alert,
   ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
@@ -26,7 +27,7 @@ const { width } = Dimensions.get('window');
 
 function IncidentPhotoDetailScreen({ route, navigation }) {
   const { photoId, photoTitle } = route.params;
-  const { user } = useAuth(); // Get current user
+  const { user, profile } = useAuth(); // Get current user
 
   const [photo, setPhoto] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +43,11 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     if (!user || !photo) return false;
     return user.id === photo.uploader_id;
   }, [user, photo]);
+
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  // 작성자이거나 관리자인 경우 수정/삭제 권한
+  const canEditOrDelete = isAuthor || isAdmin;
 
   const fetchPhotoDetail = useCallback(async () => {
     setError(null);
@@ -117,27 +123,45 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
   const showPhotoOptions = useCallback(() => {
     if (!photo) return;
 
-    const options = ['취소', '사진 신고하기'];
     const blockAvailable = user && photo.uploader_id && user.id !== photo.uploader_id;
-    if (blockAvailable) {
-      options.push('이 사용자 차단하기');
-    }
 
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: 0,
-        destructiveButtonIndex: blockAvailable ? 2 : undefined,
-        title: '게시물 옵션',
-      },
-      buttonIndex => {
-        if (buttonIndex === 1) {
-          setReportModalVisible(true);
-        } else if (blockAvailable && buttonIndex === 2) {
-          handleBlockUser();
-        }
-      },
-    );
+    if (Platform.OS === 'ios') {
+      const options = ['취소', '사진 신고하기'];
+      if (blockAvailable) {
+        options.push('이 사용자 차단하기');
+      }
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: blockAvailable ? 2 : undefined,
+          title: '게시물 옵션',
+        },
+        buttonIndex => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (blockAvailable && buttonIndex === 2) {
+            handleBlockUser();
+          }
+        },
+      );
+    } else {
+      // Android
+      const buttons = [
+        { text: '사진 신고하기', onPress: () => setReportModalVisible(true) },
+      ];
+      if (blockAvailable) {
+        buttons.push({
+          text: '이 사용자 차단하기',
+          style: 'destructive',
+          onPress: handleBlockUser,
+        });
+      }
+      buttons.push({ text: '취소', style: 'cancel' });
+
+      Alert.alert('게시물 옵션', '', buttons);
+    }
   }, [handleBlockUser, photo, user]);
 
   const handleEdit = useCallback(() => {
@@ -198,7 +222,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
       navigation.setOptions({
         title: photo.title,
         headerRight: () => {
-          if (isAuthor) {
+          if (canEditOrDelete) {
             return (
               <View style={{ flexDirection: 'row', paddingRight: 8 }}>
                 <TouchableOpacity

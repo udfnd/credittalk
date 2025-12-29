@@ -77,6 +77,11 @@ export default function HelpDeskDetailScreen() {
     return user.id === question.user_id;
   }, [user, question]);
 
+  const isAdmin = useMemo(() => profile?.is_admin === true, [profile]);
+
+  // 작성자이거나 관리자인 경우 수정/삭제 권한 (현재 HelpDesk은 수정/삭제 미지원)
+  const canEditOrDelete = isAuthor || isAdmin;
+
   // 데이터 로딩 함수 (질문 + 댓글)
   const fetchData = useCallback(async () => {
     if (!questionId || isAuthLoading) {
@@ -217,27 +222,45 @@ export default function HelpDeskDetailScreen() {
   const showQuestionOptions = useCallback(() => {
     if (!question) return;
 
-    const options = ['취소', '게시물 신고하기'];
     const blockAvailable = user && question.user_id && user.id !== question.user_id;
-    if (blockAvailable) {
-      options.push('이 사용자 차단하기');
-    }
 
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: 0,
-        destructiveButtonIndex: blockAvailable ? 2 : undefined,
-        title: '게시물 옵션',
-      },
-      buttonIndex => {
-        if (buttonIndex === 1) {
-          setReportModalVisible(true);
-        } else if (blockAvailable && buttonIndex === 2) {
-          handleBlockUser();
-        }
-      },
-    );
+    if (Platform.OS === 'ios') {
+      const options = ['취소', '게시물 신고하기'];
+      if (blockAvailable) {
+        options.push('이 사용자 차단하기');
+      }
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: blockAvailable ? 2 : undefined,
+          title: '게시물 옵션',
+        },
+        buttonIndex => {
+          if (buttonIndex === 1) {
+            setReportModalVisible(true);
+          } else if (blockAvailable && buttonIndex === 2) {
+            handleBlockUser();
+          }
+        },
+      );
+    } else {
+      // Android
+      const buttons = [
+        { text: '게시물 신고하기', onPress: () => setReportModalVisible(true) },
+      ];
+      if (blockAvailable) {
+        buttons.push({
+          text: '이 사용자 차단하기',
+          style: 'destructive',
+          onPress: handleBlockUser,
+        });
+      }
+      buttons.push({ text: '취소', style: 'cancel' });
+
+      Alert.alert('게시물 옵션', '', buttons);
+    }
   }, [handleBlockUser, question, user]);
 
   useEffect(() => {
