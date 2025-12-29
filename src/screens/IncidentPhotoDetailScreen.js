@@ -22,6 +22,7 @@ import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext'; // Import useAuth
 import ReportModal from '../components/ReportModal';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
@@ -257,12 +258,16 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     }
   }, [handleDelete, handleEdit, isAuthor, navigation, photo, photoTitle, showPhotoOptions]);
 
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   const sanitizeUrl = raw => {
     if (!raw) return '';
