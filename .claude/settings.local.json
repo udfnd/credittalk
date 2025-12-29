@@ -3,7 +3,8 @@
     "allow": [
       "Bash(./gradlew clean:*)",
       "Bash(npx react-native:*)",
-      "mcp__supabase__apply_migration"
+      "mcp__supabase__apply_migration",
+      "mcp__jetbrains__get_file_problems"
     ],
     "deny": [],
     "ask": []
