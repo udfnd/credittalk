@@ -257,8 +257,10 @@ function NewCrimeCaseDetailScreen({ route }) {
   }, [canEditOrDelete, caseDetail, handleDelete, handleEdit, navigation, showCaseOptions]);
 
   useEffect(() => {
+    AvoidSoftInput.setEnabled(true);
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
     return () => {
+      AvoidSoftInput.setEnabled(false);
       AvoidSoftInput.setShouldMimicIOSBehavior(false);
     };
   }, []);
