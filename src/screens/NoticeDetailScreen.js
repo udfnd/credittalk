@@ -12,7 +12,7 @@ import {
   Linking,
   ScrollView,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -128,14 +128,16 @@ const NoticeDetailScreen = () => {
     ]);
   };
 
-  useEffect(() => {
-    AvoidSoftInput.setEnabled(true);
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setEnabled(false);
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   const sanitizeUrl = raw => {
     if (!raw) return '';
