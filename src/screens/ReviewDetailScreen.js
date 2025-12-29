@@ -203,11 +203,17 @@ function ReviewDetailScreen({ route }) {
               }
             }
 
-            const { error: deleteError } = await supabase
+            let deleteQuery = supabase
               .from('reviews')
               .delete()
-              .eq('id', reviewId)
-              .eq('user_id', user.id); // RLS를 위한 조건 추가
+              .eq('id', reviewId);
+
+            // 관리자가 아닌 경우에만 user_id 조건 추가
+            if (!isAdmin) {
+              deleteQuery = deleteQuery.eq('user_id', user.id);
+            }
+
+            const { error: deleteError } = await deleteQuery;
 
             if (deleteError) throw deleteError;
 
