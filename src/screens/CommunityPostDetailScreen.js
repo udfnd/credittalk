@@ -183,8 +183,10 @@ function CommunityPostDetailScreen({ route }) {
   });
 
   useEffect(() => {
+    AvoidSoftInput.setEnabled(true);
     AvoidSoftInput.setShouldMimicIOSBehavior(true);
     return () => {
+      AvoidSoftInput.setEnabled(false);
       AvoidSoftInput.setShouldMimicIOSBehavior(false);
     };
   }, []);
