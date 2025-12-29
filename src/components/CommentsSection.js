@@ -19,14 +19,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useNavigation } from '@react-navigation/native';
-import { AvoidSoftInputView } from 'react-native-avoid-softinput';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ReportModal from './ReportModal';
 import { ensureSafeContent } from '../lib/contentSafety';
 
 /**
  * 공용 입력 컴포넌트
  * - depth를 받아서 depth>0(대댓글 이상)일 때는 추가 들여쓰기를 하지 않는 스타일로 렌더링
+ * - AvoidSoftInputView 제거: 부모 화면에서 AvoidSoftInput 전역 설정 사용
  */
 const CommentInput = ({
   initialContent = '',
@@ -41,79 +40,84 @@ const CommentInput = ({
   const [text, setText] = useState(initialContent);
   const disabled = loading;
   const inputContainerRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // 입력창이 마운트될 때 해당 위치로 스크롤
+  // 입력창이 마운트될 때 해당 위치로 스크롤 + 포커스 보장
   useEffect(() => {
-    if (inputContainerRef.current && scrollViewRef?.current) {
-      const timer = setTimeout(() => {
+    // 약간의 지연 후 포커스 및 스크롤 처리
+    const timer = setTimeout(() => {
+      // 포커스 보장
+      inputRef.current?.focus();
+
+      // 스크롤 처리
+      if (inputContainerRef.current && scrollViewRef?.current) {
         const nodeHandle = findNodeHandle(inputContainerRef.current);
         if (nodeHandle) {
-          UIManager.measureInWindow(nodeHandle, (x, y, width, height) => {
+          UIManager.measureInWindow(nodeHandle, (x, y) => {
             // 입력창이 화면 하단에 가깝도록 스크롤
             scrollViewRef.current?.scrollTo?.({
-              y: y - 150, // 입력창 위에 여유 공간 확보
+              y: Math.max(0, y - 150), // 입력창 위에 여유 공간 확보
               animated: true,
             });
           });
         }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+      }
+    }, 150);
+    return () => clearTimeout(timer);
   }, [scrollViewRef]);
 
   return (
-    <AvoidSoftInputView avoidOffset={8}>
-      <View
-        ref={inputContainerRef}
-        collapsable={false}
-        style={
-          isEdit
-            ? styles.editInputContainer
-            : depth > 0
-              ? styles.replyInputContainerFlat // ✅ 대댓글 이상: 추가 들여쓰기 없음
-              : styles.replyInputContainer // ✅ 루트에 달리는 답글 입력창만 1회 들여쓰기
-        }>
-        <TextInput
-          style={[styles.replyInput, disabled && { opacity: 0.6 }]}
-          placeholder={placeholder}
-          placeholderTextColor="#999"
-          value={text}
-          onChangeText={setText}
-          multiline
-          autoFocus
-          editable={!disabled}
-        />
-        <View style={styles.replyButtonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.replyActionButton,
-              styles.saveButton,
-              disabled && { opacity: 0.6 },
-            ]}
-            onPressIn={() => onSubmit(text)}
-            disabled={disabled}
-            delayPressIn={0}>
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.replyActionButtonText}>
-                {isEdit ? '저장' : '등록'}
-              </Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.replyActionButton,
-              styles.cancelButton,
-              disabled && { opacity: 0.6 },
-            ]}
-            onPress={onCancel}
-            disabled={disabled}>
-            <Text style={styles.replyActionButtonText}>취소</Text>
-          </TouchableOpacity>
-        </View>
+    <View
+      ref={inputContainerRef}
+      collapsable={false}
+      style={
+        isEdit
+          ? styles.editInputContainer
+          : depth > 0
+            ? styles.replyInputContainerFlat // ✅ 대댓글 이상: 추가 들여쓰기 없음
+            : styles.replyInputContainer // ✅ 루트에 달리는 답글 입력창만 1회 들여쓰기
+      }>
+      <TextInput
+        ref={inputRef}
+        style={[styles.replyInput, disabled && { opacity: 0.6 }]}
+        placeholder={placeholder}
+        placeholderTextColor="#999"
+        value={text}
+        onChangeText={setText}
+        multiline
+        autoFocus
+        editable={!disabled}
+      />
+      <View style={styles.replyButtonContainer}>
+        <TouchableOpacity
+          style={[
+            styles.replyActionButton,
+            styles.saveButton,
+            disabled && { opacity: 0.6 },
+          ]}
+          onPressIn={() => onSubmit(text)}
+          disabled={disabled}
+          delayPressIn={0}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.replyActionButtonText}>
+              {isEdit ? '저장' : '등록'}
+            </Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.replyActionButton,
+            styles.cancelButton,
+            disabled && { opacity: 0.6 },
+          ]}
+          onPress={onCancel}
+          disabled={disabled}>
+          <Text style={styles.replyActionButtonText}>취소</Text>
+        </TouchableOpacity>
       </View>
-    </AvoidSoftInputView>
+    </View>
   );
 };
 
@@ -237,7 +241,6 @@ const CommentItem = ({
 const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
 
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -570,34 +573,30 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         />
       )}
 
-      {/* 작성 바 */}
+      {/* 작성 바 - AvoidSoftInputView 제거: 부모 화면의 AvoidSoftInput 전역 설정 사용 */}
       {user ? (
-        <AvoidSoftInputView
-          avoidOffset={insets.bottom}
-          style={styles.footerAvoidWrapper}>
-          <View style={styles.footerInputBar} collapsable={false}>
-            <TextInput
-              style={[styles.input, submittingRoot && { opacity: 0.6 }]}
-              placeholder="따뜻한 댓글을 남겨주세요."
-              placeholderTextColor="#999"
-              value={newComment}
-              onChangeText={setNewComment}
-              multiline
-              editable={!submittingRoot}
-            />
-            <TouchableOpacity
-              style={[styles.submitButton, submittingRoot && { opacity: 0.7 }]}
-              onPressIn={() => handleAddComment(newComment)}
-              disabled={submittingRoot}
-              delayPressIn={0}>
-              {submittingRoot ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Icon name="send" size={20} color="#fff" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </AvoidSoftInputView>
+        <View style={styles.footerInputBar} collapsable={false}>
+          <TextInput
+            style={[styles.input, submittingRoot && { opacity: 0.6 }]}
+            placeholder="따뜻한 댓글을 남겨주세요."
+            placeholderTextColor="#999"
+            value={newComment}
+            onChangeText={setNewComment}
+            multiline
+            editable={!submittingRoot}
+          />
+          <TouchableOpacity
+            style={[styles.submitButton, submittingRoot && { opacity: 0.7 }]}
+            onPressIn={() => handleAddComment(newComment)}
+            disabled={submittingRoot}
+            delayPressIn={0}>
+            {submittingRoot ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Icon name="send" size={20} color="#fff" />
+            )}
+          </TouchableOpacity>
+        </View>
       ) : (
         <View style={styles.loginPrompt}>
           <Text style={styles.loginPromptText}>
@@ -735,7 +734,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  footerAvoidWrapper: {},
   footerInputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
