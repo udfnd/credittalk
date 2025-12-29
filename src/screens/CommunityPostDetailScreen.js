@@ -210,11 +210,17 @@ function CommunityPostDetailScreen({ route }) {
                 await supabase.storage.from('post-images').remove(filePaths);
               }
             }
-            const { error: deleteError } = await supabase
+            let deleteQuery = supabase
               .from('community_posts')
               .delete()
-              .eq('id', postId)
-              .eq('user_id', user.id);
+              .eq('id', postId);
+
+            // 관리자가 아닌 경우에만 user_id 조건 추가
+            if (!isAdmin) {
+              deleteQuery = deleteQuery.eq('user_id', user.id);
+            }
+
+            const { error: deleteError } = await deleteQuery;
 
             if (deleteError) throw deleteError;
 

@@ -192,11 +192,17 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
                 }
               }
 
-              const { error: deleteError } = await supabase
+              let deleteQuery = supabase
                 .from('incident_photos')
                 .delete()
-                .eq('id', photo.id)
-                .eq('uploader_id', user.id); // Secure delete with user ID
+                .eq('id', photo.id);
+
+              // 관리자가 아닌 경우에만 uploader_id 조건 추가
+              if (!isAdmin) {
+                deleteQuery = deleteQuery.eq('uploader_id', user.id);
+              }
+
+              const { error: deleteError } = await deleteQuery;
 
               if (deleteError) throw deleteError;
 
