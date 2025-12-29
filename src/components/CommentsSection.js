@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   ActionSheetIOS,
   Platform,
+  Keyboard,
+  Dimensions,
   findNodeHandle,
   UIManager,
 } from 'react-native';
@@ -42,29 +44,94 @@ const CommentInput = ({
   const inputContainerRef = useRef(null);
   const inputRef = useRef(null);
 
+  // 키보드가 입력창을 가리는지 확인하고 스크롤
+  const scrollToInput = useCallback((keyboardHeight = 0) => {
+    if (!inputContainerRef.current || !scrollViewRef?.current) return;
+
+    const inputNode = findNodeHandle(inputContainerRef.current);
+    const scrollNode = findNodeHandle(scrollViewRef.current);
+
+    if (!inputNode || !scrollNode) {
+      // 폴백: scrollToEnd
+      scrollViewRef.current?.scrollToEnd?.({ animated: true });
+      return;
+    }
+
+    // measureLayout: 입력창의 ScrollView 내 절대 위치 측정
+    UIManager.measureLayout(
+      inputNode,
+      scrollNode,
+      () => {
+        // 실패 시 scrollToEnd
+        scrollViewRef.current?.scrollToEnd?.({ animated: true });
+      },
+      (x, y, width, height) => {
+        // y: ScrollView 콘텐츠 내에서의 절대 Y 위치
+        const { height: screenHeight } = Dimensions.get('window');
+        const headerHeight = Platform.OS === 'ios' ? 100 : 56;
+
+        // Android adjustResize: 키보드가 올라오면 window 높이가 줄어듦
+        const effectiveKeyboardHeight = Platform.OS === 'android' ? 0 : keyboardHeight;
+        const visibleHeight = screenHeight - effectiveKeyboardHeight - headerHeight;
+
+        // 입력창을 가시 영역 상단 1/3 지점에 배치
+        const targetScrollY = y - visibleHeight / 3;
+
+        scrollViewRef.current?.scrollTo?.({
+          y: Math.max(0, targetScrollY),
+          animated: true,
+        });
+      },
+    );
+  }, [scrollViewRef]);
+
   // 입력창이 마운트될 때 해당 위치로 스크롤 + 포커스 보장
   useEffect(() => {
-    // 약간의 지연 후 포커스 및 스크롤 처리
-    const timer = setTimeout(() => {
-      // 포커스 보장
-      inputRef.current?.focus();
+    let keyboardHeight = 0;
+    let scrollAttempts = 0;
+    const maxAttempts = 3;
 
-      // 스크롤 처리
-      if (inputContainerRef.current && scrollViewRef?.current) {
-        const nodeHandle = findNodeHandle(inputContainerRef.current);
-        if (nodeHandle) {
-          UIManager.measureInWindow(nodeHandle, (x, y) => {
-            // 입력창이 화면 하단에 가깝도록 스크롤
-            scrollViewRef.current?.scrollTo?.({
-              y: Math.max(0, y - 150), // 입력창 위에 여유 공간 확보
-              animated: true,
-            });
-          });
-        }
+    const attemptScroll = () => {
+      if (scrollAttempts >= maxAttempts) return;
+      scrollAttempts++;
+      scrollToInput(keyboardHeight);
+    };
+
+    // Android: keyboardDidShow 사용 (키보드가 완전히 올라온 후)
+    // iOS: keyboardWillShow 사용 (애니메이션 시작 시)
+    const keyboardShowEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const keyboardDidShowListener = Keyboard.addListener(keyboardShowEvent, (e) => {
+      keyboardHeight = e.endCoordinates.height;
+
+      // Android는 adjustResize 후 레이아웃이 완료될 때까지 추가 대기
+      const delay = Platform.OS === 'android' ? 300 : 100;
+      setTimeout(attemptScroll, delay);
+
+      // Android에서 추가 시도 (레이아웃 안정화 대기)
+      if (Platform.OS === 'android') {
+        setTimeout(attemptScroll, 500);
       }
+    });
+
+    // 포커스 실행 (키보드 올리기)
+    const focusTimer = setTimeout(() => {
+      inputRef.current?.focus();
     }, 150);
-    return () => clearTimeout(timer);
-  }, [scrollViewRef]);
+
+    // 폴백: 키보드 이벤트가 발생하지 않을 경우
+    const fallbackTimer = setTimeout(() => {
+      if (scrollAttempts === 0) {
+        keyboardHeight = Platform.OS === 'ios' ? 336 : 300;
+        attemptScroll();
+      }
+    }, 800);
+
+    return () => {
+      clearTimeout(focusTimer);
+      clearTimeout(fallbackTimer);
+      keyboardDidShowListener.remove();
+    };
+  }, [scrollToInput]);
 
   return (
     <View
@@ -256,6 +323,42 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   const [submittingRoot, setSubmittingRoot] = useState(false);
   const [submittingReplyId, setSubmittingReplyId] = useState(null);
   const guardingRef = useRef(false);
+
+  // 하단 입력창 ref
+  const footerInputRef = useRef(null);
+
+  // 하단 입력창으로 스크롤하는 함수 (하단 입력창은 항상 콘텐츠 끝에 있으므로 scrollToEnd 사용)
+  const scrollToFooterInput = useCallback(() => {
+    if (scrollViewRef?.current) {
+      scrollViewRef.current?.scrollToEnd?.({ animated: true });
+    }
+  }, [scrollViewRef]);
+
+  // 하단 입력창 포커스 핸들러
+  const handleFooterInputFocus = useCallback(() => {
+    // 즉시 한 번 스크롤
+    scrollToFooterInput();
+
+    // 키보드가 완전히 올라온 후 다시 스크롤 (키보드 높이 반영)
+    const keyboardListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setTimeout(scrollToFooterInput, 50);
+        keyboardListener.remove();
+      },
+    );
+
+    // 폴백: 키보드 이벤트가 없을 경우 대비
+    const fallbackTimer = setTimeout(() => {
+      scrollToFooterInput();
+      keyboardListener.remove();
+    }, 400);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      keyboardListener.remove();
+    };
+  }, [scrollToFooterInput]);
 
   // 댓글 불러오기
   const fetchComments = useCallback(async () => {
@@ -575,13 +678,14 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
 
       {/* 작성 바 - AvoidSoftInputView 제거: 부모 화면의 AvoidSoftInput 전역 설정 사용 */}
       {user ? (
-        <View style={styles.footerInputBar} collapsable={false}>
+        <View ref={footerInputRef} style={styles.footerInputBar} collapsable={false}>
           <TextInput
             style={[styles.input, submittingRoot && { opacity: 0.6 }]}
             placeholder="따뜻한 댓글을 남겨주세요."
             placeholderTextColor="#999"
             value={newComment}
             onChangeText={setNewComment}
+            onFocus={handleFooterInputFocus}
             multiline
             editable={!submittingRoot}
           />
