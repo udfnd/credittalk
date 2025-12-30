@@ -1,41 +1,48 @@
 # React Native pods 스크립트 로드
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
-pre_install do |installer|
-  Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
-  installer.pod_targets.each do |pod|
-    if pod.name.start_with?('kakao-login')
-      def pod.build_type;
-        Pod::BuildType.static_library
-      end
-    end
-  end
-end
-
-# 최소 iOS 버전: Hermes 요구사항 확인 후 설정
+# 최소 iOS 버전
 platform :ios, '15.6'
 
-# Swift pod 및 React-jsc 종속 처리: 동적 프레임워크 + 모듈러 헤더 사용
-use_modular_headers!
-use_frameworks! :linkage => :dynamic
-
 prepare_react_native_project!
+
+# Static linkage 사용 (Firebase, Kakao, Naver SDK 호환성)
+use_frameworks! :linkage => :static
 
 target 'CreditTalk' do
   # auto-link 설정 호출
   config = use_native_modules!
-  pod 'NidThirdPartyLogin'
-  pod 'RNVectorIcons', :path => '../node_modules/react-native-vector-icons'
 
-  # React Native core pods 설치 (Hermes 활성화 여부 선택)
+  # Naver 로그인 SDK
+  pod 'NidThirdPartyLogin'
+
+  # React Native Vector Icons - 폰트는 프로젝트에 이미 포함되어 있음 (Info.plist UIAppFonts)
+  # auto-link를 통해 자동으로 연결됨
+
+  # React Native core pods 설치
   use_react_native!(
     :path => config[:reactNativePath],
-    # app_path 옵션 제거하여 package.json 경로 자동 인식
-    hermes_enabled: false
+    :hermes_enabled => false
   )
 end
 
 post_install do |installer|
   # React Native 후처리 스크립트
   react_native_post_install(installer)
+
+  # 모든 Pod 타겟에 대해 설정
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      # 빌드 설정 최적화
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.6'
+    end
+  end
+
+  # CreditTalk 타겟에 React Native 헤더 경로 추가
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
+    config.build_settings['HEADER_SEARCH_PATHS'] << ' "${PODS_ROOT}/../../node_modules/react-native/React"'
+    config.build_settings['HEADER_SEARCH_PATHS'] << ' "${PODS_ROOT}/../../node_modules/react-native/Libraries"'
+  end
 end
