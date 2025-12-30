@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ReportModal from '../components/ReportModal';
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 // 댓글 항목 UI 컴포넌트
 const CommentItem = ({ comment, currentUserId, onDelete }) => {
@@ -71,6 +72,8 @@ export default function HelpDeskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReportModalVisible, setReportModalVisible] = useState(false);
+
+  useAvoidSoftInputOnFocus();
 
   const isAuthor = useMemo(() => {
     if (!user || !question) return false;

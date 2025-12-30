@@ -19,10 +19,10 @@ import { supabase } from '../lib/supabaseClient';
 import { useNavigation } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
-import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext'; // ✅ 추가
 import ReportModal from '../components/ReportModal';
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 const { width } = Dimensions.get('window');
 
@@ -256,12 +256,7 @@ function NewCrimeCaseDetailScreen({ route }) {
     });
   }, [canEditOrDelete, caseDetail, handleDelete, handleEdit, navigation, showCaseOptions]);
 
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useAvoidSoftInputOnFocus();
 
   const sanitizeUrl = raw => {
     if (!raw) return '';
