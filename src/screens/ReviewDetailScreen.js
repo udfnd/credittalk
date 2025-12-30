@@ -16,11 +16,12 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import ImageViewing from 'react-native-image-viewing';
 import ReportModal from '../components/ReportModal';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 const { width } = Dimensions.get('window');
 
@@ -92,6 +93,17 @@ function ReviewDetailScreen({ route }) {
     });
     return unsubscribe;
   }, [navigation, fetchReviewDetail]);
+
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   const handleBlockUser = useCallback(() => {
     if (!user || !review || user.id === review.author_auth_id) {
