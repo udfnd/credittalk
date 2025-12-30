@@ -8,6 +8,8 @@ import {
   Alert,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function HelpDeskNoticeDetailScreen({ route, navigation }) {
   const noticeId = route?.params?.noticeId;
@@ -45,6 +47,17 @@ export default function HelpDeskNoticeDetailScreen({ route, navigation }) {
   useEffect(() => {
     fetchNotice();
   }, [fetchNotice]);
+
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   useEffect(() => {
     if (notice?.title) {

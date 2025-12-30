@@ -309,6 +309,7 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   const { user, profile } = useAuth();
   const navigation = useNavigation();
 
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
@@ -359,6 +360,22 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
       keyboardListener.remove();
     };
   }, [scrollToFooterInput]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, e => {
+      const inset = e?.endCoordinates?.height ?? 0;
+      setKeyboardInset(inset);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardInset(0));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // 댓글 불러오기
   const fetchComments = useCallback(async () => {
@@ -639,7 +656,7 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: 15 + keyboardInset }]}>
       <View style={styles.sectionTitleContainer}>
         <Text style={styles.sectionTitle}>댓글 ({comments.length})</Text>
       </View>
