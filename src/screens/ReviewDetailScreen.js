@@ -21,6 +21,7 @@ import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import ImageViewing from 'react-native-image-viewing';
 import ReportModal from '../components/ReportModal';
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 const { width } = Dimensions.get('window');
 
@@ -47,6 +48,7 @@ function ReviewDetailScreen({ route }) {
   const { user, profile } = useAuth();
 
   useIncrementView('reviews', reviewId);
+  useAvoidSoftInputOnFocus();
 
   const [review, setReview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);

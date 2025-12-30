@@ -18,10 +18,10 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { supabase } from '../lib/supabaseClient';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
-import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext'; // Import useAuth
 import ReportModal from '../components/ReportModal';
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 const { width } = Dimensions.get('window');
 
@@ -257,12 +257,7 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     }
   }, [handleDelete, handleEdit, isAuthor, navigation, photo, photoTitle, showPhotoOptions]);
 
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useAvoidSoftInputOnFocus();
 
   const sanitizeUrl = raw => {
     if (!raw) return '';

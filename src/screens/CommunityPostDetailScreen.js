@@ -20,9 +20,9 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
-import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import ReportModal from '../components/ReportModal'; // ReportModal import
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 const { width } = Dimensions.get('window');
 
@@ -182,12 +182,7 @@ function CommunityPostDetailScreen({ route }) {
     }
   });
 
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useAvoidSoftInputOnFocus();
 
   const handleEditPost = () => {
     navigation.navigate('CommunityPostEdit', { postId: post.id });

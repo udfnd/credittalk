@@ -17,11 +17,11 @@ import { supabase } from '../lib/supabaseClient';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import CommentsSection from '../components/CommentsSection';
 import { useIncrementView } from '../hooks/useIncrementView';
 import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext';
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 const { width } = Dimensions.get('window');
 const contentPadding = 20;
@@ -128,12 +128,7 @@ const NoticeDetailScreen = () => {
     ]);
   };
 
-  useEffect(() => {
-    AvoidSoftInput.setShouldMimicIOSBehavior(true);
-    return () => {
-      AvoidSoftInput.setShouldMimicIOSBehavior(false);
-    };
-  }, []);
+  useAvoidSoftInputOnFocus();
 
   const sanitizeUrl = raw => {
     if (!raw) return '';

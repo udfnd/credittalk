@@ -8,11 +8,14 @@ import {
   Alert,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
+import { useAvoidSoftInputOnFocus } from '../hooks/useAvoidSoftInputOnFocus';
 
 export default function HelpDeskNoticeDetailScreen({ route, navigation }) {
   const noticeId = route?.params?.noticeId;
   const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useAvoidSoftInputOnFocus();
 
   const fetchNotice = useCallback(async () => {
     if (!noticeId) {
