@@ -12,11 +12,12 @@ import {
   Alert,
   ActionSheetIOS,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ReportModal from '../components/ReportModal';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 // 댓글 항목 UI 컴포넌트
 const CommentItem = ({ comment, currentUserId, onDelete }) => {
@@ -129,6 +130,17 @@ export default function HelpDeskDetailScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   // 댓글 제출 함수
   const handleAddComment = async () => {
