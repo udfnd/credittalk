@@ -7,7 +7,14 @@
       "mcp__jetbrains__get_file_problems",
       "Bash(npx eslint:*)",
       "Bash(cat:*)",
-      "Bash(xcodebuild:*)"
+      "Bash(xcodebuild:*)",
+      "mcp__jetbrains__list_directory_tree",
+      "Bash(ls:*)",
+      "Bash(pnpm list:*)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

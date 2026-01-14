@@ -35,6 +35,7 @@ const incidentPhotosBannerImg = require('../assets/images/incident_photos_banner
 const freeBoardBannerImg = require('../assets/images/free_board_banner.jpg');
 const helpCenterBannerImg = require('../assets/images/help_center_banner.jpg');
 const companyLogoImg = require('../assets/images/company_logo.png');
+const eventBannerImg = require('../assets/images/event_banner.png');
 
 function HomeScreen() {
   const navigation = useNavigation();
@@ -248,6 +249,12 @@ function HomeScreen() {
             '크레딧톡 새로운 소식을 확인하세요.',
             noticeBannerImg,
             () => navigation.navigate('NoticeList'),
+          )}
+          {renderImageBanner(
+            '이벤트',
+            '진행 중인 이벤트에 참여하세요!',
+            eventBannerImg,
+            () => navigation.navigate('EventList'),
           )}
           {renderImageBanner(
             '신종범죄 피해사례 목록',
