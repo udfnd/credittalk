@@ -35,6 +35,7 @@ import {
   updatePushTokenOnLogin,
   setupTokenRefreshListener,
   requestNotificationPermissionAndroid,
+  requestCallDetectionPermissionsAndroid,
   ensureNotificationChannel,
   drainQueuedTap,
 } from './src/lib/push';
@@ -84,6 +85,9 @@ import HelpDeskNoticeDetailScreen from './src/screens/HelpDeskNoticeDetailScreen
 import AdditionalInfoScreen from './src/screens/AdditionalInfoScreen';
 import DeleteAccountScreen from './src/screens/DeleteAccountScreen';
 import SafetyPolicyScreen from './src/screens/SafetyPolicyScreen';
+import EventListScreen from './src/screens/EventListScreen';
+import EventDetailScreen from './src/screens/EventDetailScreen';
+import MyEventsScreen from './src/screens/MyEventsScreen';
 import SafetyAgreementModal from './src/components/SafetyAgreementModal';
 import { SAFETY_AGREEMENT_STORAGE_KEY } from './src/lib/contentSafety';
 
@@ -184,6 +188,9 @@ export type RootStackParamList = {
   AdditionalInfo: undefined;
   DeleteAccount: undefined;
   SafetyPolicy: undefined;
+  EventList: undefined;
+  EventDetail: { eventId: number };
+  MyEvents: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -537,6 +544,21 @@ function AppNavigator() {
             component={SafetyPolicyScreen}
             options={{ title: '커뮤니티 안전 약관' }}
           />
+          <RootStack.Screen
+            name="EventList"
+            component={EventListScreen}
+            options={{ title: '이벤트' }}
+          />
+          <RootStack.Screen
+            name="EventDetail"
+            component={EventDetailScreen}
+            options={{ title: '이벤트 상세' }}
+          />
+          <RootStack.Screen
+            name="MyEvents"
+            component={MyEventsScreen}
+            options={{ title: '나의 응모 현황' }}
+          />
         </>
       )}
     </RootStack.Navigator>
@@ -627,26 +649,46 @@ function App(): React.JSX.Element {
         navRef.navigate(targetScreen as never, casted as never);
       };
 
-      if (screen === 'CommunityPostDetail' && params?.postId) {
-        L_NAV('branch → CommunityTab nested detail', { postId: params.postId });
-        navRef.navigate('MainApp', {
-          screen: 'CommunityTab',
-          params: {
-            screen: 'CommunityPostDetail',
-            params: { postId: Number(params.postId) },
-          },
-        } as never);
-      } else if (screen === 'HelpDeskDetail' && params?.questionId) {
-        L_NAV('branch → HelpCenterTab nested detail', {
-          questionId: params.questionId,
-        });
-        navRef.navigate('MainApp', {
-          screen: 'HelpCenterTab',
-          params: {
-            screen: 'HelpDeskDetail',
-            params: { questionId: Number(params.questionId) },
-          },
-        } as never);
+      // CommunityPostDetail과 HelpDeskDetail은 탭 내부의 중첩 스택에 있으므로 별도 처리 필요
+      if (screen === 'CommunityPostDetail') {
+        // postId 추출: params에서 직접 또는 다양한 키 이름으로 시도
+        const postId = params?.postId ?? params?.id ?? params?.post_id;
+        if (postId) {
+          L_NAV('branch → CommunityTab nested detail', { postId });
+          navRef.navigate('MainApp', {
+            screen: 'CommunityTab',
+            params: {
+              screen: 'CommunityPostDetail',
+              params: { postId: Number(postId) },
+            },
+          } as never);
+        } else {
+          L_NAV('CommunityPostDetail missing postId, fallback to list', params);
+          navRef.navigate('MainApp', {
+            screen: 'CommunityTab',
+            params: { screen: 'CommunityList' },
+          } as never);
+        }
+      } else if (screen === 'HelpDeskDetail') {
+        // questionId 추출: params에서 직접 또는 다양한 키 이름으로 시도
+        const questionId =
+          params?.questionId ?? params?.id ?? params?.question_id;
+        if (questionId) {
+          L_NAV('branch → HelpCenterTab nested detail', { questionId });
+          navRef.navigate('MainApp', {
+            screen: 'HelpCenterTab',
+            params: {
+              screen: 'HelpDeskDetail',
+              params: { questionId: Number(questionId) },
+            },
+          } as never);
+        } else {
+          L_NAV('HelpDeskDetail missing questionId, fallback to list', params);
+          navRef.navigate('MainApp', {
+            screen: 'HelpCenterTab',
+            params: { screen: 'HelpDeskList' },
+          } as never);
+        }
       } else {
         castAndNavigate(screen, params);
       }
@@ -744,6 +786,9 @@ function App(): React.JSX.Element {
       // 2) 권한/채널 준비
       await requestNotificationPermissionAndroid().then(() =>
         L_APP('Android notification permission requested'),
+      );
+      await requestCallDetectionPermissionsAndroid().then(result =>
+        L_APP('Android call detection permissions requested', result),
       );
       await ensureNotificationChannel().then(() =>
         L_APP('ensureNotificationChannel done'),

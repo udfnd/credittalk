@@ -131,6 +131,12 @@ function SettingsScreen() {
       screen: 'MyReports',
     },
     {
+      id: 'myEvents',
+      title: '나의 응모 현황',
+      icon: 'ticket-outline',
+      screen: 'MyEvents',
+    },
+    {
       id: 'notices',
       title: '공지사항',
       icon: 'bullhorn-outline',
@@ -262,7 +268,7 @@ function SettingsScreen() {
           <Text style={styles.menuGroupTitle}>서비스</Text>
           {menuItems
             .filter(item =>
-              ['myReports', 'notices', 'reportScam'].includes(item.id),
+              ['myReports', 'myEvents', 'notices', 'reportScam'].includes(item.id),
             )
             .map(renderMenuItem)}
         </View>

@@ -2952,6 +2952,36 @@ CREATE POLICY "Admin full access" ON "public"."new_crime_cases" TO "service_role
 
 
 
+CREATE POLICY "Admins can delete arrest_news" ON "public"."arrest_news" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can delete community_posts" ON "public"."community_posts" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can delete incident_photos" ON "public"."incident_photos" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can delete new_crime_cases" ON "public"."new_crime_cases" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can delete reviews" ON "public"."reviews" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
 CREATE POLICY "Admins can manage arrest news." ON "public"."arrest_news" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
 
 
@@ -2961,6 +2991,36 @@ CREATE POLICY "Admins can manage incident photos." ON "public"."incident_photos"
 
 
 CREATE POLICY "Admins can manage notices" ON "public"."notices" USING (("auth"."role"() = 'service_role'::"text")) WITH CHECK (("auth"."role"() = 'service_role'::"text"));
+
+
+
+CREATE POLICY "Admins can update arrest_news" ON "public"."arrest_news" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can update community_posts" ON "public"."community_posts" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can update incident_photos" ON "public"."incident_photos" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can update new_crime_cases" ON "public"."new_crime_cases" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "Admins can update reviews" ON "public"."reviews" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
 
 
 

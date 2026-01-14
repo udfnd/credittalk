@@ -45,6 +45,8 @@ class CallStateReceiver : BroadcastReceiver() {
         @Suppress("DEPRECATION")
         val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
 
+        Log.d(TAG, "onReceive called - state: $state, number: $incomingNumber")
+
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
                 cancelAlarm()
@@ -52,12 +54,24 @@ class CallStateReceiver : BroadcastReceiver() {
                 if (incomingNumber != null) {
                     Log.d(TAG, "Incoming call from: $incomingNumber")
                     checkNumberAndNotify(context, incomingNumber)
+                } else {
+                    // 권한 부재로 번호를 못 받은 경우에도 경고 알림 표시
+                    Log.w(TAG, "Incoming number is null - possibly missing READ_CALL_LOG permission")
+                    notifyUnknownNumber(context)
                 }
             }
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                 // 통화 연결됨 - 기존 로직 유지 (통화 중 경고)
                 if (incomingNumber != null) {
                     checkNumberAndScheduleWarning(context, incomingNumber)
+                } else {
+                    // 권한 부재로 번호를 못 받은 경우에도 경고 알림 표시
+                    Log.w(TAG, "Incoming number is null (offhook) - possibly missing READ_CALL_LOG permission")
+                    handler = Handler(Looper.getMainLooper())
+                    runnable = Runnable {
+                        notifyUnknownNumber(context)
+                    }
+                    handler?.postDelayed(runnable!!, 5_000)
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
@@ -82,6 +96,7 @@ class CallStateReceiver : BroadcastReceiver() {
 
             // 2. 연락처 상태 확인
             val contactStatus = getContactStatus(context, normalizedNumber)
+            Log.d(TAG, "Contact status for $normalizedNumber - isInContacts: ${contactStatus.isInContacts}, savedTimestamp: ${contactStatus.savedTimestamp}")
 
             when {
                 !contactStatus.isInContacts -> {
@@ -105,8 +120,11 @@ class CallStateReceiver : BroadcastReceiver() {
                     }
                 }
                 else -> {
-                    // 연락처에 있지만 저장 시간을 알 수 없음 - 알림 스킵
-                    Log.d(TAG, "Number is in contacts (timestamp unknown), skipping alert")
+                    // 연락처에 있지만 저장 시간을 알 수 없음 - 안전을 위해 경고 표시
+                    Log.d(TAG, "Number is in contacts (timestamp unknown), showing warning for safety")
+                    Handler(Looper.getMainLooper()).post {
+                        notifyRecentlySavedNumber(context)
+                    }
                 }
             }
         }
@@ -132,10 +150,12 @@ class CallStateReceiver : BroadcastReceiver() {
 
             // 2. 연락처 상태 확인
             val contactStatus = getContactStatus(context, normalizedNumber)
+            Log.d(TAG, "Contact status (scheduled) for $normalizedNumber - isInContacts: ${contactStatus.isInContacts}, savedTimestamp: ${contactStatus.savedTimestamp}")
 
             when {
                 !contactStatus.isInContacts -> {
                     // 저장되지 않은 번호
+                    Log.d(TAG, "Number not in contacts (scheduled): $normalizedNumber")
                     Handler(Looper.getMainLooper()).post {
                         handler = Handler(Looper.getMainLooper())
                         runnable = Runnable {
@@ -149,6 +169,7 @@ class CallStateReceiver : BroadcastReceiver() {
                     val currentTime = System.currentTimeMillis()
                     val savedDuration = currentTime - contactStatus.savedTimestamp
                     if (savedDuration < ONE_WEEK_MS) {
+                        Log.d(TAG, "Number saved within one week (scheduled): $normalizedNumber")
                         Handler(Looper.getMainLooper()).post {
                             handler = Handler(Looper.getMainLooper())
                             runnable = Runnable {
@@ -161,7 +182,15 @@ class CallStateReceiver : BroadcastReceiver() {
                     }
                 }
                 else -> {
-                    Log.d(TAG, "Number is in contacts (scheduled), skipping warning")
+                    // 연락처에 있지만 저장 시간을 알 수 없음 - 안전을 위해 경고 표시
+                    Log.d(TAG, "Number is in contacts (timestamp unknown, scheduled), showing warning for safety")
+                    Handler(Looper.getMainLooper()).post {
+                        handler = Handler(Looper.getMainLooper())
+                        runnable = Runnable {
+                            notifyRecentlySavedNumber(context)
+                        }
+                        handler?.postDelayed(runnable!!, 5_000)
+                    }
                 }
             }
         }
@@ -173,6 +202,94 @@ class CallStateReceiver : BroadcastReceiver() {
     }
 
     private fun getContactStatus(context: Context, phoneNumber: String): ContactStatus {
+        // 다양한 전화번호 형식으로 검색 시도
+        val phoneVariations = generatePhoneVariations(phoneNumber)
+
+        Log.d(TAG, "Checking contact status for: $phoneNumber, variations: $phoneVariations")
+
+        for (variation in phoneVariations) {
+            try {
+                val result = lookupContactByNumber(context, variation)
+                if (result.isInContacts) {
+                    Log.d(TAG, "Contact found with variation: $variation")
+                    return result
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking contact for variation $variation: ${e.message}")
+            }
+        }
+
+        Log.d(TAG, "No contact found for any variation of: $phoneNumber")
+        return ContactStatus(isInContacts = false, savedTimestamp = null)
+    }
+
+    /**
+     * 전화번호의 다양한 형식 변형을 생성합니다.
+     */
+    private fun generatePhoneVariations(phoneNumber: String): List<String> {
+        val normalized = normalizePhoneNumber(phoneNumber)
+        val variations = mutableListOf<String>()
+
+        // 원본 번호 추가
+        variations.add(phoneNumber)
+
+        // 정규화된 번호 추가
+        if (normalized != phoneNumber) {
+            variations.add(normalized)
+        }
+
+        // 한국 전화번호 형식 변환
+        when {
+            // +82로 시작하는 경우 → 0으로 시작하는 형식으로 변환
+            normalized.startsWith("82") && normalized.length >= 11 -> {
+                val withoutCountryCode = "0" + normalized.substring(2)
+                variations.add(withoutCountryCode)
+                variations.add("+82" + normalized.substring(2))
+                variations.add("+82-" + formatKoreanNumber(normalized.substring(2)))
+            }
+            // 0으로 시작하는 경우 → +82 형식으로도 변환
+            normalized.startsWith("0") && normalized.length >= 10 -> {
+                variations.add("+82" + normalized.substring(1))
+                variations.add("82" + normalized.substring(1))
+                // 하이픈 형식 추가
+                variations.add(formatKoreanNumber(normalized))
+            }
+            // 국가코드 없이 시작하는 경우
+            else -> {
+                variations.add("0$normalized")
+                variations.add("+82$normalized")
+            }
+        }
+
+        return variations.distinct()
+    }
+
+    /**
+     * 한국 전화번호 형식으로 포맷팅합니다. (예: 01012345678 → 010-1234-5678)
+     */
+    private fun formatKoreanNumber(number: String): String {
+        val normalized = normalizePhoneNumber(number)
+        return when {
+            normalized.length == 11 && normalized.startsWith("010") -> {
+                "${normalized.substring(0, 3)}-${normalized.substring(3, 7)}-${normalized.substring(7)}"
+            }
+            normalized.length == 10 && normalized.startsWith("02") -> {
+                "${normalized.substring(0, 2)}-${normalized.substring(2, 6)}-${normalized.substring(6)}"
+            }
+            normalized.length == 10 -> {
+                "${normalized.substring(0, 3)}-${normalized.substring(3, 6)}-${normalized.substring(6)}"
+            }
+            normalized.length == 11 -> {
+                "${normalized.substring(0, 3)}-${normalized.substring(3, 7)}-${normalized.substring(7)}"
+            }
+            else -> normalized
+        }
+    }
+
+    /**
+     * 특정 번호로 연락처를 조회합니다.
+     */
+    private fun lookupContactByNumber(context: Context, phoneNumber: String): ContactStatus {
         try {
             val uri = Uri.withAppendedPath(
                 ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
@@ -196,12 +313,15 @@ class CallStateReceiver : BroadcastReceiver() {
             cursor?.use {
                 if (it.count > 0 && it.moveToFirst()) {
                     val timestampIndex = it.getColumnIndex(ContactsContract.PhoneLookup.CONTACT_LAST_UPDATED_TIMESTAMP)
-                    val timestamp = if (timestampIndex >= 0) it.getLong(timestampIndex) else null
+                    // getLong()은 null 대신 0L을 반환하므로, 0L은 유효하지 않은 값으로 처리
+                    val rawTimestamp = if (timestampIndex >= 0) it.getLong(timestampIndex) else 0L
+                    val timestamp = if (rawTimestamp > 0L) rawTimestamp else null
+                    Log.d(TAG, "Contact found - rawTimestamp: $rawTimestamp, timestamp: $timestamp")
                     return ContactStatus(isInContacts = true, savedTimestamp = timestamp)
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking contacts: ${e.message}")
+            Log.e(TAG, "Error in lookupContactByNumber for $phoneNumber: ${e.message}")
         }
         return ContactStatus(isInContacts = false, savedTimestamp = null)
     }

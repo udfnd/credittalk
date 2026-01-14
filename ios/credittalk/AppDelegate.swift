@@ -1,5 +1,6 @@
 import UIKit
 import FirebaseCore
+import FirebaseMessaging
 import kakao_login
 import NidThirdPartyLogin
 
@@ -66,6 +67,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     return false
+  }
+
+  // MARK: - Push Notifications (APNS)
+
+  func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    // Firebase Messaging에 APNS 토큰 전달
+    Messaging.messaging().apnsToken = deviceToken
+  }
+
+  func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    print("[AppDelegate] Failed to register for remote notifications: \(error.localizedDescription)")
   }
 }
 

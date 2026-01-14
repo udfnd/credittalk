@@ -38,6 +38,53 @@ export const requestNotificationPermissionAndroid = async () => {
   }
 };
 
+/**
+ * 전화 감지 기능에 필요한 권한을 요청합니다.
+ * - READ_PHONE_STATE: 전화 상태 감지
+ * - READ_CALL_LOG: Android 10 이상에서 전화번호 가져오기 (필수)
+ * - READ_CONTACTS: 연락처 확인
+ */
+export const requestCallDetectionPermissionsAndroid = async () => {
+  if (Platform.OS !== 'android') return { allGranted: true };
+
+  try {
+    const permissions = [
+      PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+      PermissionsAndroid.PERMISSIONS.READ_CALL_LOG,
+      PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
+    ];
+
+    const results = await PermissionsAndroid.requestMultiple(permissions);
+
+    const allGranted = Object.values(results).every(
+      result => result === PermissionsAndroid.RESULTS.GRANTED,
+    );
+
+    console.log('[APP] Call detection permissions requested', {
+      READ_PHONE_STATE: results[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE],
+      READ_CALL_LOG: results[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG],
+      READ_CONTACTS: results[PermissionsAndroid.PERMISSIONS.READ_CONTACTS],
+      allGranted,
+    });
+
+    return {
+      allGranted,
+      READ_PHONE_STATE:
+        results[PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE] ===
+        PermissionsAndroid.RESULTS.GRANTED,
+      READ_CALL_LOG:
+        results[PermissionsAndroid.PERMISSIONS.READ_CALL_LOG] ===
+        PermissionsAndroid.RESULTS.GRANTED,
+      READ_CONTACTS:
+        results[PermissionsAndroid.PERMISSIONS.READ_CONTACTS] ===
+        PermissionsAndroid.RESULTS.GRANTED,
+    };
+  } catch (err) {
+    console.warn('[Push] request call detection permissions failed', err);
+    return { allGranted: false, error: err };
+  }
+};
+
 async function openExternalUrlBestEffort(url) {
   if (!url) return;
   try {
@@ -211,8 +258,22 @@ export async function openFromPayload(navigateTo, data = {}) {
     ]);
 
     const { screen, link_url, url, ...rest } = data || {};
-    const finalParams =
-      rest?.params && typeof rest.params === 'object' ? rest.params : rest;
+
+    // params가 JSON 문자열인 경우 파싱하여 병합
+    let parsedParams = {};
+    if (rest?.params && typeof rest.params === 'string') {
+      try {
+        parsedParams = JSON.parse(rest.params);
+      } catch {
+        // 파싱 실패 시 무시
+      }
+    } else if (rest?.params && typeof rest.params === 'object') {
+      parsedParams = rest.params;
+    }
+
+    // rest에서 불필요한 메타데이터 필드 제거하고 파싱된 params 병합
+    const { params: _params, type: _type, nid: _nid, ...cleanRest } = rest;
+    const finalParams = { ...cleanRest, ...parsedParams };
 
     if (screen && ALLOWED_SCREENS.has(screen)) {
       console.log('[NAV:INTENT] openFromPayload navigate', {
