@@ -24,15 +24,29 @@ const getStatusInfo = (event) => {
   const entryEnd = new Date(event.entry_end_at);
 
   if (event.status === 'announced') {
-    return { label: '발표 완료', color: '#9b59b6', icon: 'trophy' };
+    return { label: '발표 완료', color: '#9b59b6', icon: 'trophy', priority: 4 };
   }
   if (event.status === 'closed' || now > entryEnd) {
-    return { label: '응모 마감', color: '#95a5a6', icon: 'clock-outline' };
+    return { label: '응모 마감', color: '#95a5a6', icon: 'clock-outline', priority: 3 };
   }
   if (now < entryStart) {
-    return { label: '응모 예정', color: '#3498db', icon: 'calendar-clock' };
+    return { label: '응모 예정', color: '#3498db', icon: 'calendar-clock', priority: 2 };
   }
-  return { label: '응모 중', color: '#27ae60', icon: 'check-circle' };
+  return { label: '응모 중', color: '#27ae60', icon: 'check-circle', priority: 1 };
+};
+
+// 이벤트 정렬: 진행 중 > 응모 예정 > 응모 마감 > 발표 완료
+const sortEvents = (events) => {
+  return [...events].sort((a, b) => {
+    const priorityA = getStatusInfo(a).priority;
+    const priorityB = getStatusInfo(b).priority;
+
+    // 우선순위가 같으면 마감일이 가까운 순서로 정렬
+    if (priorityA === priorityB) {
+      return new Date(a.entry_end_at) - new Date(b.entry_end_at);
+    }
+    return priorityA - priorityB;
+  });
 };
 
 function EventListScreen() {
@@ -78,18 +92,27 @@ function EventListScreen() {
     navigation.navigate('EventDetail', { eventId: event.id });
   };
 
+  // 이미지 URL 가져오기 (image_urls 배열 또는 image_url 지원)
+  const getFirstImageUrl = (item) => {
+    if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
+      return item.image_urls[0];
+    }
+    return item.image_url || null;
+  };
+
   const renderEventItem = ({ item }) => {
     const statusInfo = getStatusInfo(item);
     const hasEntered = item.user_entry_number !== null;
+    const thumbnailUrl = getFirstImageUrl(item);
 
     return (
       <TouchableOpacity
         style={styles.eventCard}
         onPress={() => handleEventPress(item)}
         activeOpacity={0.8}>
-        {item.image_url ? (
+        {thumbnailUrl ? (
           <Image
-            source={{ uri: item.image_url }}
+            source={{ uri: thumbnailUrl }}
             style={styles.eventImage}
             resizeMode="cover"
           />
@@ -158,7 +181,7 @@ function EventListScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={events}
+        data={sortEvents(events)}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderEventItem}
         contentContainerStyle={styles.listContent}
