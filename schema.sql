@@ -272,6 +272,82 @@ $$;
 ALTER FUNCTION "public"."delete_comment"("p_comment_id" bigint) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."draw_event_winners"("p_event_id" bigint) RETURNS TABLE("success" boolean, "message" "text", "winner_count" integer, "winner_numbers" integer[])
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+    v_is_admin boolean;
+    v_event events%ROWTYPE;
+    v_total_entries integer;
+    v_winners integer[];
+BEGIN
+    -- 관리자 권한 확인
+    SELECT u.is_admin INTO v_is_admin
+    FROM public.users u
+    WHERE u.auth_user_id = auth.uid();
+
+    IF v_is_admin IS NOT TRUE THEN
+        RETURN QUERY SELECT false, '관리자 권한이 필요합니다.'::text, 0, NULL::integer[];
+        RETURN;
+    END IF;
+
+    -- 이벤트 정보 조회
+    SELECT * INTO v_event
+    FROM public.events e
+    WHERE e.id = p_event_id;
+
+    IF v_event IS NULL THEN
+        RETURN QUERY SELECT false, '이벤트를 찾을 수 없습니다.'::text, 0, NULL::integer[];
+        RETURN;
+    END IF;
+
+    -- 응모자 수 확인
+    SELECT COUNT(*) INTO v_total_entries
+    FROM public.event_entries ee
+    WHERE ee.event_id = p_event_id;
+
+    IF v_total_entries = 0 THEN
+        RETURN QUERY SELECT false, '응모자가 없습니다.'::text, 0, NULL::integer[];
+        RETURN;
+    END IF;
+
+    -- 기존 당첨 초기화
+    UPDATE public.event_entries
+    SET is_winner = false
+    WHERE event_id = p_event_id;
+
+    -- 랜덤 당첨자 선정
+    WITH random_winners AS (
+        SELECT ee.id, ee.entry_number
+        FROM public.event_entries ee
+        WHERE ee.event_id = p_event_id
+        ORDER BY random()
+        LIMIT LEAST(v_event.winner_count, v_total_entries)
+    )
+    UPDATE public.event_entries ee
+    SET is_winner = true
+    FROM random_winners rw
+    WHERE ee.id = rw.id;
+
+    -- 당첨 번호 조회
+    SELECT ARRAY_AGG(ee.entry_number ORDER BY ee.entry_number) INTO v_winners
+    FROM public.event_entries ee
+    WHERE ee.event_id = p_event_id AND ee.is_winner = true;
+
+    -- 이벤트 상태 업데이트
+    UPDATE public.events
+    SET status = 'announced', updated_at = now()
+    WHERE id = p_event_id;
+
+    RETURN QUERY SELECT true, '당첨자 추첨이 완료되었습니다.'::text, array_length(v_winners, 1), v_winners;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."draw_event_winners"("p_event_id" bigint) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."encrypt_secret"("data" "text") RETURNS "bytea"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -313,6 +389,83 @@ $$;
 
 
 ALTER FUNCTION "public"."encrypt_secret"("data" "text") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."enter_event"("p_event_id" bigint) RETURNS TABLE("success" boolean, "entry_number" integer, "message" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+    v_user_id bigint;
+    v_event events%ROWTYPE;
+    v_next_entry_number integer;
+    v_existing_entry integer;
+BEGIN
+    -- 현재 사용자의 users.id 조회
+    SELECT u.id INTO v_user_id
+    FROM public.users u
+    WHERE u.auth_user_id = auth.uid();
+
+    IF v_user_id IS NULL THEN
+        RETURN QUERY SELECT false, NULL::integer, '로그인이 필요합니다.'::text;
+        RETURN;
+    END IF;
+
+    -- 이벤트별 Advisory Lock 획득 (동시 응모 시 race condition 방지)
+    -- 트랜잭션 종료 시 자동 해제됨
+    PERFORM pg_advisory_xact_lock(p_event_id);
+
+    -- 이벤트 정보 조회
+    SELECT * INTO v_event
+    FROM public.events e
+    WHERE e.id = p_event_id AND e.is_published = true;
+
+    IF v_event IS NULL THEN
+        RETURN QUERY SELECT false, NULL::integer, '이벤트를 찾을 수 없습니다.'::text;
+        RETURN;
+    END IF;
+
+    -- 응모 기간 확인
+    IF NOW() < v_event.entry_start_at THEN
+        RETURN QUERY SELECT false, NULL::integer, '응모 기간이 아직 시작되지 않았습니다.'::text;
+        RETURN;
+    END IF;
+
+    IF NOW() > v_event.entry_end_at THEN
+        RETURN QUERY SELECT false, NULL::integer, '응모 기간이 종료되었습니다.'::text;
+        RETURN;
+    END IF;
+
+    IF v_event.status != 'active' THEN
+        RETURN QUERY SELECT false, NULL::integer, '현재 응모할 수 없는 이벤트입니다.'::text;
+        RETURN;
+    END IF;
+
+    -- 이미 응모했는지 확인
+    SELECT ee.entry_number INTO v_existing_entry
+    FROM public.event_entries ee
+    WHERE ee.event_id = p_event_id AND ee.user_id = v_user_id;
+
+    IF v_existing_entry IS NOT NULL THEN
+        RETURN QUERY SELECT false, v_existing_entry, '이미 응모하셨습니다.'::text;
+        RETURN;
+    END IF;
+
+    -- 다음 응모 번호 계산 (Advisory Lock으로 보호됨)
+    SELECT COALESCE(MAX(ee.entry_number), 0) + 1 INTO v_next_entry_number
+    FROM public.event_entries ee
+    WHERE ee.event_id = p_event_id;
+
+    -- 응모 등록
+    INSERT INTO public.event_entries (event_id, user_id, entry_number)
+    VALUES (p_event_id, v_user_id, v_next_entry_number);
+
+    RETURN QUERY SELECT true, v_next_entry_number, '응모가 완료되었습니다.'::text;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."enter_event"("p_event_id" bigint) OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."find_email_by_profile"("p_name" "text", "p_phone_number" "text") RETURNS TABLE("email" "text")
@@ -722,6 +875,115 @@ $$;
 ALTER FUNCTION "public"."get_decrypted_report_for_admin"("report_id_input" bigint) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_event_detail"("p_event_id" bigint) RETURNS TABLE("id" bigint, "title" "text", "description" "text", "image_url" "text", "image_urls" "text"[], "entry_start_at" timestamp with time zone, "entry_end_at" timestamp with time zone, "winner_announce_at" timestamp with time zone, "winner_count" integer, "status" "text", "entry_count" bigint, "user_entry_number" integer, "user_is_winner" boolean, "winner_numbers" integer[])
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_user_id bigint;
+BEGIN
+  -- auth.uid() (uuid) -> users.id (bigint) 매핑
+  SELECT u.id INTO v_user_id
+  FROM public.users u
+  WHERE u.auth_user_id = v_auth_uid;
+
+  RETURN QUERY
+  SELECT
+    e.id,
+    e.title,
+    e.description,
+    e.image_url,
+    e.image_urls,
+    e.entry_start_at,
+    e.entry_end_at,
+    e.winner_announce_at,
+    e.winner_count,
+    e.status,
+    (SELECT COUNT(*) FROM event_entries WHERE event_id = e.id)::bigint as entry_count,
+    (SELECT entry_number FROM event_entries WHERE event_id = e.id AND user_id = v_user_id) as user_entry_number,
+    (SELECT is_winner FROM event_entries WHERE event_id = e.id AND user_id = v_user_id) as user_is_winner,
+    (SELECT ARRAY_AGG(entry_number ORDER BY entry_number) FROM event_entries WHERE event_id = e.id AND is_winner = true) as winner_numbers
+  FROM events e
+  WHERE e.id = p_event_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_event_detail"("p_event_id" bigint) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_event_entries_admin"("p_event_id" bigint) RETURNS TABLE("entry_id" bigint, "entry_number" integer, "entry_created_at" timestamp with time zone, "is_winner" boolean, "user_id" bigint, "user_nickname" "text", "user_phone_number" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+    v_is_admin boolean;
+BEGIN
+    -- 관리자 권한 확인
+    SELECT u.is_admin INTO v_is_admin
+    FROM public.users u
+    WHERE u.auth_user_id = auth.uid();
+
+    IF v_is_admin IS NOT TRUE THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        ee.id as entry_id,
+        ee.entry_number,
+        ee.created_at as entry_created_at,
+        ee.is_winner,
+        u.id as user_id,
+        u.nickname as user_nickname,
+        u.phone_number as user_phone_number
+    FROM public.event_entries ee
+    JOIN public.users u ON u.id = ee.user_id
+    WHERE ee.event_id = p_event_id
+    ORDER BY ee.entry_number ASC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_event_entries_admin"("p_event_id" bigint) OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_events_list"() RETURNS TABLE("id" bigint, "title" "text", "description" "text", "image_url" "text", "image_urls" "text"[], "entry_start_at" timestamp with time zone, "entry_end_at" timestamp with time zone, "winner_announce_at" timestamp with time zone, "winner_count" integer, "status" "text", "entry_count" bigint, "user_entry_number" integer)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_user_id bigint;
+BEGIN
+  -- auth.uid() (uuid) -> users.id (bigint) 매핑
+  SELECT u.id INTO v_user_id
+  FROM public.users u
+  WHERE u.auth_user_id = v_auth_uid;
+
+  RETURN QUERY
+  SELECT
+    e.id,
+    e.title,
+    e.description,
+    e.image_url,
+    e.image_urls,
+    e.entry_start_at,
+    e.entry_end_at,
+    e.winner_announce_at,
+    e.winner_count,
+    e.status,
+    (SELECT COUNT(*) FROM event_entries WHERE event_id = e.id)::bigint as entry_count,
+    (SELECT entry_number FROM event_entries WHERE event_id = e.id AND user_id = v_user_id) as user_entry_number
+  FROM events e
+  WHERE e.is_published = true
+  ORDER BY e.entry_start_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_events_list"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) RETURNS TABLE("id" bigint, "question_id" bigint, "user_id" "uuid", "content" "text", "created_at" timestamp with time zone, "nickname" "text", "name" "text", "is_admin" boolean)
     LANGUAGE "plpgsql" STABLE SECURITY DEFINER
     AS $$
@@ -824,6 +1086,41 @@ $$;
 
 
 ALTER FUNCTION "public"."get_incident_photos_with_comment_info"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."get_my_event_entries"() RETURNS TABLE("entry_id" bigint, "entry_number" integer, "entry_created_at" timestamp with time zone, "is_winner" boolean, "event_id" bigint, "event_title" "text", "event_image_url" "text", "event_image_urls" "text"[], "event_status" "text", "event_winner_announce_at" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_user_id bigint;
+BEGIN
+  -- auth.uid() (uuid) -> users.id (bigint) 매핑
+  SELECT u.id INTO v_user_id
+  FROM public.users u
+  WHERE u.auth_user_id = v_auth_uid;
+
+  RETURN QUERY
+  SELECT
+    ee.id as entry_id,
+    ee.entry_number,
+    ee.created_at as entry_created_at,
+    ee.is_winner,
+    e.id as event_id,
+    e.title as event_title,
+    e.image_url as event_image_url,
+    e.image_urls as event_image_urls,
+    e.status as event_status,
+    e.winner_announce_at as event_winner_announce_at
+  FROM event_entries ee
+  JOIN events e ON ee.event_id = e.id
+  WHERE ee.user_id = v_user_id
+  ORDER BY ee.created_at DESC;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_my_event_entries"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."get_new_crime_cases_with_comment_info"() RETURNS TABLE("id" bigint, "created_at" timestamp with time zone, "title" "text", "image_urls" "text"[], "category" "text", "views" bigint, "is_pinned" boolean, "is_published" boolean, "comment_count" bigint, "has_new_comment" boolean)
@@ -1902,6 +2199,88 @@ CREATE TABLE IF NOT EXISTS "public"."device_push_tokens" (
 ALTER TABLE "public"."device_push_tokens" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."event_entries" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "event_id" bigint NOT NULL,
+    "user_id" bigint NOT NULL,
+    "entry_number" integer NOT NULL,
+    "is_winner" boolean DEFAULT false
+);
+
+
+ALTER TABLE "public"."event_entries" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."event_entries" IS '이벤트 응모 정보';
+
+
+
+COMMENT ON COLUMN "public"."event_entries"."entry_number" IS '이벤트 내 고유 응모 번호';
+
+
+
+COMMENT ON COLUMN "public"."event_entries"."is_winner" IS '당첨 여부';
+
+
+
+ALTER TABLE "public"."event_entries" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."event_entries_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."events" (
+    "id" bigint NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "title" "text" NOT NULL,
+    "description" "text" NOT NULL,
+    "image_url" "text",
+    "entry_start_at" timestamp with time zone NOT NULL,
+    "entry_end_at" timestamp with time zone NOT NULL,
+    "winner_announce_at" timestamp with time zone NOT NULL,
+    "winner_count" integer DEFAULT 1 NOT NULL,
+    "status" "text" DEFAULT 'draft'::"text" NOT NULL,
+    "is_published" boolean DEFAULT false,
+    "created_by" "uuid",
+    "image_urls" "text"[] DEFAULT '{}'::"text"[],
+    CONSTRAINT "events_status_check" CHECK (("status" = ANY (ARRAY['draft'::"text", 'active'::"text", 'closed'::"text", 'announced'::"text"]))),
+    CONSTRAINT "events_winner_count_check" CHECK (("winner_count" >= 1))
+);
+
+
+ALTER TABLE "public"."events" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."events" IS '이벤트 정보';
+
+
+
+COMMENT ON COLUMN "public"."events"."winner_count" IS '당첨 인원';
+
+
+
+COMMENT ON COLUMN "public"."events"."status" IS 'draft: 초안, active: 진행중, closed: 마감, announced: 발표완료';
+
+
+
+ALTER TABLE "public"."events" ALTER COLUMN "id" ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME "public"."events_id_seq"
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."help_desk_comments" (
     "id" bigint NOT NULL,
     "question_id" bigint NOT NULL,
@@ -2584,6 +2963,26 @@ ALTER TABLE ONLY "public"."device_push_tokens"
 
 
 
+ALTER TABLE ONLY "public"."event_entries"
+    ADD CONSTRAINT "event_entries_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."event_entries"
+    ADD CONSTRAINT "event_entries_unique_number" UNIQUE ("event_id", "entry_number");
+
+
+
+ALTER TABLE ONLY "public"."event_entries"
+    ADD CONSTRAINT "event_entries_unique_user" UNIQUE ("event_id", "user_id");
+
+
+
+ALTER TABLE ONLY "public"."events"
+    ADD CONSTRAINT "events_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."help_desk_comments"
     ADD CONSTRAINT "help_desk_comments_pkey" PRIMARY KEY ("id");
 
@@ -2701,6 +3100,22 @@ CREATE INDEX "idx_comments_post_board_type" ON "public"."comments" USING "btree"
 
 
 CREATE INDEX "idx_comments_user_id" ON "public"."comments" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_event_entries_event_id" ON "public"."event_entries" USING "btree" ("event_id");
+
+
+
+CREATE INDEX "idx_event_entries_user_id" ON "public"."event_entries" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_events_is_published" ON "public"."events" USING "btree" ("is_published");
+
+
+
+CREATE INDEX "idx_events_status" ON "public"."events" USING "btree" ("status");
 
 
 
@@ -2855,6 +3270,21 @@ ALTER TABLE ONLY "public"."community_posts"
 
 ALTER TABLE ONLY "public"."device_push_tokens"
     ADD CONSTRAINT "device_push_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_entries"
+    ADD CONSTRAINT "event_entries_event_id_fkey" FOREIGN KEY ("event_id") REFERENCES "public"."events"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."event_entries"
+    ADD CONSTRAINT "event_entries_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."events"
+    ADD CONSTRAINT "events_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
 
 
 
@@ -3396,6 +3826,44 @@ CREATE POLICY "dpt update own (uuid)" ON "public"."device_push_tokens" FOR UPDAT
 
 
 
+CREATE POLICY "entries_admin_all" ON "public"."event_entries" TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "entries_insert_own" ON "public"."event_entries" FOR INSERT TO "authenticated" WITH CHECK (("user_id" = ( SELECT "users"."id"
+   FROM "public"."users"
+  WHERE ("users"."auth_user_id" = "auth"."uid"()))));
+
+
+
+CREATE POLICY "entries_select_own" ON "public"."event_entries" FOR SELECT TO "authenticated" USING (("user_id" = ( SELECT "users"."id"
+   FROM "public"."users"
+  WHERE ("users"."auth_user_id" = "auth"."uid"()))));
+
+
+
+ALTER TABLE "public"."event_entries" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."events" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "events_admin_all" ON "public"."events" TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."users"
+  WHERE (("users"."auth_user_id" = "auth"."uid"()) AND ("users"."is_admin" = true)))));
+
+
+
+CREATE POLICY "events_select_published" ON "public"."events" FOR SELECT TO "authenticated" USING (("is_published" = true));
+
+
+
 ALTER TABLE "public"."help_desk_comments" ENABLE ROW LEVEL SECURITY;
 
 
@@ -3715,9 +4183,21 @@ GRANT ALL ON FUNCTION "public"."delete_comment"("p_comment_id" bigint) TO "servi
 
 
 
+GRANT ALL ON FUNCTION "public"."draw_event_winners"("p_event_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."draw_event_winners"("p_event_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."draw_event_winners"("p_event_id" bigint) TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."encrypt_secret"("data" "text") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."enter_event"("p_event_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."enter_event"("p_event_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."enter_event"("p_event_id" bigint) TO "service_role";
 
 
 
@@ -3793,6 +4273,24 @@ GRANT ALL ON FUNCTION "public"."get_decrypted_report_for_admin"("report_id_input
 
 
 
+GRANT ALL ON FUNCTION "public"."get_event_detail"("p_event_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_event_detail"("p_event_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_event_detail"("p_event_id" bigint) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_event_entries_admin"("p_event_id" bigint) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_event_entries_admin"("p_event_id" bigint) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_event_entries_admin"("p_event_id" bigint) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_events_list"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_events_list"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_events_list"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) TO "anon";
 GRANT ALL ON FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_help_desk_comments_with_author"("p_question_id" bigint) TO "service_role";
@@ -3808,6 +4306,12 @@ GRANT ALL ON FUNCTION "public"."get_help_questions_with_status"() TO "service_ro
 GRANT ALL ON FUNCTION "public"."get_incident_photos_with_comment_info"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_incident_photos_with_comment_info"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_incident_photos_with_comment_info"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."get_my_event_entries"() TO "anon";
+GRANT ALL ON FUNCTION "public"."get_my_event_entries"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_my_event_entries"() TO "service_role";
 
 
 
@@ -4121,6 +4625,30 @@ GRANT ALL ON TABLE "public"."community_posts_with_author_profile" TO "service_ro
 GRANT ALL ON TABLE "public"."device_push_tokens" TO "anon";
 GRANT ALL ON TABLE "public"."device_push_tokens" TO "authenticated";
 GRANT ALL ON TABLE "public"."device_push_tokens" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."event_entries" TO "anon";
+GRANT ALL ON TABLE "public"."event_entries" TO "authenticated";
+GRANT ALL ON TABLE "public"."event_entries" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."event_entries_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."event_entries_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."event_entries_id_seq" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."events" TO "anon";
+GRANT ALL ON TABLE "public"."events" TO "authenticated";
+GRANT ALL ON TABLE "public"."events" TO "service_role";
+
+
+
+GRANT ALL ON SEQUENCE "public"."events_id_seq" TO "anon";
+GRANT ALL ON SEQUENCE "public"."events_id_seq" TO "authenticated";
+GRANT ALL ON SEQUENCE "public"."events_id_seq" TO "service_role";
 
 
 

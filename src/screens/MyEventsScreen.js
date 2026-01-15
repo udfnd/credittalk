@@ -74,8 +74,17 @@ function MyEventsScreen() {
     navigation.navigate('EventDetail', { eventId: entry.event_id });
   };
 
+  // 이미지 URL 가져오기 (event_image_urls 배열 또는 event_image_url 지원)
+  const getFirstImageUrl = (item) => {
+    if (Array.isArray(item.event_image_urls) && item.event_image_urls.length > 0) {
+      return item.event_image_urls[0];
+    }
+    return item.event_image_url || null;
+  };
+
   const renderEntryItem = ({ item }) => {
     const statusInfo = getEntryStatus(item);
+    const thumbnailUrl = getFirstImageUrl(item);
 
     return (
       <TouchableOpacity
@@ -83,9 +92,9 @@ function MyEventsScreen() {
         onPress={() => handleEntryPress(item)}
         activeOpacity={0.8}>
         <View style={styles.entryContent}>
-          {item.event_image_url ? (
+          {thumbnailUrl ? (
             <Image
-              source={{ uri: item.event_image_url }}
+              source={{ uri: thumbnailUrl }}
               style={styles.eventThumbnail}
               resizeMode="cover"
             />

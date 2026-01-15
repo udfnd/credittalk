@@ -14,7 +14,8 @@
       "Bash(./gradlew assembleDebug:*)",
       "Bash(npx tsc:*)",
       "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

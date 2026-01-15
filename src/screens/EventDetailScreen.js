@@ -15,6 +15,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import ImageViewing from 'react-native-image-viewing';
 
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -49,6 +50,8 @@ function EventDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [entering, setEntering] = useState(false);
+  const [isViewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   const fetchEventDetail = useCallback(async () => {
     try {
@@ -151,6 +154,55 @@ function EventDetailScreen() {
   const hasEntered = event?.user_entry_number !== null;
   const isWinner = event?.user_is_winner === true;
 
+  // 이미지 배열 처리 (image_urls 또는 image_url 지원)
+  const imageUrls = useMemo(() => {
+    if (!event) return [];
+    // image_urls 배열이 있으면 사용, 없으면 image_url을 배열로 변환
+    if (Array.isArray(event.image_urls) && event.image_urls.length > 0) {
+      return event.image_urls.filter(Boolean);
+    }
+    if (event.image_url) {
+      return [event.image_url];
+    }
+    return [];
+  }, [event]);
+
+  const viewerImages = useMemo(() => {
+    return imageUrls.map(uri => ({ uri }));
+  }, [imageUrls]);
+
+  const openViewerAt = useCallback((index) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
+
+  const renderImages = () => {
+    if (imageUrls.length === 0) {
+      return (
+        <View style={[styles.eventImage, styles.placeholderImage]}>
+          <Icon name="calendar-star" size={60} color="#bdc3c7" />
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.imageSection}>
+        {imageUrls.map((url, index) => (
+          <TouchableOpacity
+            key={index}
+            activeOpacity={0.9}
+            onPress={() => openViewerAt(index)}>
+            <Image
+              source={{ uri: url }}
+              style={styles.eventImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -182,17 +234,7 @@ function EventDetailScreen() {
           />
         }>
         {/* 이벤트 이미지 */}
-        {event.image_url ? (
-          <Image
-            source={{ uri: event.image_url }}
-            style={styles.eventImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.eventImage, styles.placeholderImage]}>
-            <Icon name="calendar-star" size={60} color="#bdc3c7" />
-          </View>
-        )}
+        {renderImages()}
 
         {/* 상태 배지 */}
         <View style={styles.statusContainer}>
@@ -357,6 +399,24 @@ function EventDetailScreen() {
           </View>
         </View>
       )}
+
+      {/* 이미지 전체화면 뷰어 */}
+      <ImageViewing
+        images={viewerImages}
+        imageIndex={viewerIndex}
+        visible={isViewerVisible}
+        onRequestClose={() => setViewerVisible(false)}
+        presentationStyle="fullScreen"
+        HeaderComponent={() => (
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity
+              onPress={() => setViewerVisible(false)}
+              style={styles.viewerCloseBtn}>
+              <Icon name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      />
     </View>
   );
 }
@@ -584,6 +644,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  imageSection: {
+    backgroundColor: '#fff',
+  },
+  viewerHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 50,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    zIndex: 10,
+  },
+  viewerCloseBtn: {
+    padding: 8,
   },
 });
 
