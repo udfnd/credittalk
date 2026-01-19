@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
+import android.telephony.PhoneNumberUtils
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -30,6 +31,11 @@ class CallStateReceiver : BroadcastReceiver() {
         private var lastFetchTime: Long = 0
         private const val CACHE_DURATION_MS = 5 * 60 * 1000L // 5분 캐시
         private const val ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000L // 1주일
+
+        // 중복 알림 방지
+        private var lastNotifiedNumber: String? = null
+        private var lastNotifiedTime: Long = 0
+        private const val NOTIFICATION_COOLDOWN_MS = 30_000L // 30초
     }
 
     // 연락처 상태 정보
@@ -76,6 +82,7 @@ class CallStateReceiver : BroadcastReceiver() {
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
                 cancelAlarm()
+                lastNotifiedNumber = null // 통화 종료 시 알림 상태 초기화
             }
         }
     }
@@ -83,6 +90,11 @@ class CallStateReceiver : BroadcastReceiver() {
     private fun checkNumberAndNotify(context: Context, phoneNumber: String) {
         executor.execute {
             val normalizedNumber = normalizePhoneNumber(phoneNumber)
+
+            // 중복 알림 체크
+            if (!shouldNotify(normalizedNumber)) {
+                return@execute
+            }
 
             // 1. 신고된 번호인지 확인 (최우선)
             val isScammer = isScammerNumber(context, normalizedNumber)
@@ -106,25 +118,17 @@ class CallStateReceiver : BroadcastReceiver() {
                         notifyUnknownNumber(context)
                     }
                 }
-                contactStatus.savedTimestamp != null -> {
-                    // 저장된 번호 - 1주일 이내인지 확인
-                    val currentTime = System.currentTimeMillis()
-                    val savedDuration = currentTime - contactStatus.savedTimestamp
-                    if (savedDuration < ONE_WEEK_MS) {
-                        Log.d(TAG, "Number saved within one week: $normalizedNumber")
-                        Handler(Looper.getMainLooper()).post {
-                            notifyRecentlySavedNumber(context)
-                        }
-                    } else {
-                        Log.d(TAG, "Number saved more than one week ago, skipping alert")
-                    }
-                }
-                else -> {
-                    // 연락처에 있지만 저장 시간을 알 수 없음 - 안전을 위해 경고 표시
-                    Log.d(TAG, "Number is in contacts (timestamp unknown), showing warning for safety")
+                contactStatus.savedTimestamp != null &&
+                (System.currentTimeMillis() - contactStatus.savedTimestamp) < ONE_WEEK_MS -> {
+                    // timestamp가 유효하고 1주일 이내에 저장된 번호
+                    Log.d(TAG, "Number saved within one week: $normalizedNumber")
                     Handler(Looper.getMainLooper()).post {
                         notifyRecentlySavedNumber(context)
                     }
+                }
+                else -> {
+                    // 연락처에 있고 (timestamp 없거나 1주일 이상 지남) - 경고 없음
+                    Log.d(TAG, "Number is in contacts, skipping alert (timestamp: ${contactStatus.savedTimestamp})")
                 }
             }
         }
@@ -133,6 +137,12 @@ class CallStateReceiver : BroadcastReceiver() {
     private fun checkNumberAndScheduleWarning(context: Context, phoneNumber: String) {
         executor.execute {
             val normalizedNumber = normalizePhoneNumber(phoneNumber)
+
+            // 중복 알림 체크 (RINGING에서 이미 알림을 보낸 경우 스킵)
+            if (!shouldNotify(normalizedNumber)) {
+                Log.d(TAG, "Skipping scheduled warning for: $normalizedNumber (already notified)")
+                return@execute
+            }
 
             // 1. 신고된 번호인지 확인 (최우선)
             val isScammer = isScammerNumber(context, normalizedNumber)
@@ -164,26 +174,10 @@ class CallStateReceiver : BroadcastReceiver() {
                         handler?.postDelayed(runnable!!, 5_000)
                     }
                 }
-                contactStatus.savedTimestamp != null -> {
-                    // 저장된 번호 - 1주일 이내인지 확인
-                    val currentTime = System.currentTimeMillis()
-                    val savedDuration = currentTime - contactStatus.savedTimestamp
-                    if (savedDuration < ONE_WEEK_MS) {
-                        Log.d(TAG, "Number saved within one week (scheduled): $normalizedNumber")
-                        Handler(Looper.getMainLooper()).post {
-                            handler = Handler(Looper.getMainLooper())
-                            runnable = Runnable {
-                                notifyRecentlySavedNumber(context)
-                            }
-                            handler?.postDelayed(runnable!!, 5_000)
-                        }
-                    } else {
-                        Log.d(TAG, "Number saved more than one week ago, skipping scheduled warning")
-                    }
-                }
-                else -> {
-                    // 연락처에 있지만 저장 시간을 알 수 없음 - 안전을 위해 경고 표시
-                    Log.d(TAG, "Number is in contacts (timestamp unknown, scheduled), showing warning for safety")
+                contactStatus.savedTimestamp != null &&
+                (System.currentTimeMillis() - contactStatus.savedTimestamp) < ONE_WEEK_MS -> {
+                    // timestamp가 유효하고 1주일 이내에 저장된 번호
+                    Log.d(TAG, "Number saved within one week (scheduled): $normalizedNumber")
                     Handler(Looper.getMainLooper()).post {
                         handler = Handler(Looper.getMainLooper())
                         runnable = Runnable {
@@ -191,6 +185,10 @@ class CallStateReceiver : BroadcastReceiver() {
                         }
                         handler?.postDelayed(runnable!!, 5_000)
                     }
+                }
+                else -> {
+                    // 연락처에 있고 (timestamp 없거나 1주일 이상 지남) - 경고 없음
+                    Log.d(TAG, "Number is in contacts (scheduled), skipping alert (timestamp: ${contactStatus.savedTimestamp})")
                 }
             }
         }
@@ -207,11 +205,12 @@ class CallStateReceiver : BroadcastReceiver() {
 
         Log.d(TAG, "Checking contact status for: $phoneNumber, variations: $phoneVariations")
 
+        // 방법 1: PhoneLookup으로 검색
         for (variation in phoneVariations) {
             try {
                 val result = lookupContactByNumber(context, variation)
                 if (result.isInContacts) {
-                    Log.d(TAG, "Contact found with variation: $variation")
+                    Log.d(TAG, "Contact found with PhoneLookup variation: $variation")
                     return result
                 }
             } catch (e: Exception) {
@@ -219,7 +218,66 @@ class CallStateReceiver : BroadcastReceiver() {
             }
         }
 
+        // 방법 2: PhoneLookup 실패 시, 모든 연락처를 가져와서 PhoneNumberUtils.compare()로 비교
+        Log.d(TAG, "PhoneLookup failed, trying PhoneNumberUtils.compare() method")
+        try {
+            val result = findContactByPhoneNumberUtils(context, phoneNumber)
+            if (result.isInContacts) {
+                Log.d(TAG, "Contact found with PhoneNumberUtils.compare()")
+                return result
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in PhoneNumberUtils compare: ${e.message}")
+        }
+
         Log.d(TAG, "No contact found for any variation of: $phoneNumber")
+        return ContactStatus(isInContacts = false, savedTimestamp = null)
+    }
+
+    /**
+     * PhoneNumberUtils.compare()를 사용하여 연락처에서 전화번호를 찾습니다.
+     * PhoneLookup이 실패할 경우 대안으로 사용합니다.
+     */
+    private fun findContactByPhoneNumberUtils(context: Context, targetNumber: String): ContactStatus {
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.CONTACT_LAST_UPDATED_TIMESTAMP
+        )
+
+        var cursor: Cursor? = null
+        try {
+            cursor = context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                projection,
+                null,
+                null,
+                null
+            )
+
+            cursor?.let {
+                val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val timestampIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_LAST_UPDATED_TIMESTAMP)
+
+                while (it.moveToNext()) {
+                    val contactNumber = if (numberIndex >= 0) it.getString(numberIndex) else null
+                    if (contactNumber != null) {
+                        // PhoneNumberUtils.compare()로 전화번호 비교 (국가 코드, 형식 차이 무시)
+                        if (PhoneNumberUtils.compare(targetNumber, contactNumber)) {
+                            val rawTimestamp = if (timestampIndex >= 0) it.getLong(timestampIndex) else 0L
+                            val timestamp = if (rawTimestamp > 0L) rawTimestamp else null
+                            Log.d(TAG, "PhoneNumberUtils match found: $contactNumber (target: $targetNumber), timestamp: $timestamp")
+                            return ContactStatus(isInContacts = true, savedTimestamp = timestamp)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in findContactByPhoneNumberUtils: ${e.message}")
+        } finally {
+            cursor?.close()
+        }
+
         return ContactStatus(isInContacts = false, savedTimestamp = null)
     }
 
@@ -290,21 +348,21 @@ class CallStateReceiver : BroadcastReceiver() {
      * 특정 번호로 연락처를 조회합니다.
      */
     private fun lookupContactByNumber(context: Context, phoneNumber: String): ContactStatus {
-        try {
-            val uri = Uri.withAppendedPath(
-                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-                Uri.encode(phoneNumber)
-            )
+        val uri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            Uri.encode(phoneNumber)
+        )
 
-            // CONTACT_LAST_UPDATED_TIMESTAMP를 사용하여 연락처 저장/수정 시간 확인
-            val projection = arrayOf(
+        // 먼저 timestamp 컬럼을 포함하여 시도
+        try {
+            val projectionWithTimestamp = arrayOf(
                 ContactsContract.PhoneLookup._ID,
                 ContactsContract.PhoneLookup.CONTACT_LAST_UPDATED_TIMESTAMP
             )
 
             val cursor: Cursor? = context.contentResolver.query(
                 uri,
-                projection,
+                projectionWithTimestamp,
                 null,
                 null,
                 null
@@ -313,7 +371,6 @@ class CallStateReceiver : BroadcastReceiver() {
             cursor?.use {
                 if (it.count > 0 && it.moveToFirst()) {
                     val timestampIndex = it.getColumnIndex(ContactsContract.PhoneLookup.CONTACT_LAST_UPDATED_TIMESTAMP)
-                    // getLong()은 null 대신 0L을 반환하므로, 0L은 유효하지 않은 값으로 처리
                     val rawTimestamp = if (timestampIndex >= 0) it.getLong(timestampIndex) else 0L
                     val timestamp = if (rawTimestamp > 0L) rawTimestamp else null
                     Log.d(TAG, "Contact found - rawTimestamp: $rawTimestamp, timestamp: $timestamp")
@@ -321,7 +378,27 @@ class CallStateReceiver : BroadcastReceiver() {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error in lookupContactByNumber for $phoneNumber: ${e.message}")
+            // CONTACT_LAST_UPDATED_TIMESTAMP가 지원되지 않는 경우, 기본 조회로 폴백
+            Log.d(TAG, "Timestamp column not supported, falling back to basic lookup for $phoneNumber")
+            try {
+                val basicProjection = arrayOf(ContactsContract.PhoneLookup._ID)
+                val cursor: Cursor? = context.contentResolver.query(
+                    uri,
+                    basicProjection,
+                    null,
+                    null,
+                    null
+                )
+
+                cursor?.use {
+                    if (it.count > 0 && it.moveToFirst()) {
+                        Log.d(TAG, "Contact found (without timestamp): $phoneNumber")
+                        return ContactStatus(isInContacts = true, savedTimestamp = null)
+                    }
+                }
+            } catch (fallbackError: Exception) {
+                Log.e(TAG, "Error in fallback lookupContactByNumber for $phoneNumber: ${fallbackError.message}")
+            }
         }
         return ContactStatus(isInContacts = false, savedTimestamp = null)
     }
@@ -406,6 +483,24 @@ class CallStateReceiver : BroadcastReceiver() {
         handler?.removeCallbacks(runnable ?: Runnable { })
         handler = null
         runnable = null
+    }
+
+    /**
+     * 중복 알림 방지를 위해 동일 번호에 대해 30초 이내 알림 여부 체크
+     */
+    private fun shouldNotify(phoneNumber: String): Boolean {
+        val currentTime = System.currentTimeMillis()
+        val normalizedNumber = normalizePhoneNumber(phoneNumber)
+
+        if (normalizedNumber == lastNotifiedNumber &&
+            currentTime - lastNotifiedTime < NOTIFICATION_COOLDOWN_MS) {
+            Log.d(TAG, "Skipping duplicate notification for: $normalizedNumber")
+            return false
+        }
+
+        lastNotifiedNumber = normalizedNumber
+        lastNotifiedTime = currentTime
+        return true
     }
 
     // 1) 저장되지 않은 번호 알림
