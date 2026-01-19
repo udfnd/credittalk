@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,15 +11,18 @@ import {
   Dimensions,
   RefreshControl,
 } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import ImageViewing from 'react-native-image-viewing';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AvoidSoftInput } from 'react-native-avoid-softinput';
 
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { logPageView } from '../lib/pageViewLogger';
+import CommentsSection from '../components/CommentsSection';
 
 const { width } = Dimensions.get('window');
 
@@ -45,6 +48,8 @@ function EventDetailScreen() {
   const navigation = useNavigation();
   const { eventId } = route.params;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef(null);
 
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +57,18 @@ function EventDetailScreen() {
   const [entering, setEntering] = useState(false);
   const [isViewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+
+  // 키보드 처리를 위한 AvoidSoftInput 설정
+  useFocusEffect(
+    useCallback(() => {
+      AvoidSoftInput.setEnabled(true);
+      AvoidSoftInput.setShouldMimicIOSBehavior(true);
+      return () => {
+        AvoidSoftInput.setEnabled(false);
+        AvoidSoftInput.setShouldMimicIOSBehavior(false);
+      };
+    }, []),
+  );
 
   const fetchEventDetail = useCallback(async () => {
     try {
@@ -223,8 +240,10 @@ function EventDetailScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 + insets.bottom }]}
+        keyboardShouldPersistTaps="always"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -367,11 +386,18 @@ function EventDetailScreen() {
             </View>
           )}
         </View>
+
+        {/* 댓글 섹션 */}
+        <CommentsSection
+          postId={eventId}
+          boardType="events"
+          scrollViewRef={scrollViewRef}
+        />
       </ScrollView>
 
       {/* 하단 응모 버튼 */}
       {!hasEntered && statusInfo.canEnter && (
-        <View style={styles.bottomContainer}>
+        <View style={[styles.bottomContainer, { paddingBottom: 16 + insets.bottom }]}>
           <TouchableOpacity
             style={styles.enterButton}
             onPress={handleEnter}
@@ -390,7 +416,7 @@ function EventDetailScreen() {
       )}
 
       {hasEntered && !isWinner && event.status !== 'announced' && (
-        <View style={styles.bottomContainer}>
+        <View style={[styles.bottomContainer, { paddingBottom: 16 + insets.bottom }]}>
           <View style={styles.enteredButton}>
             <Icon name="check-circle" size={22} color="#fff" />
             <Text style={styles.enterButtonText}>
@@ -447,7 +473,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    // paddingBottom은 인라인 스타일에서 동적으로 설정
   },
   eventImage: {
     width: width,
