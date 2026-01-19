@@ -49,6 +49,13 @@ const BOARD_TYPE_MAP = {
     screen: 'NewCrimeCaseDetail',
     idParamName: 'caseId',
   },
+  events: {
+    postTable: 'events',
+    postTitleColumn: 'title',
+    postAuthorColumn: 'created_by',
+    screen: 'EventDetail',
+    idParamName: 'eventId',
+  },
 } as const;
 
 Deno.serve(async req => {
