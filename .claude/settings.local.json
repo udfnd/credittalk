@@ -42,7 +42,13 @@
       "Bash(emulator -list-avds:*)",
       "Bash(nc:*)",
       "Bash(__NEW_LINE_ee1d0541a5419fcb__ sleep 3)",
-      "Skill(ralph-loop:cancel-ralph)"
+      "Skill(ralph-loop:cancel-ralph)",
+      "Bash(__NEW_LINE_68773ca7d92fec40__ echo \"=== Logs ===\")",
+      "Bash(__NEW_LINE_cbc830bd8a13e802__ echo \"=== Logs ===\")",
+      "Bash(__NEW_LINE_17728c17435dc92e__ echo \"=== Logs ===\")",
+      "Bash(__NEW_LINE_45e63b01ad587450__ sleep 2)",
+      "Bash(__NEW_LINE_69ab6d3f23ecf548__ sleep 2)",
+      "Bash(./gradlew :app:compileDebugKotlin:*)"
     ],
     "deny": [],
     "ask": []
