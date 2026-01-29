@@ -23,16 +23,22 @@ const getStatusInfo = (event) => {
   const entryStart = new Date(event.entry_start_at);
   const entryEnd = new Date(event.entry_end_at);
 
+  // 응모 인원 마감 확인
+  const isFull = event.max_entry_count !== null && event.entry_count >= event.max_entry_count;
+
   if (event.status === 'announced') {
-    return { label: '발표 완료', color: '#9b59b6', icon: 'trophy', priority: 4 };
+    return { label: '발표 완료', color: '#9b59b6', icon: 'trophy', priority: 4, isFull: false };
   }
   if (event.status === 'closed' || now > entryEnd) {
-    return { label: '응모 마감', color: '#95a5a6', icon: 'clock-outline', priority: 3 };
+    return { label: '응모 마감', color: '#95a5a6', icon: 'clock-outline', priority: 3, isFull: false };
   }
   if (now < entryStart) {
-    return { label: '응모 예정', color: '#3498db', icon: 'calendar-clock', priority: 2 };
+    return { label: '응모 예정', color: '#3498db', icon: 'calendar-clock', priority: 2, isFull: false };
   }
-  return { label: '응모 중', color: '#27ae60', icon: 'check-circle', priority: 1 };
+  if (isFull) {
+    return { label: '인원 마감', color: '#e67e22', icon: 'account-group', priority: 1, isFull: true };
+  }
+  return { label: '응모 중', color: '#27ae60', icon: 'check-circle', priority: 1, isFull: false };
 };
 
 // 이벤트 정렬: 진행 중 > 응모 예정 > 응모 마감 > 발표 완료
@@ -149,8 +155,12 @@ function EventListScreen() {
               </Text>
             </View>
             <View style={styles.metaItem}>
-              <Icon name="account-group" size={14} color="#7f8c8d" />
-              <Text style={styles.metaText}>{item.entry_count}명 응모</Text>
+              <Icon name="account-group" size={14} color={statusInfo.isFull ? '#e67e22' : '#7f8c8d'} />
+              <Text style={[styles.metaText, statusInfo.isFull && styles.metaTextFull]}>
+                {item.max_entry_count !== null
+                  ? `${item.entry_count}/${item.max_entry_count}명`
+                  : `${item.entry_count}명 응모`}
+              </Text>
             </View>
             <View style={styles.metaItem}>
               <Icon name="gift" size={14} color="#7f8c8d" />
@@ -300,6 +310,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7f8c8d',
     marginLeft: 4,
+  },
+  metaTextFull: {
+    color: '#e67e22',
+    fontWeight: '600',
   },
   emptyContainer: {
     alignItems: 'center',
