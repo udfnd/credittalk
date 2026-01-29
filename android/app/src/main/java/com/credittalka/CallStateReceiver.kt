@@ -466,12 +466,16 @@ class CallStateReceiver : BroadcastReceiver() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notificationManager.getNotificationChannel(channelId) == null) {
             val channel = android.app.NotificationChannel(channelId, "전화경고", android.app.NotificationManager.IMPORTANCE_HIGH)
+            channel.enableVibration(true)
+            channel.setShowBadge(true)
             notificationManager.createNotificationChannel(channel)
         }
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("저장되지 않은 전화번호입니다.")
             .setContentText("금융사기에 주의하세요.")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
         notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
     }

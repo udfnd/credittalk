@@ -31,16 +31,22 @@ const getStatusInfo = (event) => {
   const entryStart = new Date(event.entry_start_at);
   const entryEnd = new Date(event.entry_end_at);
 
+  // 응모 인원 마감 확인
+  const isFull = event.max_entry_count !== null && event.entry_count >= event.max_entry_count;
+
   if (event.status === 'announced') {
-    return { label: '발표 완료', color: '#9b59b6', icon: 'trophy', canEnter: false };
+    return { label: '발표 완료', color: '#9b59b6', icon: 'trophy', canEnter: false, isFull: false };
   }
   if (event.status === 'closed' || now > entryEnd) {
-    return { label: '응모 마감', color: '#95a5a6', icon: 'clock-outline', canEnter: false };
+    return { label: '응모 마감', color: '#95a5a6', icon: 'clock-outline', canEnter: false, isFull: false };
   }
   if (now < entryStart) {
-    return { label: '응모 예정', color: '#3498db', icon: 'calendar-clock', canEnter: false };
+    return { label: '응모 예정', color: '#3498db', icon: 'calendar-clock', canEnter: false, isFull: false };
   }
-  return { label: '응모 중', color: '#27ae60', icon: 'check-circle', canEnter: true };
+  if (isFull) {
+    return { label: '인원 마감', color: '#e67e22', icon: 'account-group', canEnter: false, isFull: true };
+  }
+  return { label: '응모 중', color: '#27ae60', icon: 'check-circle', canEnter: true, isFull: false };
 };
 
 function EventDetailScreen() {
@@ -123,13 +129,24 @@ function EventDetailScreen() {
       return;
     }
 
+    // 인원 마감되었지만 우선권이 있는 경우
+    const isFull = event?.max_entry_count !== null && event?.entry_count >= event?.max_entry_count;
+    const hasPriority = event?.user_has_priority === true;
+
+    let confirmMessage = '이 이벤트에 응모하시겠습니까?';
+    if (isFull && hasPriority) {
+      confirmMessage = '응모 인원이 마감되었지만, 우선권을 사용하여 응모할 수 있습니다.\n\n우선권을 사용하여 응모하시겠습니까?';
+    } else if (isFull && !hasPriority) {
+      confirmMessage = '응모 인원이 마감되었습니다.\n\n응모 시도 시 다음 이벤트에서 우선 응모 권한이 부여됩니다. 계속하시겠습니까?';
+    }
+
     Alert.alert(
       '이벤트 응모',
-      '이 이벤트에 응모하시겠습니까?',
+      confirmMessage,
       [
         { text: '취소', style: 'cancel' },
         {
-          text: '응모하기',
+          text: isFull && hasPriority ? '우선권 사용' : '응모하기',
           onPress: async () => {
             setEntering(true);
             try {
@@ -144,6 +161,14 @@ function EventDetailScreen() {
                   Alert.alert(
                     '응모 완료!',
                     `응모번호: #${result.entry_number}\n\n${result.message}`,
+                    [{ text: '확인' }]
+                  );
+                  fetchEventDetail();
+                } else if (result.priority_granted) {
+                  // 우선권이 부여된 경우
+                  Alert.alert(
+                    '우선권 부여됨',
+                    result.message,
                     [{ text: '확인' }]
                   );
                   fetchEventDetail();
@@ -345,8 +370,14 @@ function EventDetailScreen() {
           {/* 응모 현황 */}
           <View style={styles.statsSection}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{event.entry_count}</Text>
-              <Text style={styles.statLabel}>현재 응모자</Text>
+              <Text style={styles.statValue}>
+                {event.max_entry_count !== null
+                  ? `${event.entry_count}/${event.max_entry_count}`
+                  : event.entry_count}
+              </Text>
+              <Text style={styles.statLabel}>
+                {event.max_entry_count !== null ? '응모 현황' : '현재 응모자'}
+              </Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
@@ -354,6 +385,20 @@ function EventDetailScreen() {
               <Text style={styles.statLabel}>당첨 인원</Text>
             </View>
           </View>
+
+          {/* 우선권 보유 안내 */}
+          {event.user_has_priority && !hasEntered && (
+            <View style={styles.priorityCard}>
+              <Icon name="star-circle" size={28} color="#f39c12" />
+              <View style={styles.priorityCardContent}>
+                <Text style={styles.priorityCardTitle}>우선 응모권 보유</Text>
+                <Text style={styles.priorityCardDesc}>
+                  응모 인원이 마감되어도 우선권을 사용하여 응모할 수 있습니다.
+                  {event.user_priority_count > 1 && ` (${event.user_priority_count}개 보유)`}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* 이벤트 설명 */}
           <View style={styles.descriptionSection}>
@@ -412,6 +457,43 @@ function EventDetailScreen() {
               </>
             )}
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 인원 마감 시 - 우선권 사용 또는 우선권 받기 버튼 */}
+      {!hasEntered && statusInfo.isFull && (
+        <View style={[styles.bottomContainer, { paddingBottom: 16 + insets.bottom }]}>
+          {event.user_has_priority ? (
+            <TouchableOpacity
+              style={[styles.enterButton, styles.priorityButton]}
+              onPress={handleEnter}
+              disabled={entering}
+              activeOpacity={0.8}>
+              {entering ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Icon name="star-circle" size={22} color="#fff" />
+                  <Text style={styles.enterButtonText}>우선권으로 응모하기</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.enterButton, styles.priorityRequestButton]}
+              onPress={handleEnter}
+              disabled={entering}
+              activeOpacity={0.8}>
+              {entering ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Icon name="ticket-confirmation" size={22} color="#fff" />
+                  <Text style={styles.enterButtonText}>다음 이벤트 우선권 받기</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -664,6 +746,36 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  priorityButton: {
+    backgroundColor: '#f39c12',
+  },
+  priorityRequestButton: {
+    backgroundColor: '#e67e22',
+  },
+  priorityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef9e7',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#f1c40f',
+  },
+  priorityCardContent: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  priorityCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#d68910',
+  },
+  priorityCardDesc: {
+    fontSize: 13,
+    color: '#9a7d0a',
+    marginTop: 4,
   },
   enterButtonText: {
     color: '#fff',
