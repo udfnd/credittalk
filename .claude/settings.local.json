@@ -48,7 +48,9 @@
       "Bash(__NEW_LINE_17728c17435dc92e__ echo \"=== Logs ===\")",
       "Bash(__NEW_LINE_45e63b01ad587450__ sleep 2)",
       "Bash(__NEW_LINE_69ab6d3f23ecf548__ sleep 2)",
-      "Bash(./gradlew :app:compileDebugKotlin:*)"
+      "Bash(./gradlew :app:compileDebugKotlin:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)"
     ],
     "deny": [],
     "ask": []

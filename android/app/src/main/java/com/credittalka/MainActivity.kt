@@ -19,6 +19,7 @@ class MainActivity : ReactActivity() {
   private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       arrayOf(
           Manifest.permission.READ_PHONE_STATE,
+          Manifest.permission.READ_CALL_LOG,
           Manifest.permission.READ_CONTACTS,
           Manifest.permission.POST_NOTIFICATIONS,
           Manifest.permission.READ_MEDIA_AUDIO,
@@ -28,6 +29,7 @@ class MainActivity : ReactActivity() {
   } else {
       arrayOf(
           Manifest.permission.READ_PHONE_STATE,
+          Manifest.permission.READ_CALL_LOG,
           Manifest.permission.READ_CONTACTS,
           Manifest.permission.READ_EXTERNAL_STORAGE,
           Manifest.permission.RECORD_AUDIO

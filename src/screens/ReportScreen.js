@@ -22,6 +22,7 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 
 import ImageSelectionModal from '../components/ImageSelectionModal';
+import BankSearchModal from '../components/BankSearchModal';
 import { bankImages } from '../assets/images/banks';
 import { siteImages } from '../assets/images/sites';
 import { logPageView } from '../lib/pageViewLogger';
@@ -1018,7 +1019,7 @@ function ReportScreen({ navigation }) {
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-        <ImageSelectionModal
+        <BankSearchModal
           visible={bankModalState.visible}
           onClose={() => setBankModalState({ visible: false, index: -1 })}
           items={bankImages}
