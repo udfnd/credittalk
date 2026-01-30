@@ -11,6 +11,7 @@
 		19504E381536996957C4FF57 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		A1B2C3D4E5F6789012345679 /* ObjCExceptionHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* ObjCExceptionHandler.m */; };
 		DA99287C5B0A394F145B38AB /* Pods_CreditTalk.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 881581C7DD817381E1E71119 /* Pods_CreditTalk.framework */; };
 		EF6D1AB02E7AC9B0003A2C3A /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = EF6D1AAF2E7AC9B0003A2C3A /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
@@ -25,6 +26,8 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = CreditTalk/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = credittalk/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		881581C7DD817381E1E71119 /* Pods_CreditTalk.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_CreditTalk.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F6789012345677 /* ObjCExceptionHandler.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ObjCExceptionHandler.h; path = CreditTalk/ObjCExceptionHandler.h; sourceTree = "<group>"; };
+		A1B2C3D4E5F6789012345678 /* ObjCExceptionHandler.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ObjCExceptionHandler.m; path = CreditTalk/ObjCExceptionHandler.m; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EF6708EE2DB5E00900C672C0 /* AntDesign.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = AntDesign.ttf; sourceTree = "<group>"; };
 		EF6708EF2DB5E00900C672C0 /* Entypo.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Entypo.ttf; sourceTree = "<group>"; };
@@ -67,6 +70,8 @@
 				EF6D1AAD2E77502F003A2C3A /* CreditTalk.entitlements */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
+				A1B2C3D4E5F6789012345677 /* ObjCExceptionHandler.h */,
+				A1B2C3D4E5F6789012345678 /* ObjCExceptionHandler.m */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
@@ -314,6 +319,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				A1B2C3D4E5F6789012345679 /* ObjCExceptionHandler.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

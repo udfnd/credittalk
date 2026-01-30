@@ -4,6 +4,9 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+// Objective-C 예외 핸들러 (NSException을 Swift에서 안전하게 처리)
+#import "ObjCExceptionHandler.h"
+
 // React-RCTAppDelegate Headers
 #if __has_include(<React_RCTAppDelegate/RCTAppDelegate.h>)
 #import <React_RCTAppDelegate/RCTAppDelegate.h>
