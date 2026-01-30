@@ -50,7 +50,9 @@
       "Bash(__NEW_LINE_69ab6d3f23ecf548__ sleep 2)",
       "Bash(./gradlew :app:compileDebugKotlin:*)",
       "Bash(find:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(pod install:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []
