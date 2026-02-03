@@ -17,17 +17,26 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
-const { VoicePhishingModule } = NativeModules;
+// VoicePhishingModule - Google Play Store 정책으로 인해 비활성화
+// const { VoicePhishingModule } = NativeModules;
 
 function SettingsScreen() {
   const { user, profile, signOutUser, isLoading: authIsLoading } = useAuth();
   const navigation = useNavigation();
+  // 기능 비활성화로 인해 항상 false
   const [isVoiceDetectionEnabled, setIsVoiceDetectionEnabled] = useState(false);
+  // 기능 비활성화 상태
+  const isVoiceDetectionFeatureDisabled = true;
 
   useEffect(() => {
-    loadVoiceDetectionSetting();
+    // 기능 비활성화로 인해 설정 로드 불필요
+    // loadVoiceDetectionSetting();
   }, []);
 
+  /*
+  // ============================================================
+  // 원본 코드 - Google Play Store 정책으로 인해 비활성화
+  // ============================================================
   const loadVoiceDetectionSetting = async () => {
     try {
       const setting = await AsyncStorage.getItem('voiceDetectionEnabled');
@@ -39,8 +48,21 @@ function SettingsScreen() {
       console.error('설정 불러오기 실패:', error);
     }
   };
+  */
 
   const handleToggleVoiceDetection = async (value) => {
+    // 기능 비활성화 안내
+    Alert.alert(
+      '기능 비활성화',
+      '이 기능은 현재 Google Play Store 정책으로 인해 사용할 수 없습니다.\n\n대신 "AI 통화 분석" 기능을 이용해 주세요.',
+      [{ text: '확인' }]
+    );
+    return;
+
+    /*
+    // ============================================================
+    // 원본 코드 - Google Play Store 정책으로 인해 비활성화
+    // ============================================================
     if (Platform.OS !== 'android') {
       Alert.alert('안내', '이 기능은 Android에서만 사용 가능합니다.');
       return;
@@ -63,6 +85,7 @@ function SettingsScreen() {
       Alert.alert('오류', error.message || '서비스 제어 실패');
       console.error('VoicePhishing 서비스 제어 실패:', error);
     }
+    */
   };
 
   const handleHelpCenterLink = () => {
@@ -199,17 +222,21 @@ function SettingsScreen() {
         <View style={styles.menuGroup}>
           <Text style={styles.menuGroupTitle}>보안 도구</Text>
 
-          <View style={styles.menuItem}>
+          <View style={[styles.menuItem, isVoiceDetectionFeatureDisabled && styles.menuItemDisabled]}>
             <Icon
               name="phone-alert"
               size={24}
-              color="#555"
+              color={isVoiceDetectionFeatureDisabled ? '#aaa' : '#555'}
               style={styles.menuIcon}
             />
             <View style={{ flex: 1 }}>
-              <Text style={styles.menuText}>보이스피싱 실시간 감지</Text>
+              <Text style={[styles.menuText, isVoiceDetectionFeatureDisabled && styles.menuTextDisabled]}>
+                보이스피싱 실시간 감지
+              </Text>
               <Text style={styles.menuSubText}>
-                통화 중 키워드 감지 시 즉시 경고
+                {isVoiceDetectionFeatureDisabled
+                  ? '정책상 비활성화됨 - AI 통화 분석을 이용하세요'
+                  : '통화 중 키워드 감지 시 즉시 경고'}
               </Text>
             </View>
             <Switch
@@ -217,6 +244,7 @@ function SettingsScreen() {
               onValueChange={handleToggleVoiceDetection}
               trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
               thumbColor={isVoiceDetectionEnabled ? '#3b82f6' : '#f4f3f4'}
+              disabled={isVoiceDetectionFeatureDisabled}
             />
           </View>
 
@@ -366,10 +394,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  menuTextDisabled: {
+    color: '#aaa',
+  },
   menuSubText: {
     fontSize: 12,
     color: '#888',
     marginTop: 4,
+  },
+  menuItemDisabled: {
+    opacity: 0.7,
   },
   logoutButton: {
     marginTop: 30,

@@ -1,5 +1,36 @@
 package com.credittalka
 
+/*
+============================================================
+CallStateReceiver - 수신 전화 감지 및 스캐머 알림 기능
+
+[비활성화됨] Google Play Store 정책으로 인해 비활성화
+- READ_CALL_LOG, READ_PHONE_STATE, READ_CONTACTS 권한 필요
+- 향후 "기본 전화 앱" 승인 또는 정책 변경 시 다시 활성화 가능
+
+활성화하려면:
+1. AndroidManifest.xml에서 관련 권한 및 receiver 주석 해제
+2. 이 파일의 주석 해제
+3. VoicePhishingModule.kt의 관련 메서드 주석 해제
+============================================================
+*/
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+
+// 비활성화된 클래스 - 빈 구현
+class CallStateReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        // 기능 비활성화됨 - 아무 동작도 하지 않음
+    }
+}
+
+/*
+// ============================================================
+// 원본 코드 - Google Play Store 정책으로 인해 비활성화
+// ============================================================
+
 import android.app.PendingIntent
 import android.content.*
 import android.database.Cursor
@@ -540,3 +571,7 @@ class CallStateReceiver : BroadcastReceiver() {
         }
     }
 }
+// ============================================================
+// 원본 코드 끝
+// ============================================================
+*/
