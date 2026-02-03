@@ -1,5 +1,40 @@
 package com.credittalka
 
+/*
+============================================================
+KeywordDetectService - 보이스피싱 키워드 실시간 감지 서비스
+
+[비활성화됨] Google Play Store 정책으로 인해 비활성화
+- RECORD_AUDIO, FOREGROUND_SERVICE_MICROPHONE 권한 필요
+- 향후 정책 변경 시 다시 활성화 가능
+
+활성화하려면:
+1. AndroidManifest.xml에서 관련 권한 및 service 주석 해제
+2. 이 파일의 주석 해제
+3. VoicePhishingModule.kt의 관련 메서드 주석 해제
+============================================================
+*/
+
+import android.app.Service
+import android.content.Intent
+import android.os.IBinder
+
+// 비활성화된 클래스 - 빈 구현
+class KeywordDetectService : Service() {
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 기능 비활성화됨 - 즉시 종료
+        stopSelf()
+        return START_NOT_STICKY
+    }
+}
+
+/*
+// ============================================================
+// 원본 코드 - Google Play Store 정책으로 인해 비활성화
+// ============================================================
+
 import android.app.*
 import android.content.Intent
 import android.os.*
@@ -132,3 +167,7 @@ class KeywordDetectService : Service(), RecognitionListener {
 
     override fun onBind(intent: Intent?) = null
 }
+// ============================================================
+// 원본 코드 끝
+// ============================================================
+*/
