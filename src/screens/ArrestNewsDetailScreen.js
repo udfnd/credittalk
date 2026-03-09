@@ -128,7 +128,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           `
           id, title, content, created_at, author_name, image_urls, is_pinned, link_url, views, user_id,
           arrest_status, reported_to_police, police_station_name,
-          fraud_category, scammer_nickname, scammer_account_number, scammer_phone_number, scammer_phone_numbers
+          fraud_category, scammer_nickname, scammer_bank_name, scammer_account_number, scammer_phone_number, scammer_phone_numbers
         `,
         )
         .eq('id', newsId)
@@ -250,7 +250,24 @@ function ArrestNewsDetailScreen({ route, navigation }) {
                 blocked_user_id: news.user_id,
               });
               if (error && error.code !== '23505') throw error;
-              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+
+              // 관리자일 경우 전화번호 차단
+              if (isAdmin) {
+                try {
+                  await supabase.functions.invoke('admin-ban-phone', {
+                    body: { blocked_user_id: news.user_id },
+                  });
+                } catch (banErr) {
+                  console.warn('Phone ban failed:', banErr);
+                }
+              }
+
+              Alert.alert(
+                '차단 완료',
+                isAdmin
+                  ? '사용자가 차단되었으며, 해당 전화번호로의 재가입이 차단되었습니다.'
+                  : '사용자가 성공적으로 차단되었습니다.',
+              );
               navigation.goBack();
             } catch (err) {
               console.error('Block user error:', err);
@@ -679,6 +696,7 @@ function ArrestNewsDetailScreen({ route, navigation }) {
         {/* 사기꾼 정보 (누적신고 버튼 아래) */}
         {(news.scammer_nickname ||
           news.scammer_account_number ||
+          news.scammer_bank_name ||
           news.scammer_phone_number ||
           (news.scammer_phone_numbers && news.scammer_phone_numbers.length > 0)) && (
           <View style={styles.scammerDetailSection}>
@@ -692,9 +710,18 @@ function ArrestNewsDetailScreen({ route, navigation }) {
                 </Text>
               </View>
             )}
-            {news.scammer_account_number && (
+            {news.scammer_bank_name && (
               <View style={styles.scammerDetailRow}>
                 <Icon name="bank" size={18} color="#495057" />
+                <Text style={styles.scammerDetailLabel}>은행</Text>
+                <Text style={styles.scammerDetailValue}>
+                  {news.scammer_bank_name}
+                </Text>
+              </View>
+            )}
+            {news.scammer_account_number && (
+              <View style={styles.scammerDetailRow}>
+                <Icon name="credit-card-outline" size={18} color="#495057" />
                 <Text style={styles.scammerDetailLabel}>계좌번호</Text>
                 <Text style={styles.scammerDetailValue}>
                   {maskAccountNumber(news.scammer_account_number)}
