@@ -100,8 +100,25 @@ function CommunityPostDetailScreen({ route }) {
                 user_id: user.id,
                 blocked_user_id: post.author_auth_id,
               });
-              if (error) throw error;
-              Alert.alert('차단 완료', '사용자가 성공적으로 차단되었습니다.');
+              if (error && error.code !== '23505') throw error;
+
+              // 관리자일 경우 전화번호 차단
+              if (isAdmin) {
+                try {
+                  await supabase.functions.invoke('admin-ban-phone', {
+                    body: { blocked_user_id: post.author_auth_id },
+                  });
+                } catch (banErr) {
+                  console.warn('Phone ban failed:', banErr);
+                }
+              }
+
+              Alert.alert(
+                '차단 완료',
+                isAdmin
+                  ? '사용자가 차단되었으며, 해당 전화번호로의 재가입이 차단되었습니다.'
+                  : '사용자가 성공적으로 차단되었습니다.',
+              );
               navigation.goBack();
             } catch (err) {
               console.error('Block user error:', err);
