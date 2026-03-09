@@ -52,6 +52,17 @@ serve(async req => {
       throw new Error('이미 가입된 휴대폰 번호입니다.');
     }
 
+    // 3-1) 차단된 전화번호 확인
+    const { data: bannedPhone } = await supabaseAdmin
+      .from('banned_phones')
+      .select('id')
+      .eq('phone_number', phone)
+      .maybeSingle();
+
+    if (bannedPhone) {
+      throw new Error('이 전화번호로는 가입할 수 없습니다.');
+    }
+
     // 4) OTP 생성·해싱
     const otp = generateOtp();
     const hashedOtp = await hashOtp(otp);

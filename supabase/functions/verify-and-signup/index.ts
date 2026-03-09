@@ -62,6 +62,17 @@ serve(async req => {
       throw new Error('이미 사용된 인증번호입니다.');
     }
 
+    // 방어적 차단 번호 체크
+    const { data: bannedPhone } = await supabaseAdmin
+      .from('banned_phones')
+      .select('id')
+      .eq('phone_number', phoneNumber)
+      .maybeSingle();
+
+    if (bannedPhone) {
+      throw new Error('이 전화번호로는 가입할 수 없습니다.');
+    }
+
     const e164PhoneNumber = `+82${phoneNumber.substring(1)}`;
 
     const {

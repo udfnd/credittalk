@@ -204,7 +204,7 @@ export async function displayOnce(remote, source = 'unknown') {
 
   const androidOptions = {
     channelId: CHANNEL_ID,
-    pressAction: { id: 'default' },
+    pressAction: { id: 'default', launchActivity: 'default' },
     smallIcon: 'ic_launcher',
     ...(image
       ? { style: { type: AndroidStyle.BIGPICTURE, picture: image } }

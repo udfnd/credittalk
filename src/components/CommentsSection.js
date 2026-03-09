@@ -21,7 +21,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useNavigation } from '@react-navigation/native';
-import ReportModal from './ReportModal';
 import { ensureSafeContent } from '../lib/contentSafety';
 
 /**
@@ -213,7 +212,7 @@ const CommentItem = ({
   const isReplyingToThis = replyingToId === comment.id;
 
   const handleEdit = async newContent => {
-    await onEditSubmit(comment.id, newContent);
+    await onEditSubmit(comment.id, newContent, editingComment?.adminEdit === true);
     setEditingComment(null);
   };
 
@@ -314,11 +313,9 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 수정/답글/신고 상태
+  // 수정/답글 상태
   const [replyingToId, setReplyingToId] = useState(null);
   const [editingComment, setEditingComment] = useState(null);
-  const [isReportModalVisible, setReportModalVisible] = useState(false);
-  const [selectedComment, setSelectedComment] = useState(null);
 
   // 중복 제출 방지
   const [submittingRoot, setSubmittingRoot] = useState(false);
@@ -483,7 +480,7 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   };
 
   // 댓글 수정
-  const handleUpdateComment = async (commentId, newContent) => {
+  const handleUpdateComment = async (commentId, newContent, useAdminRpc = false) => {
     const trimmed = (newContent || '').trim();
     if (!trimmed) return;
 
@@ -500,7 +497,8 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
       return;
     }
 
-    const { error } = await supabase.rpc('update_comment', {
+    const rpcName = useAdminRpc ? 'admin_update_comment' : 'update_comment';
+    const { error } = await supabase.rpc(rpcName, {
       p_comment_id: commentId,
       p_new_content: safeContent,
     });
@@ -513,8 +511,10 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
     }
   };
 
+  const isAdmin = profile?.is_admin === true;
+
   // 댓글 삭제
-  const handleDeleteComment = commentId => {
+  const handleDeleteComment = (commentId, isCommentAuthor) => {
     Alert.alert(
       '댓글 삭제',
       '정말로 이 댓글을 삭제하시겠습니까? 대댓글도 모두 삭제됩니다.',
@@ -524,7 +524,8 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
           text: '삭제',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.rpc('delete_comment', {
+            const rpcName = isCommentAuthor ? 'delete_comment' : 'admin_delete_comment';
+            const { error } = await supabase.rpc(rpcName, {
               p_comment_id: commentId,
             });
             if (error) {
@@ -556,9 +557,23 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
                 blocked_user_id: authorId,
               });
               if (error && error.code !== '23505') throw error; // 중복(이미 차단) 에러는 무시
+
+              // 관리자일 경우 전화번호 차단
+              if (isAdmin) {
+                try {
+                  await supabase.functions.invoke('admin-ban-phone', {
+                    body: { blocked_user_id: authorId },
+                  });
+                } catch (banErr) {
+                  console.warn('Phone ban failed:', banErr);
+                }
+              }
+
               Alert.alert(
                 '차단 완료',
-                '사용자가 성공적으로 차단되었습니다. 앱을 다시 시작하면 모든 콘텐츠가 숨겨집니다.',
+                isAdmin
+                  ? '사용자가 차단되었으며, 해당 전화번호로의 재가입이 차단되었습니다.'
+                  : '사용자가 성공적으로 차단되었습니다. 앱을 다시 시작하면 모든 콘텐츠가 숨겨집니다.',
               );
               fetchComments();
             } catch (err) {
@@ -574,10 +589,15 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
     );
   };
 
-  // 댓글 옵션(수정/삭제/신고/차단)
+  // 댓글 옵션(수정/삭제/차단)
   const showCommentOptions = comment => {
     if (!user) {
       return Alert.alert('로그인 필요', '로그인이 필요한 기능입니다.');
+    }
+
+    // profile이 아직 로딩되지 않았으면 잠시 후 재시도
+    if (!profile) {
+      return Alert.alert('잠시만요', '프로필 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
     }
 
     const isAuthor = user.id === comment.users?.auth_user_id;
@@ -587,26 +607,29 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
       const actions = {};
 
       if (isAuthor) {
+        // 작성자: 수정 + 삭제
         options.push('수정하기', '삭제하기');
         actions[1] = () => setEditingComment(comment);
-        actions[2] = () => handleDeleteComment(comment.id);
+        actions[2] = () => handleDeleteComment(comment.id, true);
+      } else if (isAdmin) {
+        // 관리자(비작성자): 수정 + 삭제 + 차단
+        options.push('수정하기 (관리자)', '삭제하기 (관리자)', '이 사용자 차단하기');
+        actions[1] = () => setEditingComment({ ...comment, adminEdit: true });
+        actions[2] = () => handleDeleteComment(comment.id, false);
+        actions[3] = () =>
+          handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
       } else {
-        options.push('댓글 신고하기', '이 사용자 차단하기');
-        actions[1] = () => {
-          setSelectedComment(comment);
-          setReportModalVisible(true);
-        };
-        actions[2] = () =>
+        // 일반 사용자: 차단만
+        options.push('이 사용자 차단하기');
+        actions[1] = () =>
           handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
       }
-
-      const destructiveButtonIndex = isAuthor ? 2 : 2;
 
       ActionSheetIOS.showActionSheetWithOptions(
         {
           options,
           cancelButtonIndex: 0,
-          destructiveButtonIndex,
+          destructiveButtonIndex: isAuthor ? 2 : isAdmin ? 2 : 1,
           title: '댓글 옵션',
         },
         buttonIndex => {
@@ -625,18 +648,31 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
           {
             text: '삭제하기',
             style: 'destructive',
-            onPress: () => handleDeleteComment(comment.id),
+            onPress: () => handleDeleteComment(comment.id, true),
+          },
+        );
+      } else if (isAdmin) {
+        buttons.push(
+          {
+            text: '수정하기 (관리자)',
+            onPress: () => setEditingComment({ ...comment, adminEdit: true }),
+          },
+          {
+            text: '삭제하기 (관리자)',
+            style: 'destructive',
+            onPress: () => handleDeleteComment(comment.id, false),
+          },
+          {
+            text: '이 사용자 차단하기',
+            onPress: () =>
+              handleBlockUser(
+                comment.users.auth_user_id,
+                comment.users.nickname,
+              ),
           },
         );
       } else {
         buttons.push(
-          {
-            text: '댓글 신고하기',
-            onPress: () => {
-              setSelectedComment(comment);
-              setReportModalVisible(true);
-            },
-          },
           {
             text: '이 사용자 차단하기',
             style: 'destructive',
@@ -729,19 +765,6 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         </View>
       )}
 
-      {/* 신고 모달 */}
-      {selectedComment && (
-        <ReportModal
-          isVisible={isReportModalVisible}
-          onClose={() => {
-            setReportModalVisible(false);
-            setSelectedComment(null);
-          }}
-          contentId={selectedComment.id}
-          contentType="comment"
-          authorId={selectedComment.users?.auth_user_id}
-        />
-      )}
     </View>
   );
 };

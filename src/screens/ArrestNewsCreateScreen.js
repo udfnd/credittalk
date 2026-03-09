@@ -21,6 +21,8 @@ import RNBlobUtil from 'react-native-blob-util';
 import { Buffer } from 'buffer';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import BankSearchModal from '../components/BankSearchModal';
+import { bankImages } from '../assets/images/banks';
 
 const individualCategories = [
   '보이스피싱, 전기통신금융사기, 로맨스 스캠 사기',
@@ -308,6 +310,9 @@ export default function ArrestNewsCreateScreen() {
   const [selectedStation, setSelectedStation] = useState(null);
   const [scammerNickname, setScammerNickname] = useState('');
   const [scammerAccount, setScammerAccount] = useState('');
+  const [scammerBankName, setScammerBankName] = useState('');
+  const [showBankOtherInput, setShowBankOtherInput] = useState(false);
+  const [bankModalVisible, setBankModalVisible] = useState(false);
   const [scammerPhones, setScammerPhones] = useState(['']); // 전화번호 배열
   const [fraudCategory, setFraudCategory] = useState('');
   const [customFraudCategory, setCustomFraudCategory] = useState('');
@@ -337,6 +342,18 @@ export default function ArrestNewsCreateScreen() {
     }
     const newPhones = scammerPhones.filter((_, i) => i !== index);
     setScammerPhones(newPhones);
+  };
+
+  // 은행 선택 핸들러
+  const handleBankSelect = selectedBank => {
+    if (selectedBank === '기타') {
+      setShowBankOtherInput(true);
+      setScammerBankName('');
+    } else {
+      setShowBankOtherInput(false);
+      setScammerBankName(selectedBank);
+    }
+    setBankModalVisible(false);
   };
 
   useEffect(() => {
@@ -458,6 +475,7 @@ export default function ArrestNewsCreateScreen() {
             ? customFraudCategory.trim() || null
             : fraudCategory || null,
         scammer_nickname: scammerNickname.trim() || null,
+        scammer_bank_name: scammerBankName.trim() || null,
         scammer_account_number: scammerAccount.trim() || null,
         scammer_phone_numbers: scammerPhones
           .map(p => p.trim())
@@ -618,10 +636,7 @@ export default function ArrestNewsCreateScreen() {
         />
 
         <Text style={styles.label}>사기 카테고리</Text>
-        <ScrollView
-          style={styles.categoryList}
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled">
+        <View style={styles.categoryList}>
           {individualCategories.map(cat => {
             const isSelected = fraudCategory === cat;
             return (
@@ -645,7 +660,7 @@ export default function ArrestNewsCreateScreen() {
               </TouchableOpacity>
             );
           })}
-        </ScrollView>
+        </View>
 
         {fraudCategory === '기타' && (
           <TextInput
@@ -663,9 +678,37 @@ export default function ArrestNewsCreateScreen() {
           value={scammerNickname}
           onChangeText={setScammerNickname}
         />
+        <Text style={styles.label}>사기꾼이 쓰는 계좌번호</Text>
+        <View style={styles.inputWithButtonContainer}>
+          <TextInput
+            style={[styles.input, styles.inputWithButton]}
+            value={
+              showBankOtherInput
+                ? '기타 (직접입력)'
+                : scammerBankName
+            }
+            placeholder="오른쪽 버튼으로 은행 선택"
+            placeholderTextColor="#6c757d"
+            editable={false}
+          />
+          <TouchableOpacity
+            style={styles.inlineButton}
+            onPress={() => setBankModalVisible(true)}>
+            <Text style={styles.inlineButtonText}>선택</Text>
+          </TouchableOpacity>
+        </View>
+        {showBankOtherInput && (
+          <TextInput
+            style={[styles.input, { marginTop: -10, marginBottom: 15 }]}
+            value={scammerBankName}
+            onChangeText={setScammerBankName}
+            placeholder="은행 이름을 직접 입력해주세요."
+            placeholderTextColor="#6c757d"
+          />
+        )}
         <TextInput
           style={styles.input}
-          placeholder="사기꾼이 쓰는 계좌번호"
+          placeholder="계좌번호 (- 부호 없이 숫자만 적어주세요)"
           placeholderTextColor="#6c757d"
           value={scammerAccount}
           onChangeText={setScammerAccount}
@@ -743,6 +786,13 @@ export default function ArrestNewsCreateScreen() {
           )}
         </View>
       </ScrollView>
+      <BankSearchModal
+        visible={bankModalVisible}
+        onClose={() => setBankModalVisible(false)}
+        items={bankImages}
+        onSelect={handleBankSelect}
+        title="은행 선택"
+      />
     </SafeAreaView>
   );
 }
@@ -852,7 +902,6 @@ const styles = StyleSheet.create({
     color: '#868e96',
   },
   categoryList: {
-    maxHeight: 200,
     borderWidth: 1,
     borderColor: '#dee2e6',
     borderRadius: 8,
@@ -887,6 +936,35 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderColor: '#3d5afe',
     borderWidth: 2,
+  },
+  inputWithButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  inputWithButton: {
+    flex: 1,
+    marginRight: 0,
+    borderRightWidth: 0,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0,
+  },
+  inlineButton: {
+    height: 50,
+    paddingHorizontal: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e9ecef',
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    borderWidth: 1,
+    borderLeftWidth: 0,
+    borderColor: '#ced4da',
+  },
+  inlineButtonText: {
+    color: '#3d5afe',
+    fontWeight: 'bold',
   },
   photoContainer: {
     flexDirection: 'row',
