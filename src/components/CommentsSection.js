@@ -14,6 +14,8 @@ import {
   Dimensions,
   findNodeHandle,
   UIManager,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -321,6 +323,10 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   const [submittingRoot, setSubmittingRoot] = useState(false);
   const [submittingReplyId, setSubmittingReplyId] = useState(null);
   const guardingRef = useRef(false);
+
+  // Android 옵션 모달 상태
+  const [optionModalVisible, setOptionModalVisible] = useState(false);
+  const [optionModalButtons, setOptionModalButtons] = useState([]);
 
   // 하단 입력창 ref
   const footerInputRef = useRef(null);
@@ -639,7 +645,7 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         },
       );
     } else {
-      // Android: Alert 사용
+      // Android: 커스텀 모달 사용 (Alert은 버튼 3개 제한)
       const buttons = [];
 
       if (isAuthor) {
@@ -664,6 +670,7 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
           },
           {
             text: '이 사용자 차단하기',
+            style: 'destructive',
             onPress: () =>
               handleBlockUser(
                 comment.users.auth_user_id,
@@ -685,9 +692,8 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         );
       }
 
-      buttons.push({ text: '취소', style: 'cancel' });
-
-      Alert.alert('댓글 옵션', '', buttons);
+      setOptionModalButtons(buttons);
+      setOptionModalVisible(true);
     }
   };
 
@@ -765,6 +771,46 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         </View>
       )}
 
+      {/* Android 댓글 옵션 모달 */}
+      {Platform.OS === 'android' && (
+        <Modal
+          visible={optionModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOptionModalVisible(false)}>
+          <TouchableWithoutFeedback onPress={() => setOptionModalVisible(false)}>
+            <View style={styles.optionModalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.optionModalContent}>
+                  <Text style={styles.optionModalTitle}>댓글 옵션</Text>
+                  {optionModalButtons.map((btn, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.optionModalButton}
+                      onPress={() => {
+                        setOptionModalVisible(false);
+                        btn.onPress?.();
+                      }}>
+                      <Text
+                        style={[
+                          styles.optionModalButtonText,
+                          btn.style === 'destructive' && styles.optionModalDestructiveText,
+                        ]}>
+                        {btn.text}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    style={[styles.optionModalButton, styles.optionModalCancelButton]}
+                    onPress={() => setOptionModalVisible(false)}>
+                    <Text style={styles.optionModalCancelText}>취소</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -915,6 +961,53 @@ const styles = StyleSheet.create({
   },
   loginPromptText: { fontSize: 14, color: '#555', marginBottom: 10 },
   loginButtonText: { fontSize: 15, color: '#3d5afe', fontWeight: 'bold' },
+
+  // Android 댓글 옵션 모달
+  optionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionModalContent: {
+    width: '80%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 8,
+    elevation: 5,
+  },
+  optionModalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  optionModalButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  optionModalButtonText: {
+    fontSize: 15,
+    color: '#333',
+    textAlign: 'center',
+  },
+  optionModalDestructiveText: {
+    color: '#e53935',
+  },
+  optionModalCancelButton: {
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    marginTop: 4,
+  },
+  optionModalCancelText: {
+    fontSize: 15,
+    color: '#999',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
 });
 
 export default CommentsSection;
