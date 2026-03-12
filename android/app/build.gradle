@@ -82,8 +82,8 @@ android {
         applicationId "com.credittalka"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "25"
+        versionCode 27
+        versionName "27"
     }
     signingConfigs {
         debug {
