@@ -221,7 +221,7 @@ function HomeScreen() {
           <View style={styles.searchBarContainer}>
             <TextInput
               style={styles.searchInput}
-              placeholder="범죄에 사용된 계좌, 전번, 닉네임"
+              placeholder="계좌, 전번, 닉네임, 이름"
               placeholderTextColor="#6c757d"
               value={searchTerm}
               onChangeText={setSearchTerm}
