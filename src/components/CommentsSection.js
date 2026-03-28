@@ -220,7 +220,13 @@ const CommentItem = ({
 
   return (
     <View style={styles.commentWrapper}>
-      <View style={styles.commentContainer}>
+      <View style={[styles.commentContainer, comment.is_pinned && styles.pinnedCommentContainer]}>
+        {comment.is_pinned && (
+          <View style={styles.pinnedBadge}>
+            <Icon name="pin" size={14} color="#3d5afe" />
+            <Text style={styles.pinnedBadgeText}>고정됨</Text>
+          </View>
+        )}
         <View style={styles.commentHeader}>
           <Text style={styles.commentAuthor}>
             {comment.users?.nickname || '탈퇴한 사용자'}
@@ -388,6 +394,8 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         .select('*, users(id, nickname, auth_user_id)')
         .eq('post_id', postId)
         .eq('board_type', boardType)
+        .order('is_pinned', { ascending: false })
+        .order('pinned_at', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -595,6 +603,21 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
     );
   };
 
+  // 댓글 고정/해제 (admin only, events board)
+  const handlePinComment = async (commentId, isPinned) => {
+    const { data, error } = await supabase.rpc('admin_pin_comment', {
+      p_comment_id: commentId,
+      p_pin: !isPinned,
+    });
+    if (error) {
+      Alert.alert('오류', '댓글 고정 처리에 실패했습니다: ' + error.message);
+    } else if (data && !data.success) {
+      Alert.alert('오류', data.message || '댓글 고정 처리에 실패했습니다.');
+    } else {
+      fetchComments();
+    }
+  };
+
   // 댓글 옵션(수정/삭제/차단)
   const showCommentOptions = comment => {
     if (!user) {
@@ -629,6 +652,14 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         options.push('이 사용자 차단하기');
         actions[1] = () =>
           handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
+      }
+
+      // Admin pin/unpin option for events board
+      if (isAdmin && boardType === 'events') {
+        const pinLabel = comment.is_pinned ? '고정 해제' : '댓글 고정';
+        const nextIdx = options.length;
+        options.push(pinLabel);
+        actions[nextIdx] = () => handlePinComment(comment.id, comment.is_pinned);
       }
 
       ActionSheetIOS.showActionSheetWithOptions(
@@ -690,6 +721,14 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
               ),
           },
         );
+      }
+
+      // Admin pin/unpin option for events board
+      if (isAdmin && boardType === 'events') {
+        buttons.push({
+          text: comment.is_pinned ? '고정 해제' : '댓글 고정',
+          onPress: () => handlePinComment(comment.id, comment.is_pinned),
+        });
       }
 
       setOptionModalButtons(buttons);
@@ -836,6 +875,23 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  pinnedCommentContainer: {
+    backgroundColor: '#f0f4ff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginHorizontal: -5,
+  },
+  pinnedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  pinnedBadgeText: {
+    fontSize: 12,
+    color: '#3d5afe',
+    fontWeight: '600',
+    marginLeft: 4,
   },
   commentHeader: {
     flexDirection: 'row',

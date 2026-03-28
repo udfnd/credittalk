@@ -56,8 +56,11 @@ const maskNameMiddle = name => {
   if (name.length === 2) {
     return `${name[0]}*`;
   }
-  const middleIndex = Math.floor(name.length / 2);
-  return `${name.substring(0, middleIndex)}*${name.substring(middleIndex + 1)}`;
+  if (name.length === 3) {
+    return `${name[0]}*${name[2]}`;
+  }
+  // 4+ chars: first + '*'.repeat(length-2) + last
+  return `${name[0]}${'*'.repeat(name.length - 2)}${name[name.length - 1]}`;
 };
 
 // 전화번호 마스킹: 중간 1자리, 끝 1자리만 '*' 처리
