@@ -800,29 +800,39 @@ function App(): React.JSX.Element {
       );
 
       // 4) 콜드/웜 스타트: 초기 알림(배너 탭으로 진입) 처리
+      let coldStartHandled = false;
+
       const initialNotifee = await notifee.getInitialNotification();
       L_PUSH('notifee.getInitialNotification', {
         exists: !!initialNotifee,
         data: initialNotifee?.notification?.data,
       });
       if (initialNotifee?.notification?.data) {
+        coldStartHandled = true;
         await openFromPayloadOnce(
           navigateToMaybeQueue,
           initialNotifee.notification.data,
         );
       }
 
-      const initialRemote = await messaging().getInitialNotification();
-      L_PUSH('messaging.getInitialNotification', {
-        exists: !!initialRemote,
-        data: initialRemote?.data,
-      });
-      if (initialRemote?.data) {
-        await openFromPayloadOnce(navigateToMaybeQueue, initialRemote.data);
+      if (!coldStartHandled) {
+        const initialRemote = await messaging().getInitialNotification();
+        L_PUSH('messaging.getInitialNotification', {
+          exists: !!initialRemote,
+          data: initialRemote?.data,
+        });
+        if (initialRemote?.data) {
+          coldStartHandled = true;
+          await openFromPayloadOnce(navigateToMaybeQueue, initialRemote.data);
+        }
       }
 
       // 5) BG 컨텍스트에서 큐에 적재해 둔 탭을 한 번만 소진
       await drainQueuedTap(navigateToMaybeQueue);
+
+      if (!coldStartHandled) {
+        L_PUSH('coldStart: no initial notification found (notifee & FCM both null) — possible delegation or singleTask issue');
+      }
     })();
 
     return () => {
