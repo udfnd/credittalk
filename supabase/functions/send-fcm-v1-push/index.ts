@@ -391,9 +391,9 @@ Deno.serve(async req => {
           // - payload가 silent를 강제했다면 그 값 우선
           // - ANDROID: 항상 data-only
           // - iOS: 링크가 있으면 data-only, 아니면 notification
-          // - platform 미상: 강제 없음(요청 silent 우선)
+          // - platform 미상: data-only (notification delegation 방지)
           const wantDataOnly =
-            forcedByPayload || p === 'android' || (p === 'ios' && hasLink);
+            forcedByPayload || p !== 'ios' || (p === 'ios' && hasLink);
 
           return sendWithRetry(
             {

@@ -204,7 +204,8 @@ export async function displayOnce(remote, source = 'unknown') {
 
   const androidOptions = {
     channelId: CHANNEL_ID,
-    pressAction: { id: 'default', launchActivity: 'default' },
+    // launchActivity를 명시적으로 지정: Android 14+ implicit PendingIntent 제한 대응
+    pressAction: { id: 'default', launchActivity: 'com.credittalka.MainActivity' },
     smallIcon: 'ic_launcher',
     ...(image
       ? { style: { type: AndroidStyle.BIGPICTURE, picture: image } }

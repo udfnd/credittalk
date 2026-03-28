@@ -85,6 +85,8 @@
                       android:scheme="kakaoa5721065cc212efd0cecafc66e4fe14a" />
             </intent-filter>
         </activity>
+        <!-- FCM notification delegation 비활성화: Google Play Services가 프록시로 알림을 표시하는 것을 방지 -->
+        <meta-data android:name="firebase_messaging_notification_delegation_enabled" android:value="false" />
         <meta-data android:name="com.naver.sdk.clientId" android:value="@string/client_id" />
         <meta-data android:name="com.naver.sdk.clientSecret" android:value="@string/client_secret" />
         <meta-data android:name="com.naver.sdk.clientName" android:value="@string/client_name" />
