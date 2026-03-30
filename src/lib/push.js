@@ -256,6 +256,7 @@ export async function openFromPayload(navigateTo, data = {}) {
       'NoticeDetail',
       'ReviewDetail',
       'HelpDeskDetail',
+      'EventDetail',
     ]);
 
     const { screen, link_url, url, ...rest } = data || {};
