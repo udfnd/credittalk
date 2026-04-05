@@ -117,6 +117,7 @@ const PROTECTED_SCREENS = new Set([
   'IncidentPhotoDetail',
   'NewCrimeCaseDetail',
   'NoticeDetail',
+  'EventDetail',
   'UnifiedSearch', // Deep Link로 접근 시에도 인증 필요
 ]);
 
