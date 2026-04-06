@@ -59,6 +59,13 @@ react {
  */
 def enableProguardInReleaseBuilds = false
 
+// Load secrets from secrets.properties (gitignored)
+def secretsFile = rootProject.file("secrets.properties")
+def secrets = new Properties()
+if (secretsFile.exists()) {
+    secrets.load(new FileInputStream(secretsFile))
+}
+
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
@@ -84,6 +91,13 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 27
         versionName "27"
+
+        // Inject secrets as string resources (overrides strings.xml)
+        resValue "string", "client_id", secrets.getProperty("NAVER_CLIENT_ID", "")
+        resValue "string", "client_secret", secrets.getProperty("NAVER_CLIENT_SECRET", "")
+        resValue "string", "kakao_app_key", secrets.getProperty("KAKAO_APP_KEY", "")
+        resValue "string", "supabase_url", secrets.getProperty("SUPABASE_URL", "")
+        resValue "string", "supabase_anon_key", secrets.getProperty("SUPABASE_ANON_KEY", "")
     }
     signingConfigs {
         debug {
@@ -95,9 +109,9 @@ android {
         release {
             if (project.hasProperty('MYAPP_RELEASE_STORE_FILE')) {
                 storeFile file(MYAPP_RELEASE_STORE_FILE)
-                storePassword MYAPP_RELEASE_STORE_PASSWORD
+                storePassword secrets.getProperty("MYAPP_RELEASE_STORE_PASSWORD", "")
                 keyAlias MYAPP_RELEASE_KEY_ALIAS
-                keyPassword MYAPP_RELEASE_KEY_PASSWORD
+                keyPassword secrets.getProperty("MYAPP_RELEASE_KEY_PASSWORD", "")
             }
         }
     }

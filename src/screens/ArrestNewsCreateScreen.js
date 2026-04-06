@@ -310,6 +310,7 @@ export default function ArrestNewsCreateScreen() {
   const [selectedStation, setSelectedStation] = useState(null);
   const [scammerNickname, setScammerNickname] = useState('');
   const [scammerAccount, setScammerAccount] = useState('');
+  const [scammerAccountHolder, setScammerAccountHolder] = useState('');
   const [scammerBankName, setScammerBankName] = useState('');
   const [showBankOtherInput, setShowBankOtherInput] = useState(false);
   const [bankModalVisible, setBankModalVisible] = useState(false);
@@ -476,6 +477,7 @@ export default function ArrestNewsCreateScreen() {
             : fraudCategory || null,
         scammer_nickname: scammerNickname.trim() || null,
         scammer_bank_name: scammerBankName.trim() || null,
+        scammer_account_holder_name: scammerAccountHolder.trim() || null,
         scammer_account_number: scammerAccount.trim() || null,
         scammer_phone_numbers: scammerPhones
           .map(p => p.trim())
@@ -706,6 +708,13 @@ export default function ArrestNewsCreateScreen() {
             placeholderTextColor="#6c757d"
           />
         )}
+        <TextInput
+          style={styles.input}
+          placeholder="예금주명"
+          placeholderTextColor="#6c757d"
+          value={scammerAccountHolder}
+          onChangeText={setScammerAccountHolder}
+        />
         <TextInput
           style={styles.input}
           placeholder="계좌번호 (- 부호 없이 숫자만 적어주세요)"
