@@ -540,7 +540,7 @@ const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
               />
               <TextInput
                 style={styles.input}
-                placeholder="전화번호, 계좌번호, 닉네임 등"
+                placeholder="범죄에 사용된 계좌주, 계좌번호, 전번, 닉네임"
                 value={searchTerm}
                 onChangeText={handleSearch}
                 placeholderTextColor="#888"

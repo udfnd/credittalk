@@ -654,8 +654,8 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
           handleBlockUser(comment.users.auth_user_id, comment.users.nickname);
       }
 
-      // Admin pin/unpin option for events board
-      if (isAdmin && boardType === 'events') {
+      // Admin pin/unpin option for all boards
+      if (isAdmin) {
         const pinLabel = comment.is_pinned ? '고정 해제' : '댓글 고정';
         const nextIdx = options.length;
         options.push(pinLabel);
@@ -723,8 +723,8 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
         );
       }
 
-      // Admin pin/unpin option for events board
-      if (isAdmin && boardType === 'events') {
+      // Admin pin/unpin option for all boards
+      if (isAdmin) {
         buttons.push({
           text: comment.is_pinned ? '고정 해제' : '댓글 고정',
           onPress: () => handlePinComment(comment.id, comment.is_pinned),
