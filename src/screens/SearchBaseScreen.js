@@ -76,12 +76,10 @@ const maskPhoneNumberCustom = phoneNumber => {
     const p2 = clean.substring(3, 7); // 4자리
     const p3 = clean.substring(7, 11); // 4자리
 
-    // 중간 1자리만 마스킹 (index 1)
+    // 가운데 그룹에서 1자리만 마스킹
     const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
-    // 끝 1자리만 마스킹 (index 1 of p3)
-    const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
 
-    return `${p1}-${maskedP2}-${maskedP3}`;
+    return `${p1}-${maskedP2}-${p3}`;
   }
 
   if (len === 10) {
@@ -91,9 +89,8 @@ const maskPhoneNumberCustom = phoneNumber => {
       const p3 = clean.substring(6, 10); // 4자리
 
       const maskedP2 = `${p2[0]}*${p2.substring(2)}`;
-      const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
 
-      return `${p1}-${maskedP2}-${maskedP3}`;
+      return `${p1}-${maskedP2}-${p3}`;
     } else {
       const p1 = clean.substring(0, 3);
       const p2 = clean.substring(3, 6); // 3자리
@@ -101,9 +98,8 @@ const maskPhoneNumberCustom = phoneNumber => {
 
       // 3자리 중 중간 1자리만 마스킹
       const maskedP2 = `${p2[0]}*${p2[2]}`;
-      const maskedP3 = `${p3[0]}*${p3.substring(2)}`;
 
-      return `${p1}-${maskedP2}-${maskedP3}`;
+      return `${p1}-${maskedP2}-${p3}`;
     }
   }
 
@@ -529,7 +525,7 @@ const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
           <>
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.subtitle}>
-              피해 사례에 등록된 전화번호 및 계좌번호로 검색할 수 있습니다.
+              피해 사례에 등록된 전화번호, 계좌번호, 닉네임으로 검색할 수 있습니다.
             </Text>
             <View style={styles.searchContainer}>
               <Icon
@@ -540,7 +536,7 @@ const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
               />
               <TextInput
                 style={styles.input}
-                placeholder="범죄에 사용된 계좌주, 계좌번호, 전번, 닉네임"
+                placeholder="범죄에 사용된 계좌번호, 계좌주, 닉네임, 전번"
                 value={searchTerm}
                 onChangeText={handleSearch}
                 placeholderTextColor="#888"
