@@ -34,29 +34,32 @@ const maskAccountNumber = accountNumber => {
   return accountNumber.slice(0, -2) + '**';
 };
 
-// 전화번호 마스킹 함수 (가운데 2자리)
+// 전화번호 마스킹 함수 (가운데 1자리)
 const maskPhoneNumber = phoneNumber => {
   if (!phoneNumber || phoneNumber.length < 4) return phoneNumber;
   const cleaned = phoneNumber.replace(/\D/g, '');
   if (cleaned.length === 11) {
-    // 010-1234-5678 형식
-    return (
-      cleaned.slice(0, 3) +
-      '-' +
-      cleaned.slice(3, 5) +
-      '**' +
-      '-' +
-      cleaned.slice(7)
-    );
+    // 010-1234-5678 -> 010-1*34-5678
+    const p1 = cleaned.substring(0, 3);
+    const p2 = cleaned.substring(3, 7);
+    const p3 = cleaned.substring(7, 11);
+    return `${p1}-${p2[0]}*${p2.substring(2)}-${p3}`;
   } else if (cleaned.length === 10) {
-    // 010-123-4567 형식
-    return (
-      cleaned.slice(0, 3) + '-' + cleaned.slice(3, 5) + '*-' + cleaned.slice(6)
-    );
+    if (cleaned.startsWith('02')) {
+      // 02-1234-5678 -> 02-1*34-5678
+      const p1 = cleaned.substring(0, 2);
+      const p2 = cleaned.substring(2, 6);
+      const p3 = cleaned.substring(6, 10);
+      return `${p1}-${p2[0]}*${p2.substring(2)}-${p3}`;
+    }
+    // 031-123-4567 -> 031-1*3-4567
+    const p1 = cleaned.substring(0, 3);
+    const p2 = cleaned.substring(3, 6);
+    const p3 = cleaned.substring(6, 10);
+    return `${p1}-${p2[0]}*${p2[2]}-${p3}`;
   }
-  // 기본적으로 가운데 2자리만 마스킹
   const mid = Math.floor(cleaned.length / 2);
-  return cleaned.slice(0, mid - 1) + '**' + cleaned.slice(mid + 1);
+  return cleaned.slice(0, mid) + '*' + cleaned.slice(mid + 1);
 };
 
 function ArrestNewsDetailScreen({ route, navigation }) {
