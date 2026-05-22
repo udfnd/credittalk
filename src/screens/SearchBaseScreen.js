@@ -257,6 +257,7 @@ const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
     }
   }, [user]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const debouncedSearch = useCallback(
     debounce(async term => {
       const trimmedTerm = term.trim();
@@ -357,6 +358,7 @@ const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
     if (initialSearchTerm) {
       handleSearch(initialSearchTerm);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchTerm]);
 
   useEffect(() => {
@@ -536,7 +538,7 @@ const SearchBaseScreen = ({ title, searchTerm: propSearchTerm }) => {
               />
               <TextInput
                 style={styles.input}
-                placeholder="범죄에 사용된 계좌번호, 계좌주, 닉네임, 전번"
+                placeholder="계좌번호,계좌주,닉네임,전화번호 검색"
                 value={searchTerm}
                 onChangeText={handleSearch}
                 placeholderTextColor="#888"

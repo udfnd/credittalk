@@ -8,6 +8,7 @@ import {
 import messaging from '@react-native-firebase/messaging';
 import notifee, {
   AndroidImportance,
+  AndroidLaunchActivityFlag,
   AndroidStyle,
   EventType,
 } from '@notifee/react-native';
@@ -27,14 +28,19 @@ export async function ensureNotificationChannel() {
 }
 
 export const requestNotificationPermissionAndroid = async () => {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android') return { granted: true };
+  if (Platform.Version < 33) return { granted: true };
   try {
-    await PermissionsAndroid.request(
+    const result = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
     );
+    const granted = result === PermissionsAndroid.RESULTS.GRANTED;
     console.log('[APP]', 'Android notification permission requested');
+    console.log('[Push] POST_NOTIFICATIONS', result);
+    return { granted };
   } catch (err) {
     console.warn('[Push] request permission failed', err);
+    return { granted: false };
   }
 };
 
@@ -205,7 +211,15 @@ export async function displayOnce(remote, source = 'unknown') {
   const androidOptions = {
     channelId: CHANNEL_ID,
     // launchActivity를 명시적으로 지정: Android 14+ implicit PendingIntent 제한 대응
-    pressAction: { id: 'default', launchActivity: 'com.credittalka.MainActivity' },
+    // launchActivityFlags: Samsung OneUI 6.1+ (S24/S25)에서 singleTask 액티비티 탭 인텐트 처리 보강
+    pressAction: {
+      id: 'default',
+      launchActivity: 'com.credittalka.MainActivity',
+      launchActivityFlags: [
+        AndroidLaunchActivityFlag.SINGLE_TOP,
+        AndroidLaunchActivityFlag.NEW_TASK,
+      ],
+    },
     smallIcon: 'ic_launcher',
     ...(image
       ? { style: { type: AndroidStyle.BIGPICTURE, picture: image } }

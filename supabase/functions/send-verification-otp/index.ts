@@ -21,10 +21,12 @@ serve(async req => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let phone = '';
   try {
-    const { phone } = await req.json();
-
-    // 1) 입력 검증
+    // 1) 입력 검증 (iOS auto-format 문자 방어)
+    const body = await req.json();
+    const rawPhone = body?.phone;
+    phone = typeof rawPhone === 'string' ? rawPhone.replace(/[^0-9]/g, '') : '';
     if (!phone || !/^\d{10,11}$/.test(phone)) {
       throw new Error('올바른 휴대폰 번호를 입력해주세요.');
     }
@@ -36,18 +38,17 @@ serve(async req => {
     );
 
     // 3) 이미 가입된 번호인지 확인
-    const { data: existingUser, error: userCheckError } = await supabaseAdmin
+    const { data: existingUsers, error: userCheckError } = await supabaseAdmin
       .from('users')
       .select('id')
       .eq('phone_number', phone)
-      .single();
+      .limit(1);
 
-    if (userCheckError && userCheckError.code !== 'PGRST116') {
-      // DB 에러 로깅
+    if (userCheckError) {
       console.error('DB 사용자 조회 실패:', userCheckError);
       throw userCheckError;
     }
-    if (existingUser) {
+    if (existingUsers && existingUsers.length > 0) {
       console.error('이미 가입된 번호 요청:', phone);
       throw new Error('이미 가입된 휴대폰 번호입니다.');
     }
@@ -128,6 +129,7 @@ serve(async req => {
     );
   } catch (error) {
     // 10) 최종 에러 로깅 & 상세 메시지 반환
+    console.error('[send-verification-otp] phone:', phone);
     console.error('❌ send-verification-otp failed:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

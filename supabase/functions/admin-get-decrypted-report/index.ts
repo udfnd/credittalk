@@ -8,8 +8,8 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 // !!! 중요: 실제 관리자 인증/권한 검증 로직 구현 필수 !!!
 async function verifyAdmin(
-  supabaseAdminClient: SupabaseClient,
-  authorizationHeader?: string | null,
+  _supabaseAdminClient: SupabaseClient,
+  _authorizationHeader?: string | null,
 ): Promise<boolean> {
   // 방법 1: 요청 헤더의 JWT 토큰 검증 및 custom claims 확인
   // 방법 2: 별도의 관리자 API 키 확인

@@ -1,7 +1,7 @@
 // src/context/AuthContext.d.ts
 
 import React from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import { User } from '@supabase/supabase-js';
 
 // AuthContext가 제공하는 값들의 타입을 정의합니다.
 export interface AuthContextType {

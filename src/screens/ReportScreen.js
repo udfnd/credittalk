@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   TextInput,
@@ -128,6 +128,7 @@ const initialDamageAccount = {
 
 function ReportScreen({ navigation }) {
   const { user } = useAuth();
+  const scrollViewRef = useRef(null);
 
   useEffect(() => {
     if (user) {
@@ -246,10 +247,11 @@ function ReportScreen({ navigation }) {
     }
   }, [category, attemptedFraud]);
 
-  const clearInputs = () => {
-    // ✨ 신고자 정보 초기화
-    setReporterName('');
-    setReporterPhone('');
+  const clearInputs = ({keepReporterInfo = false} = {}) => {
+    if (!keepReporterInfo) {
+      setReporterName('');
+      setReporterPhone('');
+    }
 
     setDamageAccounts([{ ...initialDamageAccount, id: Date.now() }]);
     setNickname('');
@@ -693,9 +695,27 @@ function ReportScreen({ navigation }) {
             '알 수 없는 오류',
         );
 
-      Alert.alert('등록 완료', '사기 정보가 성공적으로 등록되었습니다.');
-      clearInputs();
-      navigation.goBack();
+      Alert.alert(
+        '등록 완료',
+        '사기 정보가 성공적으로 등록되었습니다.',
+        [
+          {
+            text: '추가 신고하기',
+            onPress: () => {
+              clearInputs({keepReporterInfo: true});
+              scrollViewRef.current?.scrollTo({y: 0, animated: true});
+            },
+          },
+          {
+            text: '완료',
+            onPress: () => {
+              clearInputs();
+              navigation.goBack();
+            },
+            style: 'cancel',
+          },
+        ],
+      );
     } catch (error) {
       Alert.alert('등록 실패', `오류 발생: ${error}`);
     } finally {
@@ -1018,7 +1038,7 @@ function ReportScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollViewRef} style={styles.container} keyboardShouldPersistTaps="handled">
         <BankSearchModal
           visible={bankModalState.visible}
           onClose={() => setBankModalState({ visible: false, index: -1 })}

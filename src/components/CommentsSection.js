@@ -24,6 +24,7 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useNavigation } from '@react-navigation/native';
 import { ensureSafeContent } from '../lib/contentSafety';
+import { blockUser, buildBlockSuccessMessage } from '../lib/blockUser';
 
 /**
  * 공용 입력 컴포넌트
@@ -389,6 +390,18 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   // 댓글 불러오기
   const fetchComments = useCallback(async () => {
     try {
+      let blockedIds = [];
+      try {
+        const { data: blockedData, error: blockedError } = await supabase.rpc(
+          'get_my_blocked_user_ids',
+        );
+        if (!blockedError && Array.isArray(blockedData)) {
+          blockedIds = blockedData;
+        }
+      } catch (blockedErr) {
+        blockedIds = [];
+      }
+
       const { data, error } = await supabase
         .from('comments')
         .select('*, users(id, nickname, auth_user_id)')
@@ -400,14 +413,18 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
 
       if (error) throw error;
 
+      const filtered = (data || []).filter(
+        c => !blockedIds.includes(c.user_id),
+      );
+
       const byId = {};
       const roots = [];
 
-      (data || []).forEach(c => {
+      filtered.forEach(c => {
         c.replies = [];
         byId[c.id] = c;
       });
-      (data || []).forEach(c => {
+      filtered.forEach(c => {
         if (c.parent_comment_id && byId[c.parent_comment_id]) {
           byId[c.parent_comment_id].replies.push(c);
         } else {
@@ -566,29 +583,13 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('blocked_users').insert({
-                user_id: user.id,
-                blocked_user_id: authorId,
+              const result = await blockUser({
+                callerUserId: user.id,
+                targetUserId: authorId,
+                isAdmin,
               });
-              if (error && error.code !== '23505') throw error; // 중복(이미 차단) 에러는 무시
 
-              // 관리자일 경우 전화번호 차단
-              if (isAdmin) {
-                try {
-                  await supabase.functions.invoke('admin-ban-phone', {
-                    body: { blocked_user_id: authorId },
-                  });
-                } catch (banErr) {
-                  console.warn('Phone ban failed:', banErr);
-                }
-              }
-
-              Alert.alert(
-                '차단 완료',
-                isAdmin
-                  ? '사용자가 차단되었으며, 해당 전화번호로의 재가입이 차단되었습니다.'
-                  : '사용자가 성공적으로 차단되었습니다. 앱을 다시 시작하면 모든 콘텐츠가 숨겨집니다.',
-              );
+              Alert.alert('차단 완료', buildBlockSuccessMessage(result));
               fetchComments();
             } catch (err) {
               console.error('Block user error:', err);

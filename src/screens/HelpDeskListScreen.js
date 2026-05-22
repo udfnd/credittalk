@@ -92,12 +92,14 @@ export default function HelpDeskListScreen({ navigation }) {
     useCallback(() => {
       setLoading(true);
       fetchQuestionsAndPublicStatus();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]),
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchQuestionsAndPublicStatus().finally(() => setRefreshing(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const openNotice = n => {

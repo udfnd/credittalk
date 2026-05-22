@@ -206,18 +206,24 @@ function SignUpScreen() {
       );
 
       if (error) {
-        const contextError = error?.context?.errorMessage;
         let displayError = '인증번호 발송에 실패했습니다.';
-        if (contextError) {
+        const tryParse = raw => {
+          if (!raw) return null;
+          if (typeof raw === 'object' && raw.error) return raw.error;
+          if (typeof raw !== 'string') return null;
           try {
-            const parsed = JSON.parse(contextError);
-            displayError = parsed.error || displayError;
+            return JSON.parse(raw).error || raw;
           } catch {
-            displayError = contextError;
+            return raw;
           }
-        } else if (error.message) {
-          displayError = error.message;
-        }
+        };
+        const parsed =
+          tryParse(error?.context?.errorMessage) ||
+          tryParse(error?.context?.body) ||
+          tryParse(error?.context) ||
+          error?.cause?.message ||
+          error?.message;
+        if (parsed) displayError = parsed;
 
         const title = displayError.includes('가입된')
           ? '인증 불가'

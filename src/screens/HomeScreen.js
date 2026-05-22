@@ -221,7 +221,7 @@ function HomeScreen() {
           <View style={styles.searchBarContainer}>
             <TextInput
               style={styles.searchInput}
-              placeholder="범죄에 사용된 계좌번호, 계좌주, 닉네임, 전번"
+              placeholder="계좌번호,계좌주,닉네임,전화번호 검색"
               placeholderTextColor="#6c757d"
               value={searchTerm}
               onChangeText={setSearchTerm}

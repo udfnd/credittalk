@@ -92,6 +92,7 @@ const NoticeDetailScreen = () => {
           ) : null,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notice, navigation, isAdmin]);
 
   const handleEdit = () => {

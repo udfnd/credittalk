@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import ReportModal from '../components/ReportModal';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
+import { blockUser, buildBlockSuccessMessage } from '../lib/blockUser';
 
 // 댓글 항목 UI 컴포넌트
 const CommentItem = ({ comment, currentUserId, onDelete }) => {
@@ -211,29 +212,13 @@ export default function HelpDeskDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.from('blocked_users').insert({
-                user_id: user.id,
-                blocked_user_id: question.user_id,
+              const result = await blockUser({
+                callerUserId: user.id,
+                targetUserId: question.user_id,
+                isAdmin,
               });
-              if (error && error.code !== '23505') throw error;
 
-              // 관리자일 경우 전화번호 차단
-              if (isAdmin) {
-                try {
-                  await supabase.functions.invoke('admin-ban-phone', {
-                    body: { blocked_user_id: question.user_id },
-                  });
-                } catch (banErr) {
-                  console.warn('Phone ban failed:', banErr);
-                }
-              }
-
-              Alert.alert(
-                '차단 완료',
-                isAdmin
-                  ? '사용자가 차단되었으며, 해당 전화번호로의 재가입이 차단되었습니다.'
-                  : '사용자가 성공적으로 차단되었습니다.',
-              );
+              Alert.alert('차단 완료', buildBlockSuccessMessage(result));
               navigation.goBack();
             } catch (err) {
               console.error('Block user error:', err);
@@ -246,7 +231,7 @@ export default function HelpDeskDetailScreen() {
         },
       ],
     );
-  }, [navigation, question, user]);
+  }, [navigation, question, user, isAdmin]);
 
   const showQuestionOptions = useCallback(() => {
     if (!question) return;
