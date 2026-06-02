@@ -136,7 +136,9 @@ async function selectTokens(withUserIds: string[] | null) {
     .from('device_push_tokens')
     .select(colsWithPlatform)
     .eq('enabled', true);
-  if (withUserIds && withUserIds.length) q = q.in('user_id', withUserIds);
+  // withUserIds가 배열이면(빈 배열 포함) 반드시 필터 적용.
+  // 과거: 빈 배열은 length===0이라 필터가 빠져 '전체 발송'으로 오작동 → 사고 방지.
+  if (withUserIds) q = q.in('user_id', withUserIds);
   let { data, error } = await q;
 
   if (
@@ -147,7 +149,7 @@ async function selectTokens(withUserIds: string[] | null) {
       .from('device_push_tokens')
       .select(colsNoPlatform)
       .eq('enabled', true);
-    if (withUserIds && withUserIds.length) q2 = q2.in('user_id', withUserIds);
+    if (withUserIds) q2 = q2.in('user_id', withUserIds);
     const r2 = await q2;
     if (r2.error) throw r2.error;
     return { rows: (r2.data ?? []) as TokenRow[], platformAvailable: false };
@@ -352,6 +354,18 @@ Deno.serve(async req => {
     const forcedByPayload =
       payload?.silent === true || payload?.data?.silent === '1';
 
+    // 안전장치: 전체 발송(audience.all)이 아닌데 타깃이 비어 있으면 브로드캐스트를 거부.
+    // (실수로 user_ids:[] 를 보내 전체에게 발송되는 사고 방지)
+    if (!audienceAll && user_ids.length === 0) {
+      return new Response(
+        JSON.stringify({
+          message:
+            'Refusing to send: no target user_ids and audience.all not set',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
     const { rows, platformAvailable } = await selectTokens(
       audienceAll ? null : user_ids,
     );
@@ -388,12 +402,13 @@ Deno.serve(async req => {
           const p = (platform || '').toLowerCase();
 
           // 규칙 요약:
-          // - payload가 silent를 강제했다면 그 값 우선
-          // - ANDROID: 항상 data-only
-          // - iOS: 링크가 있으면 data-only, 아니면 notification
-          // - platform 미상: data-only (notification delegation 방지)
+          // - payload가 silent를 강제했거나 표시할 title/body가 없으면 data-only
+          // - ANDROID: notification+data 하이브리드(OS가 백그라운드/종료 상태에서
+          //   직접 표시 → 삼성 절전/딥슬립에서도 안정적으로 전달됨)
+          // - iOS: 링크가 있으면 data-only(앱이 딥링크 처리), 아니면 notification
+          // - platform 미상: notification 포함(표시 누락 방지 우선)
           const wantDataOnly =
-            forcedByPayload || p !== 'ios' || (p === 'ios' && hasLink);
+            forcedByPayload || (!title && !body) || (p === 'ios' && hasLink);
 
           return sendWithRetry(
             {

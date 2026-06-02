@@ -159,11 +159,18 @@ function getMessageKey(remote) {
   );
 }
 
+// 같은 메시지의 단기 중복 표시만 차단. nid가 재사용되는 재발송(예: 글 수정 재알림)은
+// TTL 경과 후 다시 표시되도록 허용한다. (마커 영구 저장 시 알림이 영영 안 뜨는 버그 방지)
+const SEEN_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+
 async function markAndCheckSeen(key) {
   if (!key) return false;
   const k = `noti_seen:${key}`;
-  const seen = await AsyncStorage.getItem(k);
-  if (seen) return true;
+  const prev = await AsyncStorage.getItem(k);
+  if (prev) {
+    const ts = Number(prev);
+    if (Number.isFinite(ts) && Date.now() - ts < SEEN_TTL_MS) return true;
+  }
   await AsyncStorage.setItem(k, String(Date.now()));
   return false;
 }
@@ -312,15 +319,23 @@ export async function openFromPayload(navigateTo, data = {}) {
   }
 }
 
+// 콜드스타트 시 동시에 발화하는 여러 경로(notifee.getInitialNotification +
+// drainQueuedTap + messaging.onNotificationOpenedApp/getInitialNotification)가
+// 같은 탭을 중복 네비게이션하는 것만 차단. 짧은 TTL이라 이후 동일 nid 재탭은 정상 동작.
+const TAP_DEDUP_TTL_MS = 60 * 1000; // 60s
+
 export async function openFromPayloadOnce(navigateTo, data = {}) {
   const key = getTapKeyFromData(data);
   const marker = `noti_tap:${key}`;
-  const seen = key ? await AsyncStorage.getItem(marker) : null;
-  if (seen) {
-    console.log('[PUSH] openFromPayloadOnce dedup (tap already handled)', {
-      key,
-    });
-    return;
+  const prev = key ? await AsyncStorage.getItem(marker) : null;
+  if (prev) {
+    const ts = Number(prev);
+    if (Number.isFinite(ts) && Date.now() - ts < TAP_DEDUP_TTL_MS) {
+      console.log('[PUSH] openFromPayloadOnce dedup (tap already handled)', {
+        key,
+      });
+      return;
+    }
   }
   if (key) await AsyncStorage.setItem(marker, String(Date.now()));
   return openFromPayload(navigateTo, data);

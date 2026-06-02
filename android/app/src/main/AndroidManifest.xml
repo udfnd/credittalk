@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -85,8 +86,17 @@
                       android:scheme="kakaoa5721065cc212efd0cecafc66e4fe14a" />
             </intent-filter>
         </activity>
-        <!-- FCM notification delegation 비활성화: Google Play Services가 프록시로 알림을 표시하는 것을 방지 -->
-        <meta-data android:name="firebase_messaging_notification_delegation_enabled" android:value="false" />
+        <!--
+          notification+data 하이브리드: 백그라운드/종료 상태에서 OS(RNFirebase 메시징 서비스)가
+          notification 블록을 직접 표시한다. delegation은 RNFirebase 기본값(false)을 그대로 사용
+          (false여도 notification 메시지 자동 표시는 동작하며, true로 바꾸면 Play Services 프록시와
+           중복 표시 위험이 있어 변경하지 않음).
+          서버가 채널을 지정하지 않은 notification 메시지도 고우선순위 채널로 표시되도록 기본 채널만 지정.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="push_default_v2"
+            tools:replace="android:value" />
         <meta-data android:name="com.naver.sdk.clientId" android:value="@string/client_id" />
         <meta-data android:name="com.naver.sdk.clientSecret" android:value="@string/client_secret" />
         <meta-data android:name="com.naver.sdk.clientName" android:value="@string/client_name" />
