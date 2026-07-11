@@ -89,8 +89,8 @@ android {
         applicationId "com.credittalka"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 32
-        versionName "32"
+        versionCode 33
+        versionName "33"
 
         // Inject secrets as string resources (overrides strings.xml)
         resValue "string", "client_id", secrets.getProperty("NAVER_CLIENT_ID", "")
