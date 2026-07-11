@@ -56,8 +56,10 @@
     "react-native-rename": "^3.2.17",
     "react-native-safe-area-context": "^5.4.0",
     "react-native-screens": "^4.10.0",
+    "react-native-siren": "^0.0.7",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-vector-icons": "^10.2.0",
+    "sp-react-native-in-app-updates": "^2.0.0",
     "stream-browserify": "^3.0.0",
     "vm-browserify": "^1.1.2"
   },
