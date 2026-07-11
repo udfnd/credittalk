@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  react-native-device-info: ^15.0.2
+
 importers:
 
   .:
@@ -5412,18 +5415,8 @@ packages:
     peerDependencies:
       react-native-randombytes: '>=2.0.0 <4.0.0'
 
-  react-native-device-info@10.3.0:
-    resolution: {integrity: sha512-/ziZN1sA1REbJTv5mQZ4tXggcTvSbct+u5kCaze8BmN//lbxcTvWsU6NQd4IihLt89VkbX+14IGc9sVApSxd/w==}
-    peerDependencies:
-      react-native: '*'
-
   react-native-device-info@15.0.2:
     resolution: {integrity: sha512-dd71eXG2l3Cwp66IvKNadMTB8fhU3PEjyVddI97sYan+D4bgIAUmgGDhbSOFvHcGavksb2U17kiQYaDiK2WK2g==}
-    peerDependencies:
-      react-native: '*'
-
-  react-native-device-info@8.7.1:
-    resolution: {integrity: sha512-cVMZztFa2Qn6qpQa601W61CtUwZQ1KXfqCOeltejAWEXmgIWivC692WGSdtGudj4upSi1UgMSaGcvKjfcpdGjg==}
     peerDependencies:
       react-native: '*'
 
@@ -9414,7 +9407,9 @@ snapshots:
       metro-runtime: 0.82.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.79.1': {}
 
@@ -13802,15 +13797,7 @@ snapshots:
       randomfill: 1.0.4
       react-native-randombytes: 3.6.2
 
-  react-native-device-info@10.3.0(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)):
-    dependencies:
-      react-native: 0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)
-
   react-native-device-info@15.0.2(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)):
-    dependencies:
-      react-native: 0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)
-
-  react-native-device-info@8.7.1(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)):
     dependencies:
       react-native: 0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)
 
@@ -13988,7 +13975,7 @@ snapshots:
   react-native-siren@0.0.7(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)):
     dependencies:
       apisauce: 3.2.2
-      react-native-device-info: 8.7.1(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))
+      react-native-device-info: 15.0.2(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))
     transitivePeerDependencies:
       - debug
       - react-native
@@ -14491,7 +14478,7 @@ snapshots:
     dependencies:
       react: 19.0.0
       react-native: 0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)
-      react-native-device-info: 10.3.0(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))
+      react-native-device-info: 15.0.2(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))
       semver: 7.7.4
       underscore: 1.12.1
     optionalDependencies:

@@ -115,6 +115,43 @@ describe('In-App Update policy (src/lib/inAppUpdate.js)', () => {
   });
 });
 
+describe('Missing native module safety (16KB 기기 크래시 회귀 방지)', () => {
+  // 사전 출시 리포트: 릴리스 빌드에서 sp 라이브러리 require 시점에
+  // "NativeModule.RNDeviceInfo is null"이 throw되어 앱이 죽었음.
+  // 라이브러리 require 자체가 실패해도 checkForAppUpdate는 절대 던지면 안 됨.
+  test('sp library require failure must not crash checkForAppUpdate', async () => {
+    jest.resetModules();
+    jest.doMock('sp-react-native-in-app-updates', () => {
+      throw new Error('NativeModule.RNDeviceInfo is null');
+    });
+    const { Platform } = require('react-native');
+    Platform.OS = 'android';
+    const { checkForAppUpdate: check } = require('../src/lib/inAppUpdate');
+    await expect(check({ allowInDev: true })).resolves.toBeUndefined();
+    jest.dontMock('sp-react-native-in-app-updates');
+  });
+});
+
+describe('pushTapLog missing native module safety', () => {
+  test('device-info require failure must not crash logPushTap', async () => {
+    jest.resetModules();
+    jest.doMock('react-native-device-info', () => {
+      throw new Error('NativeModule.RNDeviceInfo is null');
+    });
+    jest.doMock('../src/lib/supabaseClient', () => ({
+      supabase: {
+        from: jest.fn(() => ({ insert: jest.fn(async () => ({ error: null })) })),
+      },
+    }));
+    const { logPushTap } = require('../src/lib/pushTapLog');
+    await expect(
+      logPushTap({ source: 'fcm_initial', outcome: 'navigate_screen' }),
+    ).resolves.toBeUndefined();
+    jest.dontMock('react-native-device-info');
+    jest.dontMock('../src/lib/supabaseClient');
+  });
+});
+
 describe('App wiring', () => {
   test('App.tsx triggers checkForAppUpdate on startup', () => {
     const appSource = fs.readFileSync(

@@ -1,8 +1,4 @@
 import { Platform } from 'react-native';
-import SpInAppUpdates, {
-  IAUUpdateKind,
-  IAUInstallStatus,
-} from 'sp-react-native-in-app-updates';
 
 // Google Play In-App Updates
 //
@@ -16,6 +12,10 @@ import SpInAppUpdates, {
 //   이상 방치된 업데이트 → IMMEDIATE(전체 화면, 설치 완료까지 진행)
 // - 그 외 → FLEXIBLE(백그라운드 다운로드, 완료 시 재시작 설치)
 // - Play 미탑재 기기/에뮬레이터/스토어 외 설치본에서는 조용히 no-op.
+//
+// 라이브러리는 try 안에서 지연 require한다: 네이티브 모듈이 없는 환경에서는
+// require 시점에 throw하는데(사전 출시 리포트에서 "NativeModule.RNDeviceInfo
+// is null" 크래시로 확인), 업데이트 확인 실패가 앱을 죽여서는 안 된다.
 
 const IMMEDIATE_PRIORITY_THRESHOLD = 4;
 const IMMEDIATE_STALENESS_DAYS = 7;
@@ -29,6 +29,12 @@ export async function checkForAppUpdate({ allowInDev = false } = {}) {
   inFlight = true;
 
   try {
+    const {
+      default: SpInAppUpdates,
+      IAUUpdateKind,
+      IAUInstallStatus,
+    } = require('sp-react-native-in-app-updates');
+
     const updater = new SpInAppUpdates(false);
     const result = await updater.checkNeedsUpdate();
     if (!result?.shouldUpdate) return;
@@ -57,7 +63,8 @@ export async function checkForAppUpdate({ allowInDev = false } = {}) {
     });
     await updater.startUpdate({ updateType: IAUUpdateKind.FLEXIBLE });
   } catch (e) {
-    // Play 서비스 부재, 스토어 외 설치, 사용자 취소 등 — 앱 동작에 영향 금지
+    // 라이브러리/네이티브 모듈 부재, Play 서비스 부재, 스토어 외 설치,
+    // 사용자 취소 등 — 앱 동작에 영향 금지
     console.warn('[IAU] in-app update check failed:', e?.message || e);
   } finally {
     inFlight = false;
