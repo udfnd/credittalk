@@ -783,7 +783,11 @@ function App(): React.JSX.Element {
           data: remoteMessage?.data,
         });
         if (remoteMessage?.data) {
-          openFromPayloadOnce(navigateToMaybeQueue, remoteMessage.data);
+          openFromPayloadOnce(
+            navigateToMaybeQueue,
+            remoteMessage.data,
+            'fcm_opened_app',
+          );
         }
       },
     );
@@ -821,6 +825,7 @@ function App(): React.JSX.Element {
         await openFromPayloadOnce(
           navigateToMaybeQueue,
           initialNotifee.notification.data,
+          'notifee_initial',
         );
       }
 
@@ -832,7 +837,11 @@ function App(): React.JSX.Element {
         });
         if (initialRemote?.data) {
           coldStartHandled = true;
-          await openFromPayloadOnce(navigateToMaybeQueue, initialRemote.data);
+          await openFromPayloadOnce(
+            navigateToMaybeQueue,
+            initialRemote.data,
+            'fcm_initial',
+          );
         }
       }
 

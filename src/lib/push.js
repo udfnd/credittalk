@@ -15,6 +15,7 @@ import notifee, {
 } from '@notifee/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabaseClient';
+import { logPushTap } from './pushTapLog';
 
 export const CHANNEL_ID = 'push_default_v2';
 const TAP_QUEUE_KEY = 'noti_tap_queue';
@@ -279,7 +280,7 @@ export async function displayOnce(remote, source = 'unknown') {
   console.log('[PUSH] displayOnce done');
 }
 
-export async function openFromPayload(navigateTo, data = {}) {
+export async function openFromPayload(navigateTo, data = {}, source = 'unknown') {
   try {
     const ALLOWED_SCREENS = new Set([
       'CommunityPostDetail',
@@ -317,18 +318,22 @@ export async function openFromPayload(navigateTo, data = {}) {
         params: finalParams,
       });
       navigateTo?.(screen, finalParams);
+      logPushTap({ source, outcome: 'navigate_screen', data });
       return;
     }
 
     const externalUrl = link_url || url;
     if (typeof externalUrl === 'string') {
       console.log('[NAV:INTENT] open external url', externalUrl);
+      logPushTap({ source, outcome: 'open_link', data });
       await openExternalUrlBestEffort(externalUrl);
     } else {
       console.log('[NAV:INTENT] nothing to open, payload=', data);
+      logPushTap({ source, outcome: 'no_target', data });
     }
   } catch (e) {
     console.warn('[Push] openFromPayload error:', e?.message || e);
+    logPushTap({ source, outcome: 'error', data, detail: { message: String(e?.message || e) } });
   }
 }
 
@@ -337,7 +342,7 @@ export async function openFromPayload(navigateTo, data = {}) {
 // 같은 탭을 중복 네비게이션하는 것만 차단. 짧은 TTL이라 이후 동일 nid 재탭은 정상 동작.
 const TAP_DEDUP_TTL_MS = 60 * 1000; // 60s
 
-export async function openFromPayloadOnce(navigateTo, data = {}) {
+export async function openFromPayloadOnce(navigateTo, data = {}, source = 'unknown') {
   const key = getTapKeyFromData(data);
   const marker = `noti_tap:${key}`;
   const prev = key ? await AsyncStorage.getItem(marker) : null;
@@ -347,11 +352,12 @@ export async function openFromPayloadOnce(navigateTo, data = {}) {
       console.log('[PUSH] openFromPayloadOnce dedup (tap already handled)', {
         key,
       });
+      logPushTap({ source, outcome: 'dedup_skip', data });
       return;
     }
   }
   if (key) await AsyncStorage.setItem(marker, String(Date.now()));
-  return openFromPayload(navigateTo, data);
+  return openFromPayload(navigateTo, data, source);
 }
 
 // push-notified queue: 탭 적재 완료 직후 등록된 드레인 리스너를 호출한다.
@@ -402,7 +408,7 @@ export async function drainQueuedTap(navigateTo) {
     for (const item of arr) {
       const data = item?.data || {};
       console.log('[NAV:INTENT] draining one', data);
-      await openFromPayloadOnce(navigateTo, data);
+      await openFromPayloadOnce(navigateTo, data, 'notifee_queue');
     }
     console.log('[NAV:INTENT] drainQueuedTap done');
   } catch (e) {
@@ -422,7 +428,7 @@ export async function drainNativeNotificationTap(navigateTo) {
     const data = await mod.getInitialNotificationData();
     if (data && (data.link_url || data.url || data.screen)) {
       console.log('[NAV:INTENT] drainNativeNotificationTap got data', data);
-      await openFromPayloadOnce(navigateTo, data);
+      await openFromPayloadOnce(navigateTo, data, 'native_fallback');
     } else {
       console.log('[NAV:INTENT] drainNativeNotificationTap: nothing pending');
     }

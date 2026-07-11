@@ -98,6 +98,9 @@ importers:
       react-native-blob-util:
         specifier: ^0.22.2
         version: 0.22.2(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))(react@19.0.0)
+      react-native-device-info:
+        specifier: ^15.0.2
+        version: 15.0.2(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))
       react-native-fs:
         specifier: ^2.20.0
         version: 2.20.0(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0))
@@ -5411,6 +5414,11 @@ packages:
 
   react-native-device-info@10.3.0:
     resolution: {integrity: sha512-/ziZN1sA1REbJTv5mQZ4tXggcTvSbct+u5kCaze8BmN//lbxcTvWsU6NQd4IihLt89VkbX+14IGc9sVApSxd/w==}
+    peerDependencies:
+      react-native: '*'
+
+  react-native-device-info@15.0.2:
+    resolution: {integrity: sha512-dd71eXG2l3Cwp66IvKNadMTB8fhU3PEjyVddI97sYan+D4bgIAUmgGDhbSOFvHcGavksb2U17kiQYaDiK2WK2g==}
     peerDependencies:
       react-native: '*'
 
@@ -10991,7 +10999,7 @@ snapshots:
       has-property-descriptors: 1.0.2
       has-proto: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.4
       internal-slot: 1.1.0
       is-array-buffer: 3.0.5
       is-callable: 1.2.7
@@ -11188,7 +11196,7 @@ snapshots:
       damerau-levenshtein: 1.0.8
       emoji-regex: 9.2.2
       eslint: 8.57.1
-      hasown: 2.0.2
+      hasown: 2.0.4
       jsx-ast-utils: 3.3.5
       language-tags: 1.0.9
       minimatch: 3.1.5
@@ -13795,6 +13803,10 @@ snapshots:
       react-native-randombytes: 3.6.2
 
   react-native-device-info@10.3.0(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)):
+    dependencies:
+      react-native: 0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)
+
+  react-native-device-info@15.0.2(react-native@0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)):
     dependencies:
       react-native: 0.79.1(@babel/core@7.28.4)(@react-native-community/cli@20.2.0(typescript@5.0.4))(@types/react@19.1.13)(react@19.0.0)
 
