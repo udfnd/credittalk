@@ -62,6 +62,32 @@ describe('Push Notification Navigation - EventDetail', () => {
   });
 
   describe('ALLOWED_SCREENS (push.js)', () => {
+    test('MyReports must be allowed (신고 분석 완료 푸시 타깃)', () => {
+      const match = pushSource.match(
+        /const ALLOWED_SCREENS\s*=\s*new Set\(\[([\s\S]*?)\]\)/,
+      );
+      expect(match[1]).toContain("'MyReports'");
+      const protectedMatch = appSource.match(
+        /const PROTECTED_SCREENS\s*=\s*new Set\(\[([\s\S]*?)\]\)/,
+      );
+      expect(protectedMatch[1]).toContain("'MyReports'");
+    });
+
+    test('new-post-notification must map events to EventDetail (Home dead-nav 방지)', () => {
+      const fn = fs.readFileSync(
+        path.resolve(
+          __dirname,
+          '../supabase/functions/new-post-notification/index.ts',
+        ),
+        'utf-8',
+      );
+      expect(fn).toMatch(/events:\s*'EventDetail'/);
+      expect(fn).toMatch(/events:\s*'eventId'/);
+      // 매핑 없는 테이블이 화이트리스트 밖 'Home'으로 발송되어
+      // 탭해도 아무 데도 못 가는 결정론적 dead-nav 금지.
+      expect(fn).not.toMatch(/\|\|\s*'Home'/);
+    });
+
     test('EventDetail must be in ALLOWED_SCREENS for push payload routing', () => {
       const match = pushSource.match(
         /const ALLOWED_SCREENS\s*=\s*new Set\(\[([\s\S]*?)\]\)/,
@@ -113,6 +139,60 @@ describe('Push Notification Navigation - EventDetail', () => {
     test('push.js openFromPayload should parse JSON params string', () => {
       // Verify the JSON parsing logic exists for params
       expect(pushSource).toMatch(/JSON\.parse\(rest\.params\)/);
+    });
+  });
+
+  // S24/S25 간헐 미이동 버그: RNFirebase getInitialNotification/onNotificationOpenedApp
+  // 누락 시 MainActivity가 캡처한 인텐트 extras로 복구하는 네이티브 폴백이 배선되어
+  // 있는지 회귀 방지.
+  describe('Native notification-tap fallback (Android S24/S25)', () => {
+    const repoRoot = path.resolve(__dirname, '..');
+    const read = rel => fs.readFileSync(path.resolve(repoRoot, rel), 'utf-8');
+
+    test('push.js exposes drainNativeNotificationTap using NativeModules.PushIntentModule', () => {
+      expect(pushSource).toMatch(/export async function drainNativeNotificationTap/);
+      expect(pushSource).toMatch(/NativeModules\.PushIntentModule/);
+      expect(pushSource).toMatch(/getInitialNotificationData/);
+    });
+
+    test('push.js drains native tap on AppState active (warm-start fallback)', () => {
+      const wireMatch = pushSource.match(
+        /export async function wireMessageHandlers[\s\S]*?\n}/,
+      );
+      expect(wireMatch).not.toBeNull();
+      expect(wireMatch[0]).toMatch(/drainNativeNotificationTap/);
+    });
+
+    test('App.tsx calls drainNativeNotificationTap on cold start', () => {
+      expect(appSource).toMatch(/drainNativeNotificationTap\(navigateToMaybeQueue\)/);
+    });
+
+    test('PushIntentModule.kt exists and exposes getInitialNotificationData', () => {
+      const mod = read(
+        'android/app/src/main/java/com/credittalka/PushIntentModule.kt',
+      );
+      expect(mod).toMatch(/fun getName\(\): String = "PushIntentModule"/);
+      expect(mod).toMatch(/fun getInitialNotificationData/);
+      expect(mod).toMatch(/MainActivity\.consumePendingPushData/);
+    });
+
+    test('PushIntentModule is registered in VoicePhishingPackage', () => {
+      const pkg = read(
+        'android/app/src/main/java/com/credittalka/VoicePhishingPackage.kt',
+      );
+      expect(pkg).toMatch(/PushIntentModule\(reactContext\)/);
+    });
+
+    test('MainActivity captures push intent on cold and warm start with consume-once + recents guard', () => {
+      const act = read(
+        'android/app/src/main/java/com/credittalka/MainActivity.kt',
+      );
+      expect(act).toMatch(/fun capturePushIntent/);
+      expect(act).toMatch(/fun consumePendingPushData/);
+      // onCreate(cold) + onNewIntent(warm) 모두에서 캡처
+      expect(act.match(/capturePushIntent\(intent\)/g)?.length).toBeGreaterThanOrEqual(2);
+      // recents 재실행 시 원래 인텐트 재처리 방지 플래그
+      expect(act).toMatch(/HANDLED_FLAG/);
     });
   });
 });

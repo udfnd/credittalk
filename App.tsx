@@ -38,6 +38,7 @@ import {
   requestCallDetectionPermissionsAndroid,
   ensureNotificationChannel,
   drainQueuedTap,
+  drainNativeNotificationTap,
 } from './src/lib/push';
 
 import HomeScreen from './src/screens/HomeScreen';
@@ -90,6 +91,7 @@ import EventDetailScreen from './src/screens/EventDetailScreen';
 import MyEventsScreen from './src/screens/MyEventsScreen';
 import SafetyAgreementModal from './src/components/SafetyAgreementModal';
 import { SAFETY_AGREEMENT_STORAGE_KEY } from './src/lib/contentSafety';
+import { checkForAppUpdate } from './src/lib/inAppUpdate';
 
 const LOG = (...args: any[]) => console.log(...args);
 const L_APP = (...a: any[]) => LOG('[APP]', ...a);
@@ -118,6 +120,7 @@ const PROTECTED_SCREENS = new Set([
   'NewCrimeCaseDetail',
   'NoticeDetail',
   'EventDetail',
+  'MyReports', // 신고 분석 완료 푸시 타깃
   'UnifiedSearch', // Deep Link로 접근 시에도 인증 필요
 ]);
 
@@ -729,6 +732,11 @@ function App(): React.JSX.Element {
   );
 
   useEffect(() => {
+    // 스토어 자동 업데이트 적용률 정체 대응: 실행 시 Play In-App Update 확인
+    checkForAppUpdate();
+  }, []);
+
+  useEffect(() => {
     L_APP('NaverLogin.initialize');
     NaverLogin.initialize({
       appName: '크레딧톡',
@@ -831,8 +839,13 @@ function App(): React.JSX.Element {
       // 5) BG 컨텍스트에서 큐에 적재해 둔 탭을 한 번만 소진
       await drainQueuedTap(navigateToMaybeQueue);
 
+      // 5b) 네이티브 인텐트 폴백: RNFirebase가 콜드스타트에서 payload를 누락해도
+      //     MainActivity가 캡처해 둔 알림 data로 복구(S24/S25 간헐 미이동 대응).
+      //     consume-once + nid 디듀프라 위 경로가 성공했으면 중복 실행되지 않는다.
+      await drainNativeNotificationTap(navigateToMaybeQueue);
+
       if (!coldStartHandled) {
-        L_PUSH('coldStart: no initial notification found (notifee & FCM both null) — possible delegation or singleTask issue');
+        L_PUSH('coldStart: no initial notification found (notifee & FCM both null) — native fallback attempted');
       }
     })();
 

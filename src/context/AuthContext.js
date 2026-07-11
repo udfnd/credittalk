@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!user) {
+    if (!user?.id) {
       setProfile(null);
       return;
     }
@@ -53,16 +53,17 @@ export const AuthProvider = ({ children }) => {
         setProfile(data || null);
       } catch (e) {
         console.error('Error fetching profile:', e.message);
-        Alert.alert(
-          '프로필 정보 로딩 실패',
-          '프로필 정보를 불러오는 중 문제가 발생했습니다.',
-        );
-        setProfile(null);
+        // 일시적(네트워크 등) 조회 실패로 profile을 null로 만들면 RootStack이
+        // MainApp 브랜치를 unmount→remount 하며 열린 화면이 홈으로 되감긴다.
+        // (푸시 탭 직후 토큰 리프레시와 겹치면 "탭 → 홈" 간헐 버그로 나타남)
+        // 기존 profile을 유지하고 다음 auth 이벤트에서 재조회에 맡긴다.
       }
     };
 
     fetchProfile();
-  }, [user]);
+    // user 객체는 TOKEN_REFRESHED 등 모든 auth 이벤트마다 새 참조가 되므로
+    // id 기준으로만 재조회한다(리프레시마다 재조회 → 일시 실패 → 홈 되감김 방지).
+  }, [user?.id]);
 
   // ✅ Apple 로그인 함수 추가
   const signInWithApple = async (identityToken, nonce) => {

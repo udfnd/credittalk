@@ -1,6 +1,7 @@
 /**
  * FCM v1 Push (Supabase Edge)
- * - ANDROID: 항상 data-only(silent=true) → onMessage/백그라운드 핸들러에서 표시
+ * - ANDROID: title/body가 있으면 notification+data 하이브리드(OS가 백그라운드/종료
+ *   상태에서 직접 표시 — 삼성 절전에서도 안정 전달), 없거나 silent면 data-only
  * - iOS: 링크가 있으면 data-only, 없으면 notification(= OS가 표시)
  * - expect_os_alert: 서버가 OS 표시를 기대하는 경우 '1'로 data에 명시 → 클라가 중복 표시를 스킵
  * - nid(디듀프 키)로 collapse(tag) 지정 → 중복 수렴

@@ -4,6 +4,7 @@ import {
   Linking,
   Alert,
   AppState,
+  NativeModules,
 } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import notifee, {
@@ -94,9 +95,11 @@ export const requestCallDetectionPermissionsAndroid = async () => {
 async function openExternalUrlBestEffort(url) {
   if (!url) return;
   try {
+    // Android 11+ 패키지 가시성: manifest <queries>에 없는 스킴은 canOpenURL이
+    // false를 반환하지만 실제 openURL은 성공할 수 있음 → 항상 시도한다.
     const supported = await Linking.canOpenURL(url);
-    if (supported) await Linking.openURL(url);
-    else console.warn(`[Push] Cannot open URL: ${url}`);
+    if (!supported) console.warn(`[Push] canOpenURL=false, trying anyway: ${url}`);
+    await Linking.openURL(url);
   } catch (error) {
     console.error('[Push] Error opening URL:', error);
   }
@@ -176,11 +179,20 @@ async function markAndCheckSeen(key) {
 }
 
 function getTapKeyFromData(data = {}) {
+  // 네이티브 폴백 캡처 data에는 nid/collapse_key/messageId/title/body가 모두
+  // 없을 수 있음. 그때 키가 상수("{}")로 붕괴하면 60초 내 서로 다른 알림의
+  // 두 번째 탭이 dedup에 먹혀 조용히 드롭되므로 라우팅 필드까지 키에 포함.
   return (
     data?.nid ||
     data?.collapse_key ||
     data?.messageId ||
-    JSON.stringify({ t: data?.title, b: data?.body })
+    JSON.stringify({
+      t: data?.title,
+      b: data?.body,
+      s: data?.screen,
+      l: data?.link_url || data?.url,
+      p: data?.params,
+    })
   );
 }
 
@@ -278,6 +290,7 @@ export async function openFromPayload(navigateTo, data = {}) {
       'ReviewDetail',
       'HelpDeskDetail',
       'EventDetail',
+      'MyReports', // 신고 분석 완료 푸시(admin) 타깃
     ]);
 
     const { screen, link_url, url, ...rest } = data || {};
@@ -341,6 +354,18 @@ export async function openFromPayloadOnce(navigateTo, data = {}) {
   return openFromPayload(navigateTo, data);
 }
 
+// push-notified queue: 탭 적재 완료 직후 등록된 드레인 리스너를 호출한다.
+// 배경: onBackgroundEvent의 queueTapIntent(쓰기)와 앱 초기화/AppState 'active'의
+// drainQueuedTap(읽기)은 서로 순서 보장이 없어, 읽기가 먼저 끝나면 탭이 큐에
+// 잠들고 앱은 홈 화면만 표시됐다(S24/S25 간헐 미이동의 잔여 원인).
+// 리스너는 wireMessageHandlers에서 초기화 드레인보다 먼저 바인딩되므로,
+// 쓰기가 늦든 읽기가 늦든 둘 중 하나는 반드시 탭을 소비한다.
+let tapQueueListener = null;
+
+export function setTapQueueListener(listener) {
+  tapQueueListener = listener;
+}
+
 export async function queueTapIntent(data = {}) {
   try {
     const raw = (await AsyncStorage.getItem(TAP_QUEUE_KEY)) || '[]';
@@ -350,6 +375,11 @@ export async function queueTapIntent(data = {}) {
     console.log('[PUSH] queueTapIntent stored', arr.length);
   } catch (e) {
     console.warn('[PUSH] queueTapIntent error', e?.message || e);
+  }
+  try {
+    await tapQueueListener?.();
+  } catch (e) {
+    console.warn('[PUSH] tapQueueListener error', e?.message || e);
   }
 }
 
@@ -380,9 +410,33 @@ export async function drainQueuedTap(navigateTo) {
   }
 }
 
+// 네이티브 폴백: 삼성 OneUI 프로세스 재생성 상황에서 RNFirebase의
+// getInitialNotification/onNotificationOpenedApp 이 payload를 누락해도,
+// MainActivity가 인텐트 extras에서 직접 캡처해 둔 알림 data를 읽어 네비게이션한다.
+// (consume-once + openFromPayloadOnce nid 디듀프로 FCM 표준 경로와 중복 실행 방지)
+export async function drainNativeNotificationTap(navigateTo) {
+  if (Platform.OS !== 'android') return;
+  try {
+    const mod = NativeModules.PushIntentModule;
+    if (!mod?.getInitialNotificationData) return;
+    const data = await mod.getInitialNotificationData();
+    if (data && (data.link_url || data.url || data.screen)) {
+      console.log('[NAV:INTENT] drainNativeNotificationTap got data', data);
+      await openFromPayloadOnce(navigateTo, data);
+    } else {
+      console.log('[NAV:INTENT] drainNativeNotificationTap: nothing pending');
+    }
+  } catch (e) {
+    console.warn('[NAV:INTENT] drainNativeNotificationTap error', e?.message || e);
+  }
+}
+
 export async function wireMessageHandlers(navigateTo) {
   if (global.__PUSH_FG_BOUND__) return;
   global.__PUSH_FG_BOUND__ = true;
+
+  // 탭이 큐에 적재되는 즉시 소비(늦게 도착한 백그라운드/콜드스타트 PRESS 대응).
+  setTapQueueListener(() => drainQueuedTap(navigateTo));
 
   messaging().onMessage(async remoteMessage => {
     try {
@@ -404,8 +458,10 @@ export async function wireMessageHandlers(navigateTo) {
 
   AppState.addEventListener('change', state => {
     if (state === 'active') {
-      console.log('[NAV:INTENT] AppState active → drainQueuedTap');
+      console.log('[NAV:INTENT] AppState active → drain queued + native tap');
       drainQueuedTap(navigateTo);
+      // 웜 스타트(백그라운드 알림 탭 → 복귀) 폴백
+      drainNativeNotificationTap(navigateTo);
     }
   });
 }

@@ -20,6 +20,7 @@ const SCREEN_MAP: Record<string, string> = {
   new_crime_cases: 'NewCrimeCaseDetail',
   notices: 'NoticeDetail',
   reviews: 'ReviewDetail',
+  events: 'EventDetail',
 };
 
 const ID_PARAM_MAP: Record<string, string> = {
@@ -29,6 +30,7 @@ const ID_PARAM_MAP: Record<string, string> = {
   new_crime_cases: 'caseId',
   notices: 'noticeId',
   reviews: 'reviewId',
+  events: 'eventId',
 };
 
 const CHUNK_SIZE = 100;
@@ -51,16 +53,22 @@ Deno.serve(async req => {
 
     const authorId = post.user_id || post.uploader_id;
 
-    const screen = SCREEN_MAP[String(table)] || 'Home';
-    const idParamKey = ID_PARAM_MAP[String(table)] || 'id';
+    // 매핑 없는 테이블은 screen을 아예 싣지 않는다. 과거 'Home' fallback은
+    // 클라이언트 ALLOWED_SCREENS에 없어 탭해도 아무 데도 못 가는 dead-nav였음.
+    const screen = SCREEN_MAP[String(table)] ?? null;
+    const idParamKey = ID_PARAM_MAP[String(table)] ?? 'id';
     const nid = `post_${String(table)}_${String(post.id)}`;
 
     const makeDataPayload = () => ({
       type: 'NAV',
-      screen: String(screen),
-      params: JSON.stringify({ [idParamKey]: String(post.id) }),
       nid: String(nid),
-      [idParamKey]: String(post.id),
+      ...(screen
+        ? {
+            screen: String(screen),
+            params: JSON.stringify({ [idParamKey]: String(post.id) }),
+            [idParamKey]: String(post.id),
+          }
+        : {}),
     });
 
     let isAdminAuthor = false;
