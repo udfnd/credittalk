@@ -72,6 +72,36 @@ describe('Push tap queue - race-free drain (S24/S25)', () => {
     expect(drained).toHaveBeenCalledTimes(1);
   });
 
+  test('foreground PRESS after App remount navigates via the LATEST navigateTo (stale closure regression)', async () => {
+    // 삼성 OneUI는 백그라운드에서 프로세스는 살리고 액티비티만 죽였다 재생성하는
+    // 경우가 있음 → JS 컨텍스트 유지 + React 루트 리마운트. 이때 __PUSH_FG_BOUND__
+    // 가드 때문에 리스너가 첫 마운트의 죽은 navRef 클로저를 계속 쥐고 있으면
+    // 이후 알림 탭이 죽은 pending 큐로 들어가 조용히 사라진다(홈만 표시).
+    const notifee = require('@notifee/react-native').default;
+    const nav1 = jest.fn();
+    const nav2 = jest.fn();
+
+    await push.wireMessageHandlers(nav1); // 마운트 #1
+    const fgHandler = notifee.onForegroundEvent.mock.calls[0][0];
+    await push.wireMessageHandlers(nav2); // 액티비티 재생성 후 마운트 #2
+
+    await fgHandler({
+      type: 1, // PRESS
+      detail: {
+        notification: {
+          data: { nid: 'remount1', screen: 'NoticeDetail', noticeId: '9' },
+        },
+      },
+    });
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(nav2).toHaveBeenCalledWith(
+      'NoticeDetail',
+      expect.objectContaining({ noticeId: '9' }),
+    );
+    expect(nav1).not.toHaveBeenCalled();
+  });
+
   test('a tap queued AFTER drainQueuedTap already ran still navigates (race regression)', async () => {
     const navigateTo = jest.fn();
     await push.wireMessageHandlers(navigateTo);
@@ -145,6 +175,45 @@ describe('MainActivity fallback stays scoped to FCM flat extras', () => {
     // 검증 결과: notifee press는 MainActivity 인텐트에 "notification" Bundle을
     // 싣지 않음(트램폴린 액티비티로만 전달). 해당 캡처 코드는 죽은 코드라 제거됨.
     expect(act).not.toMatch(/getBundleExtra\("notification"\)/);
+  });
+});
+
+describe('Detail screens must refetch when route params change (재직진입 dead-nav)', () => {
+  // 이미 해당 상세 화면이 포커스된 상태에서 알림을 탭하면 React Navigation은
+  // 화면을 push하지 않고 기존 라우트의 params만 갱신한다. 이때 focus 이벤트는
+  // 발생하지 않으므로, focus 리스너에만 의존하는 화면은 이전 글을 그대로
+  // 보여준다("클릭해도 이동 안 함"). id 변경 → fetch 콜백 identity 변경 →
+  // 직접 useEffect로 재조회해야 한다.
+  const cases = [
+    ['CommunityPostDetailScreen', 'fetchPostDetail'],
+    ['NoticeDetailScreen', 'fetchNoticeDetails'],
+    ['ReviewDetailScreen', 'fetchReviewDetail'],
+    ['IncidentPhotoDetailScreen', 'fetchPhotoDetail'],
+    ['NewCrimeCaseDetailScreen', 'fetchCaseDetail'],
+    ['EventDetailScreen', 'fetchEventDetail'],
+  ];
+
+  test.each(cases)('%s re-runs %s on param change', (file, fn) => {
+    const src = fs.readFileSync(
+      path.resolve(__dirname, `../src/screens/${file}.js`),
+      'utf-8',
+    );
+    const direct = new RegExp(
+      `useEffect\\(\\(\\) => \\{[\\s\\S]{0,200}?${fn}\\(\\);\\s*\\}, \\[${fn}\\]\\)`,
+    );
+    expect(src).toMatch(direct);
+  });
+});
+
+describe('Pending nav intent must survive App remounts', () => {
+  test('App.tsx keeps the pending holder in module scope, not useRef', () => {
+    const appSource = fs.readFileSync(
+      path.resolve(__dirname, '../App.tsx'),
+      'utf-8',
+    );
+    // 액티비티 재생성으로 App이 리마운트되면 useRef 기반 pending은 유실된다.
+    expect(appSource).toMatch(/const pendingNavHolder[\s\S]{0,160}?current:\s*null/);
+    expect(appSource).not.toMatch(/pendingNavRef = useRef/);
   });
 });
 

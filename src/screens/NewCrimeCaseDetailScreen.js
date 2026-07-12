@@ -83,6 +83,12 @@ function NewCrimeCaseDetailScreen({ route }) {
     return unsubscribe;
   }, [navigation, fetchCaseDetail]);
 
+  // 포커스 상태에서 caseId만 바뀌는 경우(알림 탭) focus 이벤트가 없다 → 직접 재조회
+  useEffect(() => {
+    setIsLoading(true);
+    fetchCaseDetail();
+  }, [fetchCaseDetail]);
+
   const handleBlockUser = useCallback(() => {
     if (!user || !caseDetail || user.id === caseDetail.user_id) {
       if (!user) {

@@ -73,6 +73,12 @@ const NoticeDetailScreen = () => {
     return unsubscribe;
   }, [navigation, fetchNoticeDetails]);
 
+  // 포커스 상태에서 noticeId만 바뀌는 경우(알림 탭) focus 이벤트가 없다 → 직접 재조회
+  useEffect(() => {
+    setLoading(true);
+    fetchNoticeDetails();
+  }, [fetchNoticeDetails]);
+
   useEffect(() => {
     if (notice) {
       navigation.setOptions({

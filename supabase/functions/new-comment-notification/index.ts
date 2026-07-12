@@ -56,13 +56,29 @@ const BOARD_TYPE_MAP = {
     screen: 'EventDetail',
     idParamName: 'eventId',
   },
+  notices: {
+    postTable: 'notices',
+    postTitleColumn: 'title',
+    // notices에는 작성자 컬럼이 없음(관리자 작성, author_name 문자열뿐) →
+    // 작성자 대상 푸시는 건너뛰고 부모 댓글 작성자 + 관리자 알림만 발송.
+    postAuthorColumn: null,
+    screen: 'NoticeDetail',
+    idParamName: 'noticeId',
+  },
 } as const;
+
+// 레거시 오타 board_type 보정: 'review' 단수형 데이터가 실존함
+const BOARD_TYPE_ALIASES: Record<string, keyof typeof BOARD_TYPE_MAP> = {
+  review: 'reviews',
+};
 
 Deno.serve(async req => {
   try {
     const { record: comment } = await req.json();
+    const boardType =
+      BOARD_TYPE_ALIASES[String(comment?.board_type)] ?? comment?.board_type;
     const mapping =
-      BOARD_TYPE_MAP[comment?.board_type as keyof typeof BOARD_TYPE_MAP];
+      BOARD_TYPE_MAP[boardType as keyof typeof BOARD_TYPE_MAP];
 
     if (!comment || !comment.post_id || !mapping) {
       const message = !mapping
@@ -77,14 +93,19 @@ Deno.serve(async req => {
     const nid = `comment_${String(comment.id)}`;
     const notifiedUserUuids = new Set<string>();
 
+    const authorColumn: string | null = mapping.postAuthorColumn;
     const { data: post, error: postError } = await supabaseAdmin
       .from(mapping.postTable)
-      .select(`${mapping.postAuthorColumn}, ${mapping.postTitleColumn}`)
+      .select(
+        authorColumn
+          ? `${authorColumn}, ${mapping.postTitleColumn}`
+          : mapping.postTitleColumn,
+      )
       .eq('id', comment.post_id)
       .single();
     if (postError) throw postError;
 
-    const postAuthorUuid = post?.[mapping.postAuthorColumn];
+    const postAuthorUuid = authorColumn ? post?.[authorColumn] : null;
     const postTitle = String(post?.[mapping.postTitleColumn] ?? '');
 
     const { data: commentAuthor, error: commentAuthorError } =

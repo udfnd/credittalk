@@ -437,12 +437,24 @@ export async function drainNativeNotificationTap(navigateTo) {
   }
 }
 
+// 삼성 OneUI 등은 백그라운드에서 프로세스는 살리고 액티비티만 회수했다가
+// 재생성하는 경우가 있다 → JS 컨텍스트(모듈 상태)는 유지된 채 React 루트만
+// 리마운트되어 navRef가 교체된다. OS 리스너(1회 바인딩)가 첫 마운트의
+// navigateTo 클로저를 계속 쥐고 있으면 이후 탭이 죽은 navRef로 흘러가
+// 조용히 증발하므로, 리스너는 항상 이 참조를 통해 최신 마운트의
+// navigateTo를 호출한다(wireMessageHandlers가 마운트마다 갱신).
+let currentNavigateTo = null;
+
 export async function wireMessageHandlers(navigateTo) {
-  if (global.__PUSH_FG_BOUND__) return;
-  global.__PUSH_FG_BOUND__ = true;
+  currentNavigateTo = navigateTo;
+  const nav = (screen, params) => currentNavigateTo?.(screen, params);
 
   // 탭이 큐에 적재되는 즉시 소비(늦게 도착한 백그라운드/콜드스타트 PRESS 대응).
-  setTapQueueListener(() => drainQueuedTap(navigateTo));
+  // 리마운트 시에도 최신 nav로 재바인딩되어야 하므로 가드보다 먼저 실행.
+  setTapQueueListener(() => drainQueuedTap(nav));
+
+  if (global.__PUSH_FG_BOUND__) return;
+  global.__PUSH_FG_BOUND__ = true;
 
   messaging().onMessage(async remoteMessage => {
     try {
@@ -458,16 +470,16 @@ export async function wireMessageHandlers(navigateTo) {
         '[FG] onForegroundEvent PRESS/ACTION_PRESS, queue & open once',
       );
       await queueTapIntent(detail?.notification?.data || {});
-      await drainQueuedTap(navigateTo);
+      await drainQueuedTap(nav);
     }
   });
 
   AppState.addEventListener('change', state => {
     if (state === 'active') {
       console.log('[NAV:INTENT] AppState active → drain queued + native tap');
-      drainQueuedTap(navigateTo);
+      drainQueuedTap(nav);
       // 웜 스타트(백그라운드 알림 탭 → 복귀) 폴백
-      drainNativeNotificationTap(navigateTo);
+      drainNativeNotificationTap(nav);
     }
   });
 }

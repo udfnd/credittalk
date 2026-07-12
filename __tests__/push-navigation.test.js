@@ -196,3 +196,33 @@ describe('Push Notification Navigation - EventDetail', () => {
     });
   });
 });
+
+// 공지(notices) 댓글과 레거시 오타 board_type('review')은 BOARD_TYPE_MAP에 없어
+// new-comment-notification이 400으로 끝나 알림 자체가 발송되지 않았다.
+describe('new-comment-notification board_type coverage', () => {
+  const fnSource = require('fs').readFileSync(
+    require('path').resolve(
+      __dirname,
+      '../supabase/functions/new-comment-notification/index.ts',
+    ),
+    'utf-8',
+  );
+
+  test('maps notices comments to NoticeDetail', () => {
+    expect(fnSource).toMatch(/notices:\s*\{/);
+    expect(fnSource).toMatch(/'NoticeDetail'/);
+    expect(fnSource).toMatch(/noticeId/);
+  });
+
+  test('legacy "review" board_type is aliased to reviews mapping', () => {
+    expect(fnSource).toMatch(/\breview\b/);
+  });
+
+  test('notices mapping must not assume an author column (notices has none)', () => {
+    // notices 테이블에는 user_id/uploader_id가 없으므로 작성자 푸시는 건너뛰고
+    // 부모 댓글 작성자 + 관리자 알림만 발송해야 한다.
+    const noticesBlock = fnSource.match(/notices:\s*\{[\s\S]*?\}/);
+    expect(noticesBlock).not.toBeNull();
+    expect(noticesBlock[0]).not.toMatch(/postAuthorColumn:\s*'(user_id|uploader_id)'/);
+  });
+});

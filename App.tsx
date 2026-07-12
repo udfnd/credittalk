@@ -617,9 +617,17 @@ function NavIntentReplayer({
   return null;
 }
 
+// 미처리 네비게이션 인텐트는 모듈 스코프에 보관한다. 액티비티 재생성으로
+// App이 리마운트돼도(프로세스/JS 컨텍스트 유지) 인증 대기 중이던 알림 탭이
+// 유실되지 않도록 useRef(마운트 수명) 대신 모듈 수명 홀더를 쓴다.
+const pendingNavHolder: React.MutableRefObject<{
+  screen: string;
+  params?: any;
+} | null> = { current: null };
+
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
-  const pendingNavRef = useRef<{ screen: string; params?: any } | null>(null);
+  const pendingNavRef = pendingNavHolder;
   const authReadyRef = useRef(false);
 
   const [hasAcceptedSafety, setHasAcceptedSafety] = useState(false);
@@ -697,7 +705,7 @@ function App(): React.JSX.Element {
         castAndNavigate(screen, params);
       }
     },
-    [navRef],
+    [navRef, pendingNavRef],
   );
 
   const navigateToMaybeQueue = useCallback(
@@ -714,7 +722,7 @@ function App(): React.JSX.Element {
         pendingNavRef.current = { screen, params };
       }
     },
-    [navRef, navigateToScreen],
+    [navRef, navigateToScreen, pendingNavRef],
   );
 
   const onAuthReadyChange = useCallback(
@@ -728,7 +736,7 @@ function App(): React.JSX.Element {
         navigateToScreen(screen, params);
       }
     },
-    [navRef, navigateToScreen],
+    [navRef, navigateToScreen, pendingNavRef],
   );
 
   useEffect(() => {

@@ -82,6 +82,14 @@ function CommunityPostDetailScreen({ route }) {
     return unsubscribe;
   }, [navigation, fetchPostDetail]);
 
+  // 이미 이 화면이 포커스된 상태에서 알림 탭 등으로 postId만 바뀌면 focus
+  // 이벤트가 발생하지 않는다 → id 변경(= fetch 콜백 identity 변경)에 직접
+  // 반응해 재조회해야 화면이 새 글로 이동한다.
+  useEffect(() => {
+    setIsLoading(true);
+    fetchPostDetail();
+  }, [fetchPostDetail]);
+
   const handleBlockUser = async () => {
     if (!user || !post || user.id === post.author_auth_id) return;
 

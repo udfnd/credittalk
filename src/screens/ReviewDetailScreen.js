@@ -95,6 +95,12 @@ function ReviewDetailScreen({ route }) {
     return unsubscribe;
   }, [navigation, fetchReviewDetail]);
 
+  // 포커스 상태에서 reviewId만 바뀌는 경우(알림 탭) focus 이벤트가 없다 → 직접 재조회
+  useEffect(() => {
+    setIsLoading(true);
+    fetchReviewDetail();
+  }, [fetchReviewDetail]);
+
   useFocusEffect(
     useCallback(() => {
       AvoidSoftInput.setEnabled(true);

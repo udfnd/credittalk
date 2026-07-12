@@ -107,6 +107,12 @@ function EventDetailScreen() {
     return unsubscribe;
   }, [navigation, fetchEventDetail]);
 
+  // 포커스 상태에서 eventId만 바뀌는 경우(알림 탭) focus 이벤트가 없다 → 직접 재조회
+  useEffect(() => {
+    setLoading(true);
+    fetchEventDetail();
+  }, [fetchEventDetail]);
+
   useEffect(() => {
     if (event) {
       navigation.setOptions({

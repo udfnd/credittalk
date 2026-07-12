@@ -82,6 +82,12 @@ function IncidentPhotoDetailScreen({ route, navigation }) {
     return unsubscribe;
   }, [navigation, fetchPhotoDetail]);
 
+  // 포커스 상태에서 photoId만 바뀌는 경우(알림 탭) focus 이벤트가 없다 → 직접 재조회
+  useEffect(() => {
+    setIsLoading(true);
+    fetchPhotoDetail();
+  }, [fetchPhotoDetail]);
+
   const handleBlockUser = useCallback(() => {
     if (!user || !photo || user.id === photo.uploader_id) {
       if (!user) {
