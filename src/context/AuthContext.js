@@ -39,7 +39,15 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const fetchProfile = async () => {
+    let cancelled = false;
+    // 콜드스타트 첫 조회가 일시(네트워크) 실패하면 profile이 null로 남아
+    // RootStack이 AdditionalInfo 브랜치에 갇히고, authReady가 false라 대기 중인
+    // 푸시 네비게이션도 flush되지 않는다. 이 effect는 [user?.id] 키라 토큰
+    // 리프레시로는 재실행되지 않으므로, 성공(또는 진짜 프로필 없음 확정)까지
+    // 백오프 재시도한다.
+    const RETRY_DELAYS_MS = [1000, 3000, 8000, 20000];
+
+    const fetchProfile = async (attempt = 0) => {
       try {
         const { data, error } = await supabase
           .from('users')
@@ -50,19 +58,28 @@ export const AuthProvider = ({ children }) => {
         if (error && error.code !== 'PGRST116') {
           throw error;
         }
-        setProfile(data || null);
+        // PGRST116(행 없음)은 실제로 추가 정보 입력이 필요한 상태 → null 확정
+        if (!cancelled) setProfile(data || null);
       } catch (e) {
         console.error('Error fetching profile:', e.message);
         // 일시적(네트워크 등) 조회 실패로 profile을 null로 만들면 RootStack이
         // MainApp 브랜치를 unmount→remount 하며 열린 화면이 홈으로 되감긴다.
         // (푸시 탭 직후 토큰 리프레시와 겹치면 "탭 → 홈" 간헐 버그로 나타남)
-        // 기존 profile을 유지하고 다음 auth 이벤트에서 재조회에 맡긴다.
+        // 기존 profile은 유지하고, 백오프 후 재시도한다.
+        if (!cancelled && attempt < RETRY_DELAYS_MS.length) {
+          setTimeout(() => {
+            if (!cancelled) fetchProfile(attempt + 1);
+          }, RETRY_DELAYS_MS[attempt]);
+        }
       }
     };
 
     fetchProfile();
     // user 객체는 TOKEN_REFRESHED 등 모든 auth 이벤트마다 새 참조가 되므로
     // id 기준으로만 재조회한다(리프레시마다 재조회 → 일시 실패 → 홈 되감김 방지).
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   // ✅ Apple 로그인 함수 추가

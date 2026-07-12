@@ -606,9 +606,11 @@ function NavIntentReplayer({
       return;
     }
     if (user && profile) {
-      L_INTENT('flushing pending (auth ready)', pending);
-      pendingNavRef.current = null;
-      navigateToScreen(pending.screen, pending.params);
+      const fresh = takePendingNav();
+      if (fresh) {
+        L_INTENT('flushing pending (auth ready)', fresh);
+        navigateToScreen(fresh.screen, fresh.params);
+      }
     } else {
       L_INTENT('pending exists, but auth not ready yet');
     }
@@ -623,7 +625,28 @@ function NavIntentReplayer({
 const pendingNavHolder: React.MutableRefObject<{
   screen: string;
   params?: any;
+  ts: number;
 } | null> = { current: null };
+
+// 홀더가 프로세스 수명 동안 살아있으므로 TTL을 둔다: 인증 미준비로 큐잉된
+// 탭이 한참 뒤 로그인 시점에 유령 이동하는 것 방지.
+const PENDING_NAV_TTL_MS = 5 * 60 * 1000;
+
+function setPendingNav(screen: string, params?: any) {
+  pendingNavHolder.current = { screen, params, ts: Date.now() };
+}
+
+/** 꺼내면서 비운다. TTL 초과분은 폐기하고 null 반환. */
+function takePendingNav(): { screen: string; params?: any } | null {
+  const pending = pendingNavHolder.current;
+  pendingNavHolder.current = null;
+  if (!pending) return null;
+  if (Date.now() - pending.ts > PENDING_NAV_TTL_MS) {
+    L_INTENT('pending expired, dropping', { screen: pending.screen });
+    return null;
+  }
+  return pending;
+}
 
 function App(): React.JSX.Element {
   const navRef = useNavigationContainerRef<RootStackParamList>();
@@ -639,13 +662,13 @@ function App(): React.JSX.Element {
 
       if (!navRef.isReady()) {
         L_INTENT('nav not ready → queue', { screen, params });
-        pendingNavRef.current = { screen, params };
+        setPendingNav(screen, params);
         return;
       }
 
       if (needsAuth(screen) && !authReadyRef.current) {
         L_INTENT('protected & auth not ready → queue', { screen, params });
-        pendingNavRef.current = { screen, params };
+        setPendingNav(screen, params);
         return;
       }
 
@@ -705,7 +728,7 @@ function App(): React.JSX.Element {
         castAndNavigate(screen, params);
       }
     },
-    [navRef, pendingNavRef],
+    [navRef],
   );
 
   const navigateToMaybeQueue = useCallback(
@@ -719,10 +742,10 @@ function App(): React.JSX.Element {
         navigateToScreen(screen, params);
       } else {
         L_INTENT('queue (nav not ready)', { screen, params });
-        pendingNavRef.current = { screen, params };
+        setPendingNav(screen, params);
       }
     },
-    [navRef, navigateToScreen, pendingNavRef],
+    [navRef, navigateToScreen],
   );
 
   const onAuthReadyChange = useCallback(
@@ -730,10 +753,11 @@ function App(): React.JSX.Element {
       L_AUTH('onAuthReadyChange', { ready });
       authReadyRef.current = ready;
       if (ready && navRef.isReady() && pendingNavRef.current) {
-        const { screen, params } = pendingNavRef.current;
-        L_INTENT('auth ready & nav ready → flush pending', { screen, params });
-        pendingNavRef.current = null;
-        navigateToScreen(screen, params);
+        const fresh = takePendingNav();
+        if (fresh) {
+          L_INTENT('auth ready & nav ready → flush pending', fresh);
+          navigateToScreen(fresh.screen, fresh.params);
+        }
       }
     },
     [navRef, navigateToScreen, pendingNavRef],
@@ -936,9 +960,11 @@ function App(): React.JSX.Element {
                 authReady: authReadyRef.current,
               });
               if (!needsAuth(screen) || authReadyRef.current) {
-                L_INTENT('onReady → flushing pending');
-                pendingNavRef.current = null;
-                navigateToScreen(screen, params);
+                const fresh = takePendingNav();
+                if (fresh) {
+                  L_INTENT('onReady → flushing pending');
+                  navigateToScreen(fresh.screen, fresh.params);
+                }
               } else {
                 L_INTENT('onReady → keep pending (auth not ready)');
               }

@@ -212,8 +212,20 @@ describe('Pending nav intent must survive App remounts', () => {
       'utf-8',
     );
     // 액티비티 재생성으로 App이 리마운트되면 useRef 기반 pending은 유실된다.
-    expect(appSource).toMatch(/const pendingNavHolder[\s\S]{0,160}?current:\s*null/);
+    expect(appSource).toMatch(/const pendingNavHolder[\s\S]{0,200}?current:\s*null/);
     expect(appSource).not.toMatch(/pendingNavRef = useRef/);
+  });
+
+  test('pending intents expire (오래된 탭의 지연 로그인 후 유령 이동 방지)', () => {
+    const appSource = fs.readFileSync(
+      path.resolve(__dirname, '../App.tsx'),
+      'utf-8',
+    );
+    // 모듈 스코프 홀더는 프로세스 수명 동안 살아있으므로, 큐잉 시각을 기록하고
+    // flush 시점에 TTL을 넘긴 인텐트는 폐기해야 한다.
+    expect(appSource).toMatch(/PENDING_NAV_TTL_MS/);
+    expect(appSource).toMatch(/setPendingNav\(/);
+    expect(appSource).toMatch(/takePendingNav\(/);
   });
 });
 
@@ -227,6 +239,18 @@ describe('AuthContext must not bounce MainApp on token refresh (App→Home 되�
     // onAuthStateChange는 TOKEN_REFRESHED마다 새 user 객체를 만들므로
     // [user] 의존성은 리프레시마다 profile 재조회를 유발함.
     expect(authSource).toMatch(/\},\s*\[user\?\.id\]\s*\);/);
+  });
+
+  test('cold-start profile fetch failure must retry (AdditionalInfo 갇힘 + pending nav 유실 방지)', () => {
+    // 콜드스타트 첫 fetchProfile이 일시 실패하면 profile=null로 남아
+    // RootStack이 AdditionalInfo에 갇히고, authReady가 영영 false라
+    // 큐잉된 푸시 네비게이션도 flush되지 않는다. 백오프 재시도가 필요.
+    const fetchBlock = authSource.match(
+      /const fetchProfile = async[\s\S]*?\n    \};/,
+    );
+    expect(fetchBlock).not.toBeNull();
+    expect(fetchBlock[0]).toMatch(/setTimeout/);
+    expect(authSource).toMatch(/RETRY_DELAYS_MS/);
   });
 
   test('transient profile fetch failure must NOT null out an existing profile', () => {
