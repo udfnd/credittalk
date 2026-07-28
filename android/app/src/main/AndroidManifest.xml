@@ -29,12 +29,16 @@
         </intent>
         <package android:name="com.google.android.youtube" />
     </queries>
+    <!-- enableOnBackInvokedCallback=false: targetSdk 36부터 예측형 뒤로가기가
+         기본 활성화되는데, RN BackHandler는 레거시 onBackPressed 경로에 의존하므로
+         뒤로가기가 내비게이션을 거치지 않고 앱을 종료시킬 수 있다 → 레거시 유지 -->
     <application
             android:name=".MainApplication"
             android:label="@string/app_name"
             android:icon="@mipmap/ic_launcher"
             android:allowBackup="false"
             android:theme="@style/AppTheme"
+            android:enableOnBackInvokedCallback="false"
             android:supportsRtl="true">
         <activity
                 android:name=".MainActivity"

@@ -4,10 +4,11 @@ ext {
 
 buildscript {
     ext {
-        buildToolsVersion = "35.0.0"
+        // Play 정책: 2026-08-31부터 targetSdk 36(Android 16) 미만은 업데이트 불가
+        buildToolsVersion = "36.0.0"
         minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
+        compileSdkVersion = 36
+        targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.0.21"
     }
