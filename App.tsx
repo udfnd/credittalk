@@ -39,7 +39,9 @@ import {
   ensureNotificationChannel,
   drainQueuedTap,
   drainNativeNotificationTap,
+  runExclusivePushOp,
 } from './src/lib/push';
+import { logPushTap } from './src/lib/pushTapLog';
 
 import HomeScreen from './src/screens/HomeScreen';
 import ReportScreen from './src/screens/ReportScreen';
@@ -633,6 +635,17 @@ const pendingNavHolder: React.MutableRefObject<{
 const PENDING_NAV_TTL_MS = 5 * 60 * 1000;
 
 function setPendingNav(screen: string, params?: any) {
+  const prev = pendingNavHolder.current;
+  // 단일 슬롯이라 서로 다른 인텐트가 겹치면 이전 것이 조용히 유실된다 → 기록
+  if (prev && (prev.screen !== screen || JSON.stringify(prev.params) !== JSON.stringify(params))) {
+    L_INTENT('pending overwritten', { prev: prev.screen, next: screen });
+    logPushTap({
+      source: 'nav_intent',
+      outcome: 'pending_overwritten',
+      data: { screen: prev.screen },
+      detail: { prevScreen: prev.screen, prevParams: prev.params ?? null, nextScreen: screen },
+    });
+  }
   pendingNavHolder.current = { screen, params, ts: Date.now() };
 }
 
@@ -643,6 +656,13 @@ function takePendingNav(): { screen: string; params?: any } | null {
   if (!pending) return null;
   if (Date.now() - pending.ts > PENDING_NAV_TTL_MS) {
     L_INTENT('pending expired, dropping', { screen: pending.screen });
+    // 탭이 최종적으로 아무 데도 도달하지 못하고 폐기됨 → 기록
+    logPushTap({
+      source: 'nav_intent',
+      outcome: 'pending_expired',
+      data: { screen: pending.screen },
+      detail: { params: pending.params ?? null, ageMs: Date.now() - pending.ts },
+    });
     return null;
   }
   return pending;
@@ -655,6 +675,35 @@ function App(): React.JSX.Element {
 
   const [hasAcceptedSafety, setHasAcceptedSafety] = useState(false);
   const [isCheckingSafety, setIsCheckingSafety] = useState(true);
+
+  // 네비게이션 "실제 도달" 검증: navigate 호출이 조용히 실패해도(죽은 navRef,
+  // 리듀서 무시, 인증 리다이렉트 등) 기존 텔레메트리는 성공(navigate_screen)으로
+  // 기록됐다. 호출 1.5초 뒤 현재 라우트를 비교해 불일치면 원격 로그를 남긴다.
+  const verifyNavOutcome = useCallback(
+    (expectedScreen: string, context?: Record<string, any>) => {
+      setTimeout(() => {
+        try {
+          const actual = navRef.isReady()
+            ? navRef.getCurrentRoute()?.name ?? null
+            : null;
+          if (actual !== expectedScreen) {
+            L_NAV('nav verification FAILED', {
+              expectedScreen,
+              actual,
+              context,
+            });
+            logPushTap({
+              source: 'nav_verify',
+              outcome: 'nav_verify_failed',
+              data: { screen: expectedScreen },
+              detail: { expected: expectedScreen, actual, ...(context ?? {}) },
+            });
+          }
+        } catch {}
+      }, 1500);
+    },
+    [navRef],
+  );
 
   const navigateToScreen = useCallback(
     (screen: string, params?: any) => {
@@ -682,53 +731,80 @@ function App(): React.JSX.Element {
         });
         L_NAV('nav.navigate()', { targetScreen, casted });
         navRef.navigate(targetScreen as never, casted as never);
+        verifyNavOutcome(targetScreen, { params: casted });
       };
 
-      // CommunityPostDetail과 HelpDeskDetail은 탭 내부의 중첩 스택에 있으므로 별도 처리 필요
-      if (screen === 'CommunityPostDetail') {
-        // postId 추출: params에서 직접 또는 다양한 키 이름으로 시도
-        const postId = params?.postId ?? params?.id ?? params?.post_id;
-        if (postId) {
-          L_NAV('branch → CommunityTab nested detail', { postId });
-          navRef.navigate('MainApp', {
-            screen: 'CommunityTab',
-            params: {
-              screen: 'CommunityPostDetail',
-              params: { postId: Number(postId) },
-            },
-          } as never);
+      try {
+        // CommunityPostDetail과 HelpDeskDetail은 탭 내부의 중첩 스택에 있으므로 별도 처리 필요
+        if (screen === 'CommunityPostDetail') {
+          // postId 추출: params에서 직접 또는 다양한 키 이름으로 시도
+          const postId = params?.postId ?? params?.id ?? params?.post_id;
+          if (postId) {
+            L_NAV('branch → CommunityTab nested detail', { postId });
+            navRef.navigate('MainApp', {
+              screen: 'CommunityTab',
+              params: {
+                screen: 'CommunityPostDetail',
+                params: { postId: Number(postId) },
+              },
+            } as never);
+            verifyNavOutcome('CommunityPostDetail', { postId });
+          } else {
+            L_NAV('CommunityPostDetail missing postId, fallback to list', params);
+            // 글 상세로 못 가고 리스트로 폴백 = 사용자 입장에선 "이동 실패" → 기록
+            logPushTap({
+              source: 'nav_intent',
+              outcome: 'nav_fallback_list',
+              data: { screen },
+              detail: { reason: 'missing postId', params: params ?? null },
+            });
+            navRef.navigate('MainApp', {
+              screen: 'CommunityTab',
+              params: { screen: 'CommunityList' },
+            } as never);
+          }
+        } else if (screen === 'HelpDeskDetail') {
+          // questionId 추출: params에서 직접 또는 다양한 키 이름으로 시도
+          const questionId =
+            params?.questionId ?? params?.id ?? params?.question_id;
+          if (questionId) {
+            L_NAV('branch → HelpCenterTab nested detail', { questionId });
+            navRef.navigate('MainApp', {
+              screen: 'HelpCenterTab',
+              params: {
+                screen: 'HelpDeskDetail',
+                params: { questionId: Number(questionId) },
+              },
+            } as never);
+            verifyNavOutcome('HelpDeskDetail', { questionId });
+          } else {
+            L_NAV('HelpDeskDetail missing questionId, fallback to list', params);
+            logPushTap({
+              source: 'nav_intent',
+              outcome: 'nav_fallback_list',
+              data: { screen },
+              detail: { reason: 'missing questionId', params: params ?? null },
+            });
+            navRef.navigate('MainApp', {
+              screen: 'HelpCenterTab',
+              params: { screen: 'HelpDeskList' },
+            } as never);
+          }
         } else {
-          L_NAV('CommunityPostDetail missing postId, fallback to list', params);
-          navRef.navigate('MainApp', {
-            screen: 'CommunityTab',
-            params: { screen: 'CommunityList' },
-          } as never);
+          castAndNavigate(screen, params);
         }
-      } else if (screen === 'HelpDeskDetail') {
-        // questionId 추출: params에서 직접 또는 다양한 키 이름으로 시도
-        const questionId =
-          params?.questionId ?? params?.id ?? params?.question_id;
-        if (questionId) {
-          L_NAV('branch → HelpCenterTab nested detail', { questionId });
-          navRef.navigate('MainApp', {
-            screen: 'HelpCenterTab',
-            params: {
-              screen: 'HelpDeskDetail',
-              params: { questionId: Number(questionId) },
-            },
-          } as never);
-        } else {
-          L_NAV('HelpDeskDetail missing questionId, fallback to list', params);
-          navRef.navigate('MainApp', {
-            screen: 'HelpCenterTab',
-            params: { screen: 'HelpDeskList' },
-          } as never);
-        }
-      } else {
-        castAndNavigate(screen, params);
+      } catch (e: any) {
+        // navigate 호출 자체가 던진 경우 — 탭이 유실됨 → 반드시 기록
+        L_NAV('navigate threw', { screen, message: e?.message });
+        logPushTap({
+          source: 'nav_intent',
+          outcome: 'nav_error',
+          data: { screen },
+          detail: { message: String(e?.message || e), params: params ?? null },
+        });
       }
     },
-    [navRef],
+    [navRef, verifyNavOutcome],
   );
 
   const navigateToMaybeQueue = useCallback(
@@ -815,11 +891,12 @@ function App(): React.JSX.Element {
           data: remoteMessage?.data,
         });
         if (remoteMessage?.data) {
-          openFromPayloadOnce(
-            navigateToMaybeQueue,
-            remoteMessage.data,
-            'fcm_opened_app',
-          );
+          // _mid(FCM message id): consume 마커 키 — 이후 콜드스타트 캐시가
+          // 같은 메시지를 재반환해도 stale 재생으로 차단된다.
+          const data = remoteMessage.messageId
+            ? { ...remoteMessage.data, _mid: String(remoteMessage.messageId) }
+            : remoteMessage.data;
+          openFromPayloadOnce(navigateToMaybeQueue, data, 'fcm_opened_app');
         }
       },
     );
@@ -844,50 +921,68 @@ function App(): React.JSX.Element {
         L_PUSH('wireMessageHandlers bound (foreground listeners)'),
       );
 
-      // 4) 콜드/웜 스타트: 초기 알림(배너 탭으로 진입) 처리
-      let coldStartHandled = false;
-
-      const initialNotifee = await notifee.getInitialNotification();
-      L_PUSH('notifee.getInitialNotification', {
-        exists: !!initialNotifee,
-        data: initialNotifee?.notification?.data,
-      });
-      if (initialNotifee?.notification?.data) {
-        coldStartHandled = true;
-        await openFromPayloadOnce(
+      // 4~5) 콜드/웜 스타트 초기 알림 처리.
+      //  - 전체를 직렬화 체인에서 실행: AppState 'active' 드레인과 인터리빙되면
+      //    실제 탭이 stale 재생에게 마지막-네비게이션을 빼앗기는 레이스 실측(7/17).
+      //  - 순서: 네이티브 캡처(실제 런치 인텐트, 가장 신뢰) → notifee 초기 →
+      //    FCM 초기(삼성에서 이전 탭을 재반환하는 stale 캐시 실측 → consume 마커로 차단).
+      await runExclusivePushOp('coldstart-init', async () => {
+        // 4) 네이티브 인텐트 캡처 최우선: MainActivity가 실제 런치 인텐트에서
+        //    직접 읽은 값이라 RNFirebase 캐시보다 신뢰할 수 있다.
+        const nativeHandled = await drainNativeNotificationTap(
           navigateToMaybeQueue,
-          initialNotifee.notification.data,
-          'notifee_initial',
         );
-      }
+        let coldStartHandled = nativeHandled;
 
-      if (!coldStartHandled) {
-        const initialRemote = await messaging().getInitialNotification();
-        L_PUSH('messaging.getInitialNotification', {
-          exists: !!initialRemote,
-          data: initialRemote?.data,
-        });
-        if (initialRemote?.data) {
-          coldStartHandled = true;
-          await openFromPayloadOnce(
-            navigateToMaybeQueue,
-            initialRemote.data,
-            'fcm_initial',
+        if (!coldStartHandled) {
+          const initialNotifee = await notifee.getInitialNotification();
+          L_PUSH('notifee.getInitialNotification', {
+            exists: !!initialNotifee,
+            data: initialNotifee?.notification?.data,
+          });
+          if (initialNotifee?.notification?.data) {
+            coldStartHandled = true;
+            await openFromPayloadOnce(
+              navigateToMaybeQueue,
+              initialNotifee.notification.data,
+              'notifee_initial',
+              { fromInitialCache: true },
+            );
+          }
+        }
+
+        if (!coldStartHandled) {
+          const initialRemote = await messaging().getInitialNotification();
+          L_PUSH('messaging.getInitialNotification', {
+            exists: !!initialRemote,
+            data: initialRemote?.data,
+          });
+          if (initialRemote?.data) {
+            coldStartHandled = true;
+            const data = initialRemote.messageId
+              ? {
+                  ...initialRemote.data,
+                  _mid: String(initialRemote.messageId),
+                }
+              : initialRemote.data;
+            await openFromPayloadOnce(
+              navigateToMaybeQueue,
+              data,
+              'fcm_initial',
+              { fromInitialCache: true },
+            );
+          }
+        }
+
+        // 5) BG 컨텍스트에서 큐에 적재해 둔 탭을 한 번만 소진
+        await drainQueuedTap(navigateToMaybeQueue);
+
+        if (!coldStartHandled) {
+          L_PUSH(
+            'coldStart: no initial notification found (native & notifee & FCM all null)',
           );
         }
-      }
-
-      // 5) BG 컨텍스트에서 큐에 적재해 둔 탭을 한 번만 소진
-      await drainQueuedTap(navigateToMaybeQueue);
-
-      // 5b) 네이티브 인텐트 폴백: RNFirebase가 콜드스타트에서 payload를 누락해도
-      //     MainActivity가 캡처해 둔 알림 data로 복구(S24/S25 간헐 미이동 대응).
-      //     consume-once + nid 디듀프라 위 경로가 성공했으면 중복 실행되지 않는다.
-      await drainNativeNotificationTap(navigateToMaybeQueue);
-
-      if (!coldStartHandled) {
-        L_PUSH('coldStart: no initial notification found (notifee & FCM both null) — native fallback attempted');
-      }
+      });
     })();
 
     return () => {

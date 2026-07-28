@@ -164,7 +164,10 @@ describe('Push Notification Navigation - EventDetail', () => {
     });
 
     test('App.tsx calls drainNativeNotificationTap on cold start', () => {
-      expect(appSource).toMatch(/drainNativeNotificationTap\(navigateToMaybeQueue\)/);
+      // 호출이 멀티라인 포맷이어도 매칭되도록 공백/개행 허용
+      expect(appSource).toMatch(
+        /drainNativeNotificationTap\(\s*navigateToMaybeQueue,?\s*\)/,
+      );
     });
 
     test('PushIntentModule.kt exists and exposes getInitialNotificationData', () => {

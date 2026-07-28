@@ -83,6 +83,9 @@ class MainActivity : ReactActivity() {
       val value = extras.get(key)
       if (value is String) data[key] = value
     }
+    // FCM message id는 google.* 프리픽스라 위 루프에서 걸러진다 — 명시적으로 보존.
+    // JS 쪽 stale-replay 방지 consume 마커의 키(_mid)로 쓰인다(메시지 단위 유니크).
+    extras.getString("google.message_id")?.let { data["_mid"] = it }
 
     // 라우팅에 쓸 키가 하나라도 있어야 알림 탭으로 간주(런처 일반 실행은 무시).
     if (!hasRouteKey(data)) return

@@ -8,6 +8,7 @@ import {
 } from '@react-native-seoul/kakao-login';
 import { NaverLogin } from '@react-native-seoul/naver-login';
 import { appleAuth } from '@invertase/react-native-apple-authentication'; // ✅ Apple Auth 추가
+import { unregisterPushToken } from '../lib/push';
 
 const AuthContext = createContext(null);
 
@@ -103,6 +104,10 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
 
       Alert.alert('성공', '계정이 성공적으로 삭제되었습니다.');
+      // 삭제된 계정으로 알림이 가지 않도록 이 기기의 푸시 토큰도 정리
+      try {
+        await unregisterPushToken();
+      } catch (e) {}
       // supabase.auth.signOut()은 onAuthStateChange 리스너를 트리거하여
       // 자동으로 로그아웃 상태로 전환합니다.
       await supabase.auth.signOut();
@@ -125,6 +130,13 @@ export const AuthProvider = ({ children }) => {
       return supabase.auth.signInWithPassword({ email, password });
     },
     signOutUser: async () => {
+      // 로그아웃 전에 이 기기의 푸시 토큰을 비활성화한다.
+      // 안 하면 로그아웃한 기기가 계속 이 계정의 알림을 받고,
+      // 다중 기기 계정에서는 "활성 토큰" 목록에 유령으로 남는다.
+      // (signOut 이후엔 RLS 때문에 토큰 행 업데이트가 불가하므로 반드시 먼저)
+      try {
+        await unregisterPushToken();
+      } catch (e) {}
       await supabase.auth.signOut();
       try {
         await kakaoLogout();

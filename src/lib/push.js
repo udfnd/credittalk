@@ -179,6 +179,70 @@ async function markAndCheckSeen(key) {
   return false;
 }
 
+// ── 메시지 단위 consume 마커 ─────────────────────────────────────────────
+// RNFirebase messaging().getInitialNotification()이 삼성 기기에서 "이전 탭"
+// 메시지를 콜드스타트마다 재반환하거나(stale 캐시), recents 인텐트 재전달로
+// 과거 탭이 재생되는 문제가 실측됨(push_tap_logs 7/15·7/17·7/23 참조).
+// 탭이 실제 처리되면 메시지 키를 기록해 두고, 초기화 캐시 경로(fcm_initial /
+// notifee_initial / native_fallback)는 이미 소비된 메시지를 무시한다.
+// 키는 FCM message id(_mid) 우선 — 같은 nid로 재발송된 "새" 메시지는 _mid가
+// 달라 차단되지 않는다. _mid가 없으면 nid로 폴백.
+const CONSUMED_PREFIX = 'noti_msg_consumed:';
+const CONSUMED_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+function getConsumeKey(data = {}) {
+  const mid = data?._mid || data?.messageId;
+  if (mid) return `mid:${mid}`;
+  if (data?.nid) return `nid:${data.nid}`;
+  return null;
+}
+
+async function isTapConsumed(data) {
+  const key = getConsumeKey(data);
+  if (!key) return false;
+  try {
+    const prev = await AsyncStorage.getItem(CONSUMED_PREFIX + key);
+    if (!prev) return false;
+    const ts = Number(prev);
+    return Number.isFinite(ts) && Date.now() - ts < CONSUMED_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function markTapConsumed(data) {
+  const key = getConsumeKey(data);
+  if (!key) return;
+  try {
+    await AsyncStorage.setItem(CONSUMED_PREFIX + key, String(Date.now()));
+  } catch {}
+}
+
+// ── 푸시 처리 직렬화 ────────────────────────────────────────────────────
+// 콜드스타트 초기화 시퀀스(App.tsx)와 AppState 'active' 드레인, 탭 큐 드레인이
+// 동시에 달리면 "실제 탭"이 "stale 재생"에게 마지막-네비게이션 자리를 빼앗기는
+// 레이스가 실측됨(7/17 04:24 로그). 모든 푸시 인텐트 처리를 한 체인에서
+// 순차 실행해 인터리빙을 제거한다.
+let pushOpChain = Promise.resolve();
+
+export function runExclusivePushOp(label, fn) {
+  const run = async () => {
+    try {
+      return await fn();
+    } catch (e) {
+      console.warn(`[PUSH] exclusive op "${label}" error:`, e?.message || e);
+      return undefined;
+    }
+  };
+  const p = pushOpChain.then(run);
+  // 다음 작업이 이전 실패에 막히지 않게 체인은 항상 resolve로 유지
+  pushOpChain = p.then(
+    () => {},
+    () => {},
+  );
+  return p;
+}
+
 function getTapKeyFromData(data = {}) {
   // 네이티브 폴백 캡처 data에는 nid/collapse_key/messageId/title/body가 모두
   // 없을 수 있음. 그때 키가 상수("{}")로 붕괴하면 60초 내 서로 다른 알림의
@@ -222,7 +286,11 @@ export async function displayOnce(remote, source = 'unknown') {
 
   await ensureNotificationChannel();
 
-  const { title, body, data, image } = picked;
+  const { title, body, data: pickedData, image } = picked;
+  // FCM message id를 데이터에 보존: 탭 시 consume 마커 키로 사용(stale 재생 차단)
+  const data = remote?.messageId
+    ? { ...pickedData, _mid: String(remote.messageId) }
+    : pickedData;
 
   // 4) 같은 메시지는 같은 id로 '교체'되도록 보장 (nid 없으면 key로 fallback)
   const stableId =
@@ -342,7 +410,23 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
 // 같은 탭을 중복 네비게이션하는 것만 차단. 짧은 TTL이라 이후 동일 nid 재탭은 정상 동작.
 const TAP_DEDUP_TTL_MS = 60 * 1000; // 60s
 
-export async function openFromPayloadOnce(navigateTo, data = {}, source = 'unknown') {
+export async function openFromPayloadOnce(
+  navigateTo,
+  data = {},
+  source = 'unknown',
+  { fromInitialCache = false } = {},
+) {
+  // 초기화 캐시 경로(fcm_initial/notifee_initial/native_fallback)는 과거에
+  // 이미 처리된 탭을 재반환할 수 있다 → consume 마커로 차단하고 로그를 남긴다.
+  if (fromInitialCache && (await isTapConsumed(data))) {
+    console.log('[PUSH] openFromPayloadOnce stale replay skip', {
+      source,
+      key: getConsumeKey(data),
+    });
+    logPushTap({ source, outcome: 'stale_replay_skip', data });
+    return;
+  }
+
   const key = getTapKeyFromData(data);
   const marker = `noti_tap:${key}`;
   const prev = key ? await AsyncStorage.getItem(marker) : null;
@@ -357,6 +441,8 @@ export async function openFromPayloadOnce(navigateTo, data = {}, source = 'unkno
     }
   }
   if (key) await AsyncStorage.setItem(marker, String(Date.now()));
+  // 실제 처리로 진입 → 이후 콜드스타트 캐시가 이 메시지를 재반환해도 무시되도록 기록
+  await markTapConsumed(data);
   return openFromPayload(navigateTo, data, source);
 }
 
@@ -408,11 +494,26 @@ export async function drainQueuedTap(navigateTo) {
     for (const item of arr) {
       const data = item?.data || {};
       console.log('[NAV:INTENT] draining one', data);
-      await openFromPayloadOnce(navigateTo, data, 'notifee_queue');
+      try {
+        await openFromPayloadOnce(navigateTo, data, 'notifee_queue');
+      } catch (e) {
+        // 큐는 이미 비웠으므로 여기서 터지면 탭이 조용히 유실된다 → 반드시 기록
+        logPushTap({
+          source: 'notifee_queue',
+          outcome: 'error',
+          data,
+          detail: { message: String(e?.message || e), phase: 'drain_item' },
+        });
+      }
     }
     console.log('[NAV:INTENT] drainQueuedTap done');
   } catch (e) {
     console.warn('[NAV:INTENT] drainQueuedTap error:', e?.message || e);
+    logPushTap({
+      source: 'notifee_queue',
+      outcome: 'error',
+      detail: { message: String(e?.message || e), phase: 'drain' },
+    });
   }
 }
 
@@ -420,20 +521,27 @@ export async function drainQueuedTap(navigateTo) {
 // getInitialNotification/onNotificationOpenedApp 이 payload를 누락해도,
 // MainActivity가 인텐트 extras에서 직접 캡처해 둔 알림 data를 읽어 네비게이션한다.
 // (consume-once + openFromPayloadOnce nid 디듀프로 FCM 표준 경로와 중복 실행 방지)
+/** @returns {Promise<boolean>} 라우팅 가능한 탭 data를 발견해 처리(또는 스킵 판정)했으면 true */
 export async function drainNativeNotificationTap(navigateTo) {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android') return false;
   try {
     const mod = NativeModules.PushIntentModule;
-    if (!mod?.getInitialNotificationData) return;
+    if (!mod?.getInitialNotificationData) return false;
     const data = await mod.getInitialNotificationData();
     if (data && (data.link_url || data.url || data.screen)) {
       console.log('[NAV:INTENT] drainNativeNotificationTap got data', data);
-      await openFromPayloadOnce(navigateTo, data, 'native_fallback');
-    } else {
-      console.log('[NAV:INTENT] drainNativeNotificationTap: nothing pending');
+      // 액티비티 인텐트에서 직접 캡처한 값 = 실제 앱을 연 탭(가장 신뢰 가능).
+      // 단 recents 재전달로 과거 인텐트가 다시 올 수 있으므로 initial-cache 취급.
+      await openFromPayloadOnce(navigateTo, data, 'native_fallback', {
+        fromInitialCache: true,
+      });
+      return true;
     }
+    console.log('[NAV:INTENT] drainNativeNotificationTap: nothing pending');
+    return false;
   } catch (e) {
     console.warn('[NAV:INTENT] drainNativeNotificationTap error', e?.message || e);
+    return false;
   }
 }
 
@@ -451,7 +559,10 @@ export async function wireMessageHandlers(navigateTo) {
 
   // 탭이 큐에 적재되는 즉시 소비(늦게 도착한 백그라운드/콜드스타트 PRESS 대응).
   // 리마운트 시에도 최신 nav로 재바인딩되어야 하므로 가드보다 먼저 실행.
-  setTapQueueListener(() => drainQueuedTap(nav));
+  // 콜드스타트 초기화 시퀀스와의 인터리빙 방지를 위해 직렬화 체인에서 실행.
+  setTapQueueListener(() =>
+    runExclusivePushOp('tap-queue-drain', () => drainQueuedTap(nav)),
+  );
 
   if (global.__PUSH_FG_BOUND__) return;
   global.__PUSH_FG_BOUND__ = true;
@@ -469,17 +580,20 @@ export async function wireMessageHandlers(navigateTo) {
       console.log(
         '[FG] onForegroundEvent PRESS/ACTION_PRESS, queue & open once',
       );
+      // queueTapIntent가 tapQueueListener(직렬화된 드레인)를 호출하므로
+      // 여기서 별도 drain을 중복 실행하지 않는다.
       await queueTapIntent(detail?.notification?.data || {});
-      await drainQueuedTap(nav);
     }
   });
 
   AppState.addEventListener('change', state => {
     if (state === 'active') {
       console.log('[NAV:INTENT] AppState active → drain queued + native tap');
-      drainQueuedTap(nav);
-      // 웜 스타트(백그라운드 알림 탭 → 복귀) 폴백
-      drainNativeNotificationTap(nav);
+      runExclusivePushOp('appstate-drain', async () => {
+        await drainQueuedTap(nav);
+        // 웜 스타트(백그라운드 알림 탭 → 복귀) 폴백
+        await drainNativeNotificationTap(nav);
+      });
     }
   });
 }
