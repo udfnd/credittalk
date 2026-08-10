@@ -243,6 +243,52 @@ export function runExclusivePushOp(label, fn) {
   return p;
 }
 
+// ── 표시 시점 payload 백업 ──────────────────────────────────────────────
+// 삼성 OneUI(S24/S25 포함, And 12~16)에서 notifee가 표시한 알림을 탭하면
+// PRESS 이벤트의 notification.data가 비어 도착하는 사례 실측(push_tap_logs
+// no_target 주 45건, 전원 notifee_initial/notifee_queue 경로). FCM 경로의
+// 네이티브 인텐트 캡처 폴백은 notifee 알림 인텐트를 읽지 못하므로, 표시할 때
+// notification id 기준으로 data를 백업해 두고 탭 data에 라우팅 필드가 없으면
+// 복원한다.
+const PAYLOAD_BACKUP_PREFIX = 'noti_payload:';
+const PAYLOAD_BACKUP_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d
+
+export function hasRoutingFields(data = {}) {
+  return !!(data?.screen || data?.link_url || data?.url);
+}
+
+async function backupPayload(id, data = {}) {
+  if (!id || !hasRoutingFields(data)) return;
+  try {
+    await AsyncStorage.setItem(
+      PAYLOAD_BACKUP_PREFIX + id,
+      JSON.stringify({ ts: Date.now(), data }),
+    );
+  } catch {}
+}
+
+// 탭 이벤트의 notification에서 data를 꺼내되, 라우팅 필드가 유실됐으면
+// 표시 시점 백업에서 복원한다. 복원 시 _restored 마커를 남겨 텔레메트리로
+// 복원 빈도를 추적할 수 있게 한다.
+export async function extractTapData(notification) {
+  const data = notification?.data || {};
+  if (hasRoutingFields(data)) return data;
+  const id = notification?.id;
+  if (!id) return data;
+  try {
+    const raw = await AsyncStorage.getItem(PAYLOAD_BACKUP_PREFIX + id);
+    if (!raw) return data;
+    const { ts, data: saved } = JSON.parse(raw) || {};
+    if (!Number.isFinite(ts) || Date.now() - ts > PAYLOAD_BACKUP_TTL_MS)
+      return data;
+    if (!hasRoutingFields(saved)) return data;
+    console.log('[PUSH] tap data restored from backup', { id });
+    return { ...saved, ...data, _restored: '1' };
+  } catch {
+    return data;
+  }
+}
+
 function getTapKeyFromData(data = {}) {
   // 네이티브 폴백 캡처 data에는 nid/collapse_key/messageId/title/body가 모두
   // 없을 수 있음. 그때 키가 상수("{}")로 붕괴하면 60초 내 서로 다른 알림의
@@ -295,6 +341,9 @@ export async function displayOnce(remote, source = 'unknown') {
   // 4) 같은 메시지는 같은 id로 '교체'되도록 보장 (nid 없으면 key로 fallback)
   const stableId =
     (remote?.data && (remote.data.nid || remote.data.collapse_key)) || key;
+
+  // 탭 이벤트에서 data가 유실되는 삼성 사례 대비: 표시 전에 id→data 백업
+  await backupPayload(stableId, data);
 
   const androidOptions = {
     channelId: CHANNEL_ID,
@@ -397,7 +446,17 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
       await openExternalUrlBestEffort(externalUrl);
     } else {
       console.log('[NAV:INTENT] nothing to open, payload=', data);
-      logPushTap({ source, outcome: 'no_target', data });
+      // keys: 탭 data가 통째로 빈 것인지(키 0개) 라우팅 필드만 빠진 것인지 구분,
+      // restored: 백업 복원을 거쳤는데도 대상이 없었는지 추적
+      logPushTap({
+        source,
+        outcome: 'no_target',
+        data,
+        detail: {
+          keys: Object.keys(data || {}),
+          restored: data?._restored === '1',
+        },
+      });
     }
   } catch (e) {
     console.warn('[Push] openFromPayload error:', e?.message || e);
@@ -582,7 +641,7 @@ export async function wireMessageHandlers(navigateTo) {
       );
       // queueTapIntent가 tapQueueListener(직렬화된 드레인)를 호출하므로
       // 여기서 별도 drain을 중복 실행하지 않는다.
-      await queueTapIntent(detail?.notification?.data || {});
+      await queueTapIntent(await extractTapData(detail?.notification));
     }
   });
 

@@ -40,6 +40,7 @@ import {
   drainQueuedTap,
   drainNativeNotificationTap,
   runExclusivePushOp,
+  extractTapData,
 } from './src/lib/push';
 import { logPushTap } from './src/lib/pushTapLog';
 
@@ -940,14 +941,20 @@ function App(): React.JSX.Element {
             exists: !!initialNotifee,
             data: initialNotifee?.notification?.data,
           });
-          if (initialNotifee?.notification?.data) {
-            coldStartHandled = true;
-            await openFromPayloadOnce(
-              navigateToMaybeQueue,
-              initialNotifee.notification.data,
-              'notifee_initial',
-              { fromInitialCache: true },
-            );
+          if (initialNotifee?.notification) {
+            // 삼성에서 초기 알림의 data가 비어 오는 사례 대비: 표시 시점 백업에서 복원
+            const tapData = await extractTapData(initialNotifee.notification);
+            // 빈 탭({})으로 콜드스타트를 "처리됨" 판정하면 뒤의 FCM 초기 경로까지
+            // 건너뛰어 탭이 유실되므로, 내용 있는 data만 처리한다.
+            if (Object.keys(tapData).length > 0) {
+              coldStartHandled = true;
+              await openFromPayloadOnce(
+                navigateToMaybeQueue,
+                tapData,
+                'notifee_initial',
+                { fromInitialCache: true },
+              );
+            }
           }
         }
 

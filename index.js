@@ -11,6 +11,7 @@ import { name as appName } from './app.json';
 import {
   displayOnce,
   ensureNotificationChannel,
+  extractTapData,
   queueTapIntent,
 } from './src/lib/push';
 
@@ -33,7 +34,8 @@ if (!global.__PUSH_BG_BOUND__) {
 
   notifee.onBackgroundEvent(async ({ type, detail }) => {
     if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
-      await queueTapIntent(detail?.notification?.data || {});
+      // 삼성에서 PRESS 이벤트의 data가 비어 오는 사례 대비: 표시 시점 백업에서 복원
+      await queueTapIntent(await extractTapData(detail?.notification));
       if (detail?.notification?.id) {
         try {
           await notifee.cancelNotification(detail.notification.id);
