@@ -430,7 +430,7 @@ export default function HelpDeskCreateScreen({ navigation }) {
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             분석 의뢰를 하고 싶은 자료가 있으실 경우, 카카오톡 아이디
-            “leekd5904”를 추가하신 뒤, 성함을 밝히시고 자료를 첨부해주세요.
+            “lekd5904”를 추가하신 뒤, 성함을 밝히시고 자료를 첨부해주세요.
           </Text>
         </View>
 
