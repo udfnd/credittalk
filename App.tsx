@@ -943,9 +943,24 @@ function App(): React.JSX.Element {
           });
           if (initialNotifee?.notification) {
             // 삼성에서 초기 알림의 data가 비어 오는 사례 대비: 표시 시점 백업에서 복원
+            // (blind restore는 금지: getInitialNotification은 탭 없는 일반 실행에서도
+            //  stale 알림을 재반환할 수 있어 오발동 위험 — PRESS 경로가 큐로 커버)
             const tapData = await extractTapData(initialNotifee.notification);
             // 빈 탭({})으로 콜드스타트를 "처리됨" 판정하면 뒤의 FCM 초기 경로까지
             // 건너뛰어 탭이 유실되므로, 내용 있는 data만 처리한다.
+            // 조용한 스킵은 유실 규모를 숨기므로 텔레메트리는 남긴다(가드 자체는 유지).
+            if (Object.keys(tapData).length === 0) {
+              // no_target(실패 지표)과 섞이지 않게 별도 outcome으로 기록:
+              // 이 가드는 "정상 방어"(빈 초기 알림 무시, 실제 탭은 큐가 처리)와
+              // "유실"(큐도 비었던 경우)이 섞여 있어 원격 판별용 로그만 남긴다.
+              logPushTap({
+                source: 'notifee_initial',
+                outcome: 'empty_initial_skip',
+                detail: {
+                  hasId: !!initialNotifee.notification?.id,
+                },
+              });
+            }
             if (Object.keys(tapData).length > 0) {
               coldStartHandled = true;
               await openFromPayloadOnce(

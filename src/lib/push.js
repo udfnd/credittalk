@@ -188,7 +188,11 @@ async function markAndCheckSeen(key) {
 // 키는 FCM message id(_mid) 우선 — 같은 nid로 재발송된 "새" 메시지는 _mid가
 // 달라 차단되지 않는다. _mid가 없으면 nid로 폴백.
 const CONSUMED_PREFIX = 'noti_msg_consumed:';
-const CONSUMED_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+// 실측 탭 지연 최대 84h(push_tap_logs) — 24h로 두면 소비 마커가 먼저 만료되어
+// 이미 방문한 payload가 blind restore로 재복원될 수 있어 백업 TTL(7d)과 맞춘다.
+// 같은 메시지의 순수 재탭은 존재하지 않으므로(탭 시 알림이 쉐이드에서 제거됨)
+// 마커 수명 연장의 부작용은 없다.
+const CONSUMED_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d (= PAYLOAD_BACKUP_TTL_MS)
 
 function getConsumeKey(data = {}) {
   const mid = data?._mid || data?.messageId;
@@ -252,9 +256,30 @@ export function runExclusivePushOp(label, fn) {
 // 복원한다.
 const PAYLOAD_BACKUP_PREFIX = 'noti_payload:';
 const PAYLOAD_BACKUP_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7d
+// 완전 빈 PRESS(id까지 소거) 복구용 최근 표시 인덱스: [{id, ts}] 최신이 마지막
+const PAYLOAD_INDEX_KEY = 'noti_payload_index';
+const PAYLOAD_INDEX_MAX = 20;
+// blind 복원 후보 자격 시간창: 백업 TTL(7d)보다 짧게 둔다. 스와이프로 지워져
+// id 소거 DISMISSED로 인덱스에서 못 지운 엔트리가 후보를 오염(오이동 또는
+// 복수 후보로 복원 마비)시키는 기간을 제한. 실측 no_target 탭 지연은 전건
+// 24h 이내라 48h면 정상 케이스를 덮는다.
+const BLIND_CANDIDATE_WINDOW_MS = 48 * 60 * 60 * 1000; // 48h
 
 export function hasRoutingFields(data = {}) {
   return !!(data?.screen || data?.link_url || data?.url);
+}
+
+// 인덱스 read-modify-write 직렬화: displayOnce는 FCM headless와 포그라운드에서
+// 병렬 실행될 수 있어, 비원자적 RMW가 인덱스 엔트리를 유실시킨다(적대적 검증에서
+// Promise.all(displayOnce×2)로 재현됨). 전용 체인이라 데드락 여지 없음.
+let indexWriteChain = Promise.resolve();
+function runExclusiveIndexWrite(fn) {
+  const p = indexWriteChain.then(fn, fn);
+  indexWriteChain = p.then(
+    () => {},
+    () => {},
+  );
+  return p;
 }
 
 async function backupPayload(id, data = {}) {
@@ -264,17 +289,217 @@ async function backupPayload(id, data = {}) {
       PAYLOAD_BACKUP_PREFIX + id,
       JSON.stringify({ ts: Date.now(), data }),
     );
+    // 인덱스는 빈 PRESS 복구(안드로이드 전용)에만 쓰이므로 iOS는 적재 생략
+    if (Platform.OS !== 'android') return;
+    await runExclusiveIndexWrite(async () => {
+      const raw = (await AsyncStorage.getItem(PAYLOAD_INDEX_KEY)) || '[]';
+      let arr = [];
+      try {
+        arr = JSON.parse(raw) || [];
+      } catch {
+        arr = [];
+      }
+      arr = arr.filter(
+        e =>
+          e?.id &&
+          e.id !== id &&
+          Number.isFinite(e.ts) &&
+          Date.now() - e.ts < PAYLOAD_BACKUP_TTL_MS,
+      );
+      arr.push({ id, ts: Date.now() });
+      if (arr.length > PAYLOAD_INDEX_MAX) arr = arr.slice(-PAYLOAD_INDEX_MAX);
+      await AsyncStorage.setItem(PAYLOAD_INDEX_KEY, JSON.stringify(arr));
+    });
   } catch {}
+}
+
+// 공용 후보 수집: "인덱스에 있고 + 지금 쉐이드에 없고 + 시간창 내 + 백업이
+// 살아 있고 라우팅 필드 보유 + 아직 미소비"인 항목을 최신순으로 모은다.
+// PRESS 복원(후보 1건이면 그것이 방금 탭된 알림)과 id 소거 DISMISSED 정리
+// (후보 1건이면 그것이 방금 스와이프된 알림)가 같은 판별식을 공유한다.
+// 반환: { candidates, indexLen, dispN, matched }
+//  - dispN: 관측된 쉐이드 알림 수, matched: 그중 인덱스와 id가 일치한 수.
+//    OneUI가 Notification.extras까지 지워 notifee id가 합성 폴백으로 떨어지면
+//    "쉐이드에 있는데 없다"고 오판하므로, dispN>0 && matched=0 패턴을 원격
+//    텔레메트리로 감지하기 위한 필드다. 관측 실패 시 dispN=-1(후보 판정 불가).
+async function collectBlindCandidates() {
+  const empty = (indexLen, dispN = 0, matched = 0) => ({
+    candidates: [],
+    indexLen,
+    dispN,
+    matched,
+  });
+  let arr = [];
+  try {
+    const raw = await AsyncStorage.getItem(PAYLOAD_INDEX_KEY);
+    if (!raw) return empty(0);
+    try {
+      arr = JSON.parse(raw) || [];
+    } catch {
+      return empty(0);
+    }
+  } catch {
+    return empty(-1);
+  }
+
+  let displayedIds;
+  try {
+    const displayed = (await notifee.getDisplayedNotifications()) || [];
+    displayedIds = new Set(
+      displayed.map(d => d?.notification?.id ?? d?.id).filter(Boolean),
+    );
+  } catch (e) {
+    // 쉐이드를 못 읽으면 무엇이 사라졌는지 특정할 수 없다 → 판정 포기(fail-safe)
+    console.warn('[PUSH] getDisplayedNotifications failed', e?.message || e);
+    return empty(arr.length, -1);
+  }
+  const matched = arr.filter(e => displayedIds.has(String(e?.id))).length;
+
+  const candidates = [];
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const entry = arr[i];
+    // 엔트리 하나가 깨져도 나머지 후보 스캔은 계속한다
+    try {
+      if (!entry?.id || !Number.isFinite(entry.ts)) continue;
+      if (Date.now() - entry.ts > BLIND_CANDIDATE_WINDOW_MS) continue;
+      if (displayedIds.has(String(entry.id))) continue; // 아직 표시 중 = 탭/스와이프 아님
+      const rawBackup = await AsyncStorage.getItem(
+        PAYLOAD_BACKUP_PREFIX + entry.id,
+      );
+      if (!rawBackup) continue;
+      const { ts, data: saved } = JSON.parse(rawBackup) || {};
+      if (!Number.isFinite(ts) || Date.now() - ts > PAYLOAD_BACKUP_TTL_MS)
+        continue;
+      if (!hasRoutingFields(saved)) continue;
+      if (await isTapConsumed(saved)) continue;
+      candidates.push({ id: entry.id, saved });
+      if (candidates.length > 1) break; // 소비처가 전부 "정확히 1건"만 쓰므로 조기 종료
+    } catch {
+      continue;
+    }
+  }
+  return { candidates, indexLen: arr.length, dispN: displayedIds.size, matched };
+}
+
+// 스와이프 dismiss된 알림은 탭될 수 없으므로 blind 복원 후보에서 즉시 제거한다.
+// (쉐이드 부재만으로는 "탭으로 사라짐"과 "스와이프로 사라짐"을 구분할 수 없어,
+// DISMISSED 이벤트로 지우지 않으면 라우팅 없는 알림 탭이 스와이프된 링크로
+// 오이동하거나, 후보 복수로 blind 복원이 시간창 내내 마비된다)
+// id가 소거된 DISMISSED(OneUI가 PRESS와 같은 방식으로 비워 보내는 경우)는
+// PRESS 복원과 대칭으로 처리: 방금 쉐이드에서 사라진 미소비 후보가 정확히
+// 1건이면 그것이 스와이프된 알림이므로 제거하고, 애매하면 아무것도 안 한다.
+export async function removeFromDisplayIndex(id) {
+  try {
+    let targetId = id;
+    if (!targetId) {
+      if (Platform.OS !== 'android') return;
+      const { candidates } = await collectBlindCandidates();
+      if (candidates.length !== 1) return;
+      targetId = candidates[0].id;
+    }
+    await runExclusiveIndexWrite(async () => {
+      const raw = (await AsyncStorage.getItem(PAYLOAD_INDEX_KEY)) || '[]';
+      let arr = [];
+      try {
+        arr = JSON.parse(raw) || [];
+      } catch {
+        arr = [];
+      }
+      const next = arr.filter(e => String(e?.id) !== String(targetId));
+      if (next.length !== arr.length) {
+        console.log('[PUSH] removed dismissed entry from display index', {
+          id: targetId,
+        });
+        await AsyncStorage.setItem(PAYLOAD_INDEX_KEY, JSON.stringify(next));
+      }
+    });
+  } catch {}
+}
+
+// 완전 빈 PRESS(OneUI가 notification을 id·data 통째로 비워 전달 — v36 id 기반
+// 복원이 배포 후 성공 0건으로 실측된 원인) 복구.
+//
+// 추측이 아니라 관측으로 대상을 좁힌다: notifee 알림은 autoCancel(기본 true)로
+// 탭 직후 쉐이드에서 사라지므로, 후보(collectBlindCandidates)가 정확히 1건일
+// 때만 그것을 방금 탭된 알림으로 보고 복원한다. 라우팅 없는 알림을 탭한 경우
+// (동일하게 빈 PRESS로 도착) 쌓여 있던 다른 알림들은 여전히 쉐이드에 보이므로
+// 후보에서 배제된다 → 오이동 방지. 0건/복수(스와이프로 지운 미탭 알림이 섞인
+// 경우)나 쉐이드 관측 실패 시에는 복원을 포기한다(오이동보다 홈 유지가 안전).
+// 연속 탭은 앞선 탭이 소비 마커를 남기므로 매번 후보 1건으로 수렴한다.
+async function restoreLatestDisplayedPayload() {
+  try {
+    const { candidates, indexLen, dispN, matched } =
+      await collectBlindCandidates();
+    if (candidates.length !== 1)
+      return {
+        payload: null,
+        indexLen,
+        candidates: dispN === -1 ? -1 : candidates.length,
+        dispN,
+        matched,
+      };
+    const { id, saved } = candidates[0];
+    console.log('[PUSH] blind-restored displayed payload', { id });
+    return {
+      payload: {
+        ...saved,
+        _restored: '2',
+        _restoredId: String(id),
+        _dispn: String(dispN),
+        _match: String(matched),
+      },
+      indexLen,
+      candidates: 1,
+      dispN,
+      matched,
+    };
+  } catch {}
+  return { payload: null, indexLen: -1, candidates: 0, dispN: -1, matched: 0 };
 }
 
 // 탭 이벤트의 notification에서 data를 꺼내되, 라우팅 필드가 유실됐으면
 // 표시 시점 백업에서 복원한다. 복원 시 _restored 마커를 남겨 텔레메트리로
 // 복원 빈도를 추적할 수 있게 한다.
-export async function extractTapData(notification) {
+// allowBlindRestore: 실제 사용자 탭이 확실한 PRESS 이벤트 경로에서만 true.
+// (getInitialNotification류 초기화 캐시는 일반 실행에서도 빈 알림을 재반환할
+// 수 있어, blind 복원을 허용하면 탭 없이 앱만 열어도 과거 알림으로 이동하는
+// 오발동 위험이 있으므로 금지)
+export async function extractTapData(
+  notification,
+  { allowBlindRestore = false } = {},
+) {
   const data = notification?.data || {};
   if (hasRoutingFields(data)) return data;
   const id = notification?.id;
-  if (!id) return data;
+  if (!id) {
+    // OneUI 소거 시그니처: id·data 모두 빈 PRESS(실측: 필드의 no_target 전건이
+    // 이 형태). 라우팅 없는 알림의 탭도 같은 시그니처로 오므로, 복원 함수가
+    // 쉐이드 관측으로 후보를 좁혀 1건일 때만 복원한다. 삼성 OneUI 한정 증상이라
+    // 안드로이드에서만 시도(iOS는 실익 없이 오이동 위험만 추가).
+    if (
+      allowBlindRestore &&
+      Platform.OS === 'android' &&
+      Object.keys(data).length === 0
+    ) {
+      const { payload, indexLen, candidates, dispN, matched } =
+        await restoreLatestDisplayedPayload();
+      if (payload) return payload;
+      // 복원 실패 진단 마커: id 부재(_noid), 당시 인덱스 크기(_idx), 후보 수
+      // (_cand: -1=쉐이드 관측 실패), 쉐이드 알림 수/인덱스 일치 수
+      // (_dispn/_match: OneUI가 쉐이드 id까지 합성 폴백으로 바꾸는 기기 감지),
+      // 발생 시각(_ts: 60초 dedup 키 붕괴로 연타 진단이 dedup_skip에 먹히는 것
+      // 방지). underscore 필터로 화면 params에는 새지 않는다.
+      return {
+        _noid: '1',
+        _idx: String(indexLen),
+        _cand: String(candidates),
+        _dispn: String(dispN),
+        _match: String(matched),
+        _ts: String(Date.now()),
+      };
+    }
+    return data;
+  }
   try {
     const raw = await AsyncStorage.getItem(PAYLOAD_BACKUP_PREFIX + id);
     if (!raw) return data;
@@ -303,6 +528,9 @@ function getTapKeyFromData(data = {}) {
       s: data?.screen,
       l: data?.link_url || data?.url,
       p: data?.params,
+      // 빈 PRESS 진단 마커(_ts): 키가 상수로 붕괴해 연속 빈 탭의 no_target
+      // 진단 로그가 dedup_skip으로 먹히는 것을 막는다(네비게이션은 어차피 없음)
+      n: data?._ts,
     })
   );
 }
@@ -426,8 +654,27 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
     }
 
     // rest에서 불필요한 메타데이터 필드 제거하고 파싱된 params 병합
+    // (_mid/_restored/_restoredId 등 내부 마커도 화면 params로 새지 않게 제거)
     const { params: _params, type: _type, nid: _nid, ...cleanRest } = rest;
-    const finalParams = { ...cleanRest, ...parsedParams };
+    const finalParams = Object.fromEntries(
+      Object.entries({ ...cleanRest, ...parsedParams }).filter(
+        ([k]) => !k.startsWith('_'),
+      ),
+    );
+
+    // 백업 복원을 거친 탭인지 성공 로그에도 남겨 복원 효과를 원격 검증한다.
+    // blind 복원(_restored='2')은 쉐이드 관측치(dispN/matched)도 함께 남겨
+    // "잘못된 복원"(dispN>0 && matched=0 기기)을 원격에서 판별할 수 있게 한다.
+    const restoredDetail = data?._restored
+      ? {
+          detail: {
+            restored: data._restored,
+            ...(data?._dispn !== undefined
+              ? { dispN: Number(data._dispn), matched: Number(data._match) }
+              : {}),
+          },
+        }
+      : {};
 
     if (screen && ALLOWED_SCREENS.has(screen)) {
       console.log('[NAV:INTENT] openFromPayload navigate', {
@@ -435,14 +682,14 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
         params: finalParams,
       });
       navigateTo?.(screen, finalParams);
-      logPushTap({ source, outcome: 'navigate_screen', data });
+      logPushTap({ source, outcome: 'navigate_screen', data, ...restoredDetail });
       return;
     }
 
     const externalUrl = link_url || url;
     if (typeof externalUrl === 'string') {
       console.log('[NAV:INTENT] open external url', externalUrl);
-      logPushTap({ source, outcome: 'open_link', data });
+      logPushTap({ source, outcome: 'open_link', data, ...restoredDetail });
       await openExternalUrlBestEffort(externalUrl);
     } else {
       console.log('[NAV:INTENT] nothing to open, payload=', data);
@@ -454,7 +701,19 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
         data,
         detail: {
           keys: Object.keys(data || {}),
-          restored: data?._restored === '1',
+          // '1'=id 기반 복원, '2'=blind 복원, null=복원 안 거침(성공 로그와 동형)
+          restored: data?._restored ?? null,
+          // 빈 PRESS(blind restore 시도) 실패 진단: id 부재 + 당시 인덱스
+          // 크기 + 후보 수(-1=쉐이드 관측 실패) + 쉐이드 관측치
+          ...(data?._noid === '1'
+            ? {
+                hasId: false,
+                indexLen: Number(data?._idx),
+                candidates: Number(data?._cand),
+                dispN: Number(data?._dispn),
+                matched: Number(data?._match),
+              }
+            : {}),
         },
       });
     }
@@ -641,7 +900,14 @@ export async function wireMessageHandlers(navigateTo) {
       );
       // queueTapIntent가 tapQueueListener(직렬화된 드레인)를 호출하므로
       // 여기서 별도 drain을 중복 실행하지 않는다.
-      await queueTapIntent(await extractTapData(detail?.notification));
+      await queueTapIntent(
+        await extractTapData(detail?.notification, {
+          allowBlindRestore: true,
+        }),
+      );
+    } else if (type === EventType.DISMISSED) {
+      // 스와이프로 지운 알림은 blind 복원 후보에서 제거(id 소거 시 best-effort)
+      await removeFromDisplayIndex(detail?.notification?.id);
     }
   });
 

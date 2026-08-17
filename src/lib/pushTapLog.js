@@ -15,6 +15,8 @@ import { supabase } from './supabaseClient';
 //   no_target         payload에 이동 대상 없음
 //   dedup_skip        60초 내 동일 탭 중복 → 스킵
 //   stale_replay_skip 콜드스타트 캐시가 과거 탭을 재반환 → 차단(정상 방어)
+//   empty_initial_skip 콜드스타트 notifee 초기 알림이 빈 채 도착 → 무시
+//                     (실제 탭은 큐 경로가 처리하는 정상 방어와 유실이 혼재)
 //   nav_verify_failed navigate 호출 1.5초 후에도 대상 화면 미도달(실패 확정)
 //   nav_fallback_list id 누락으로 상세 대신 리스트로 폴백(사용자 관점 실패)
 //   nav_error         navigate 호출 자체가 예외
