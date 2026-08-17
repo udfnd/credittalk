@@ -24,7 +24,11 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useNavigation } from '@react-navigation/native';
 import { ensureSafeContent } from '../lib/contentSafety';
-import { blockUser, buildBlockSuccessMessage } from '../lib/blockUser';
+import {
+  blockUser,
+  buildBlockSuccessMessage,
+  isCommentBlocked,
+} from '../lib/blockUser';
 
 /**
  * 공용 입력 컴포넌트
@@ -413,8 +417,10 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
 
       if (error) throw error;
 
+      // blockedIds는 auth uuid 목록 — comments.user_id(bigint)가 아니라
+      // 조인된 users.auth_user_id로 비교해야 실제로 걸러진다
       const filtered = (data || []).filter(
-        c => !blockedIds.includes(c.user_id),
+        c => !isCommentBlocked(c, blockedIds),
       );
 
       const byId = {};

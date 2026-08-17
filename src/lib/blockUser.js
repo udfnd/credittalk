@@ -54,6 +54,20 @@ export async function blockUser({ callerUserId, targetUserId, isAdmin }) {
 }
 
 /**
+ * 댓글 작성자가 차단 목록에 있는지 판정.
+ *
+ * blocked_users.blocked_user_id(= get_my_blocked_user_ids 반환)는 auth uuid이고
+ * comments.user_id는 public.users.id(bigint)라 서로 비교하면 절대 매칭되지
+ * 않는다(실제로 이 비교를 쓰던 필터가 아무 댓글도 걸러내지 못했음).
+ * 반드시 조인된 users.auth_user_id(uuid) 기준으로 비교한다.
+ */
+export function isCommentBlocked(comment, blockedIds) {
+  if (!Array.isArray(blockedIds) || blockedIds.length === 0) return false;
+  const authorAuthId = comment?.users?.auth_user_id;
+  return !!authorAuthId && blockedIds.includes(authorAuthId);
+}
+
+/**
  * 차단 결과를 사용자에게 보여줄 메시지 문자열.
  */
 export function buildBlockSuccessMessage({ adminPurged, phoneBanned }) {
