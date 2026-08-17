@@ -54,17 +54,35 @@ export async function blockUser({ callerUserId, targetUserId, isAdmin }) {
 }
 
 /**
- * 댓글 작성자가 차단 목록에 있는지 판정.
- *
- * blocked_users.blocked_user_id(= get_my_blocked_user_ids 반환)는 auth uuid이고
- * comments.user_id는 public.users.id(bigint)라 서로 비교하면 절대 매칭되지
- * 않는다(실제로 이 비교를 쓰던 필터가 아무 댓글도 걸러내지 못했음).
- * 반드시 조인된 users.auth_user_id(uuid) 기준으로 비교한다.
+ * 내가 차단한 사용자들의 auth uuid 목록.
+ * 조회 실패(비로그인/네트워크 등)는 빈 배열로 처리 — 차단 목록을 못 읽었다고
+ * 화면 로딩을 막으면 안 된다(필터가 잠시 안 걸리는 쪽이 덜 해롭다).
+ */
+export async function getMyBlockedUserIds() {
+  try {
+    const { data, error } = await supabase.rpc('get_my_blocked_user_ids');
+    if (error || !Array.isArray(data)) return [];
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 작성자 auth uuid가 차단 목록에 있는지 판정.
+ * 주의: blocked_user_id는 auth uuid — 게시물/댓글 행의 bigint
+ * public.users.id와 비교하면 절대 매칭되지 않는다(과거 댓글 필터 버그).
+ */
+export function isBlockedAuthor(authorAuthId, blockedIds) {
+  if (!Array.isArray(blockedIds) || blockedIds.length === 0) return false;
+  return !!authorAuthId && blockedIds.includes(authorAuthId);
+}
+
+/**
+ * 댓글 작성자가 차단 목록에 있는지 판정 — 조인된 users.auth_user_id 기준.
  */
 export function isCommentBlocked(comment, blockedIds) {
-  if (!Array.isArray(blockedIds) || blockedIds.length === 0) return false;
-  const authorAuthId = comment?.users?.auth_user_id;
-  return !!authorAuthId && blockedIds.includes(authorAuthId);
+  return isBlockedAuthor(comment?.users?.auth_user_id, blockedIds);
 }
 
 /**

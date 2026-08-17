@@ -15,7 +15,12 @@ jest.mock('../src/lib/supabaseClient', () => ({
   },
 }));
 
-const { isCommentBlocked } = require('../src/lib/blockUser');
+const {
+  isCommentBlocked,
+  isBlockedAuthor,
+  getMyBlockedUserIds,
+} = require('../src/lib/blockUser');
+const { supabase } = require('../src/lib/supabaseClient');
 
 describe('isCommentBlocked (차단 댓글 필터)', () => {
   const AUTH_ID = '5b1f2c3d-0000-4000-8000-000000000001';
@@ -48,5 +53,37 @@ describe('isCommentBlocked (차단 댓글 필터)', () => {
     expect(isCommentBlocked({ ...comment, users: null }, blockedIds)).toBe(false);
     expect(isCommentBlocked(comment, [])).toBe(false);
     expect(isCommentBlocked(comment, null)).toBe(false);
+  });
+});
+
+describe('isBlockedAuthor (게시물 상세 차단 가드)', () => {
+  const AUTH_ID = '5b1f2c3d-0000-4000-8000-000000000001';
+
+  test('차단된 작성자의 auth id면 true', () => {
+    expect(isBlockedAuthor(AUTH_ID, [AUTH_ID])).toBe(true);
+  });
+
+  test('미차단/작성자 없음/목록 비정상은 전부 false', () => {
+    expect(isBlockedAuthor('other-id', [AUTH_ID])).toBe(false);
+    expect(isBlockedAuthor(null, [AUTH_ID])).toBe(false);
+    expect(isBlockedAuthor(AUTH_ID, [])).toBe(false);
+    expect(isBlockedAuthor(AUTH_ID, null)).toBe(false);
+  });
+});
+
+describe('getMyBlockedUserIds (차단 목록 조회 래퍼)', () => {
+  test('RPC 성공 시 배열 그대로 반환', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: ['a', 'b'], error: null });
+    await expect(getMyBlockedUserIds()).resolves.toEqual(['a', 'b']);
+    expect(supabase.rpc).toHaveBeenCalledWith('get_my_blocked_user_ids');
+  });
+
+  test('에러/비배열/예외 시 빈 배열(조회 실패가 화면을 막으면 안 됨)', async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: null, error: { message: 'x' } });
+    await expect(getMyBlockedUserIds()).resolves.toEqual([]);
+    supabase.rpc.mockResolvedValueOnce({ data: 'oops', error: null });
+    await expect(getMyBlockedUserIds()).resolves.toEqual([]);
+    supabase.rpc.mockRejectedValueOnce(new Error('network'));
+    await expect(getMyBlockedUserIds()).resolves.toEqual([]);
   });
 });

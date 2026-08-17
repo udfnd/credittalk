@@ -27,6 +27,7 @@ import { ensureSafeContent } from '../lib/contentSafety';
 import {
   blockUser,
   buildBlockSuccessMessage,
+  getMyBlockedUserIds,
   isCommentBlocked,
 } from '../lib/blockUser';
 
@@ -394,17 +395,7 @@ const CommentsSection = ({ postId, boardType, scrollViewRef }) => {
   // 댓글 불러오기
   const fetchComments = useCallback(async () => {
     try {
-      let blockedIds = [];
-      try {
-        const { data: blockedData, error: blockedError } = await supabase.rpc(
-          'get_my_blocked_user_ids',
-        );
-        if (!blockedError && Array.isArray(blockedData)) {
-          blockedIds = blockedData;
-        }
-      } catch (blockedErr) {
-        blockedIds = [];
-      }
+      const blockedIds = await getMyBlockedUserIds();
 
       const { data, error } = await supabase
         .from('comments')

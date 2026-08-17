@@ -25,7 +25,12 @@ import ImageViewing from 'react-native-image-viewing';
 import { useAuth } from '../context/AuthContext';
 import ReportModal from '../components/ReportModal';
 import { useFocusEffect } from '@react-navigation/native';
-import { blockUser, buildBlockSuccessMessage } from '../lib/blockUser';
+import {
+  blockUser,
+  buildBlockSuccessMessage,
+  getMyBlockedUserIds,
+  isBlockedAuthor,
+} from '../lib/blockUser';
 
 const { width } = Dimensions.get('window');
 
@@ -144,6 +149,10 @@ function ArrestNewsDetailScreen({ route, navigation }) {
           throw new Error('소식을 찾을 수 없거나 접근 권한이 없습니다.');
         }
         throw fetchError;
+      }
+      // 목록은 서버 RPC가 차단 작성자를 거르지만, 상세는 직접 진입 가능 → 가드
+      if (isBlockedAuthor(data?.user_id, await getMyBlockedUserIds())) {
+        throw new Error('차단한 사용자의 게시물입니다.');
       }
       setNews(data);
     } catch (err) {

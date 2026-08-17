@@ -23,7 +23,12 @@ import { useIncrementView } from '../hooks/useIncrementView';
 import { AvoidSoftInput } from 'react-native-avoid-softinput';
 import ImageViewing from 'react-native-image-viewing';
 import ReportModal from '../components/ReportModal'; // ReportModal import
-import { blockUser, buildBlockSuccessMessage } from '../lib/blockUser';
+import {
+  blockUser,
+  buildBlockSuccessMessage,
+  getMyBlockedUserIds,
+  isBlockedAuthor,
+} from '../lib/blockUser';
 
 const { width } = Dimensions.get('window');
 
@@ -66,6 +71,11 @@ function CommunityPostDetailScreen({ route }) {
           throw new Error('게시글을 찾을 수 없거나 접근 권한이 없습니다.');
         }
         throw fetchError;
+      }
+      // 목록은 서버 RPC가 차단 작성자를 거르지만, 상세는 푸시 탭·딥링크로
+      // 직접 진입할 수 있어 여기서도 가드한다
+      if (isBlockedAuthor(data?.author_auth_id, await getMyBlockedUserIds())) {
+        throw new Error('차단한 사용자의 게시물입니다.');
       }
       setPost(data);
     } catch (err) {
