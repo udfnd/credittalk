@@ -422,7 +422,10 @@ class CallStateReceiver : BroadcastReceiver() {
             val supabaseUrl = context.getString(R.string.supabase_url)
             val supabaseKey = context.getString(R.string.supabase_anon_key)
 
-            val url = URL("$supabaseUrl/rest/v1/masked_scammer_reports?select=phone_numbers")
+            // 최소 노출 전용 뷰 사용: masked_scammer_reports는 phone_numbers 외의
+            // 민감 컬럼까지 anon에 노출되어 있어 v38부터 전화번호 전용 뷰로 전환
+            // (구버전 호환을 위해 기존 뷰 권한은 서버에서 별도 단계로 회수)
+            val url = URL("$supabaseUrl/rest/v1/scammer_phone_numbers?select=phone_numbers")
             val connection = url.openConnection() as HttpURLConnection
 
             connection.requestMethod = "GET"
