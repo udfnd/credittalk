@@ -147,6 +147,40 @@ describe('Push tap queue - race-free drain (S24/S25)', () => {
     );
     expect(JSON.parse(await AsyncStorage.getItem('noti_tap_queue'))).toEqual([]);
   });
+
+  test('AsyncStorage write failure falls back to the in-memory tap queue', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    AsyncStorage.setItem.mockRejectedValueOnce(new Error('disk temporarily unavailable'));
+    push.setTapQueueListener(null);
+
+    const stored = await push.queueTapIntent(
+      { nid: 'volatile-1', screen: 'NoticeDetail', noticeId: '17' },
+      { notifyListener: false },
+    );
+    expect(stored).toBe(false);
+
+    const navigateTo = jest.fn(() => true);
+    expect(await push.drainQueuedTap(navigateTo)).toBe(true);
+    expect(navigateTo).toHaveBeenCalledWith(
+      'NoticeDetail',
+      expect.objectContaining({ noticeId: '17' }),
+    );
+  });
+
+  test('dedup marker read failure never blocks the actual navigation', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    AsyncStorage.getItem.mockRejectedValueOnce(new Error('read failed'));
+    const navigateTo = jest.fn(() => true);
+
+    const result = await push.openFromPayloadOnce(navigateTo, {
+      nid: 'dedup-storage-failure-1',
+      screen: 'NoticeDetail',
+      noticeId: '18',
+    });
+
+    expect(result.handled).toBe(true);
+    expect(navigateTo).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Tap dedup key must distinguish nid-less notifications', () => {

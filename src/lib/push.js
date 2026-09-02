@@ -233,18 +233,33 @@ const SEEN_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
 async function isRecentlySeen(key) {
   if (!key) return false;
-  const k = `noti_seen:${key}`;
-  const prev = await AsyncStorage.getItem(k);
-  if (prev) {
-    const ts = Number(prev);
-    if (Number.isFinite(ts) && Date.now() - ts < SEEN_TTL_MS) return true;
+  try {
+    const k = `noti_seen:${key}`;
+    const prev = await AsyncStorage.getItem(k);
+    if (prev) {
+      const ts = Number(prev);
+      if (Number.isFinite(ts) && Date.now() - ts < SEEN_TTL_MS) return true;
+    }
+  } catch (error) {
+    // 중복 방지 저장소 장애가 알림 자체를 막아서는 안 된다.
+    console.warn('[PUSH] seen marker read failed; displaying anyway', {
+      message: error?.message || String(error),
+    });
   }
   return false;
 }
 
 async function markSeen(key) {
   if (!key) return;
-  await AsyncStorage.setItem(`noti_seen:${key}`, String(Date.now()));
+  try {
+    await AsyncStorage.setItem(`noti_seen:${key}`, String(Date.now()));
+  } catch (error) {
+    // 이미 표시된 알림과 탭 payload 백업은 보존한다. 마커 실패 때문에 표시
+    // 성공을 실패로 되돌리면 재전달 중복과 삼성 탭 복원 유실이 동시에 생긴다.
+    console.warn('[PUSH] seen marker write failed', {
+      message: error?.message || String(error),
+    });
+  }
 }
 
 // ── 메시지 단위 consume 마커 ─────────────────────────────────────────────
@@ -688,7 +703,7 @@ async function displayOnceInternal(remote, source = 'unknown') {
   // 탭 이벤트에서 data가 유실되는 삼성 사례 대비: 표시 전에 id→data 백업
   await backupPayload(stableId, data);
 
-  const androidOptions = {
+  const androidBaseOptions = {
     channelId: CHANNEL_ID,
     // launchActivity를 명시적으로 지정: Android 14+ implicit PendingIntent 제한 대응
     // launchActivityFlags: Samsung OneUI 6.1+ (S24/S25)에서 singleTask 액티비티 탭 인텐트 처리 보강
@@ -701,6 +716,9 @@ async function displayOnceInternal(remote, source = 'unknown') {
       ],
     },
     smallIcon: 'ic_launcher',
+  };
+  const androidOptions = {
+    ...androidBaseOptions,
     ...(image
       ? { style: { type: AndroidStyle.BIGPICTURE, picture: image } }
       : body
@@ -737,7 +755,33 @@ async function displayOnceInternal(remote, source = 'unknown') {
   });
 
   try {
-    await notifee.displayNotification(notif);
+    if (Platform.OS === 'android' && image) {
+      // 원격 이미지는 느리거나 1MB/포맷 제한을 넘을 수 있다. 이미지 다운로드를
+      // 기다리다 foreground/headless 실행 시간이 끝나면 알림 전체가 사라지므로,
+      // 텍스트 알림을 먼저 확정하고 같은 id로 rich 알림을 best-effort 갱신한다.
+      await notifee.displayNotification({
+        ...notif,
+        android: {
+          ...androidBaseOptions,
+          onlyAlertOnce: true,
+          ...(body
+            ? { style: { type: AndroidStyle.BIGTEXT, text: body } }
+            : {}),
+        },
+      });
+      try {
+        await notifee.displayNotification({
+          ...notif,
+          android: { ...androidOptions, onlyAlertOnce: true },
+        });
+      } catch (imageError) {
+        console.warn('[PUSH] rich image update failed; text notification kept', {
+          message: imageError?.message || String(imageError),
+        });
+      }
+    } else {
+      await notifee.displayNotification(notif);
+    }
     await markSeen(key);
     console.log('[PUSH] displayOnce done');
   } catch (error) {
@@ -868,6 +912,7 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
 // 같은 탭을 중복 네비게이션하는 것만 차단. 짧은 TTL이라 이후 동일 nid 재탭은 정상 동작.
 const TAP_DEDUP_TTL_MS = 60 * 1000; // 60s
 let tapOpenChain = Promise.resolve();
+const recentTapMemory = new Map();
 
 export function openFromPayloadOnce(...args) {
   const operation = tapOpenChain.then(() => openFromPayloadOnceInternal(...args));
@@ -897,9 +942,20 @@ async function openFromPayloadOnceInternal(
 
   const key = getTapKeyFromData(data);
   const marker = `noti_tap:${key}`;
-  const prev = key ? await AsyncStorage.getItem(marker) : null;
-  if (prev) {
-    const ts = Number(prev);
+  let previousTimestamp = key ? recentTapMemory.get(key) : null;
+  if (key && !previousTimestamp) {
+    try {
+      previousTimestamp = await AsyncStorage.getItem(marker);
+    } catch (error) {
+      // 저장소 장애 시에도 실제 링크/화면 이동은 시도한다. 프로세스 내 Map이
+      // 동시에 들어온 FCM/Notifee 경로의 중복은 계속 막는다.
+      console.warn('[PUSH] tap dedup marker read failed; opening anyway', {
+        message: error?.message || String(error),
+      });
+    }
+  }
+  if (previousTimestamp) {
+    const ts = Number(previousTimestamp);
     if (Number.isFinite(ts) && Date.now() - ts < TAP_DEDUP_TTL_MS) {
       console.log('[PUSH] openFromPayloadOnce dedup (tap already handled)', {
         key,
@@ -912,7 +968,25 @@ async function openFromPayloadOnceInternal(
   // 실제 링크 열기/네비게이션 인계가 성공한 뒤에만 소비한다. 일시 실패는 큐에서
   // 재시도할 수 있고, 실패가 60초 dedup에 가려지지 않는다.
   if (result?.handled) {
-    if (key) await AsyncStorage.setItem(marker, String(Date.now()));
+    if (key) {
+      const now = Date.now();
+      recentTapMemory.set(key, now);
+      if (recentTapMemory.size > 100) {
+        for (const [savedKey, timestamp] of recentTapMemory) {
+          if (now - timestamp >= TAP_DEDUP_TTL_MS) recentTapMemory.delete(savedKey);
+        }
+        while (recentTapMemory.size > 100) {
+          recentTapMemory.delete(recentTapMemory.keys().next().value);
+        }
+      }
+      try {
+        await AsyncStorage.setItem(marker, String(now));
+      } catch (error) {
+        console.warn('[PUSH] tap dedup marker write failed', {
+          message: error?.message || String(error),
+        });
+      }
+    }
     await markTapConsumed(data);
   }
   return result;
@@ -928,6 +1002,11 @@ let tapQueueListener = null;
 const TAP_QUEUE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TAP_QUEUE_MAX = 20;
 let tapQueueChain = Promise.resolve();
+const volatileTapQueue = [];
+
+function replaceVolatileTapQueue(entries) {
+  volatileTapQueue.splice(0, volatileTapQueue.length, ...entries.slice(-TAP_QUEUE_MAX));
+}
 
 function runExclusiveTapQueue(operation) {
   const result = tapQueueChain.then(operation, operation);
@@ -956,14 +1035,15 @@ export async function queueTapIntent(
   { notifyListener = true } = {},
 ) {
   let stored = false;
+  const now = Date.now();
+  const entry = { id: `${now}:${Math.random()}`, ts: now, data };
   try {
     await runExclusiveTapQueue(async () => {
-      const now = Date.now();
       const raw = await AsyncStorage.getItem(TAP_QUEUE_KEY);
       const entries = parseTapQueue(raw).filter(
         item => Number.isFinite(item?.ts) && now - item.ts <= TAP_QUEUE_TTL_MS,
       );
-      entries.push({ id: `${now}:${Math.random()}`, ts: now, data });
+      entries.push(entry);
       const bounded = entries.slice(-TAP_QUEUE_MAX);
       await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(bounded));
       console.log('[PUSH] queueTapIntent stored', bounded.length);
@@ -971,6 +1051,9 @@ export async function queueTapIntent(
     stored = true;
   } catch (e) {
     console.warn('[PUSH] queueTapIntent error', e?.message || e);
+    // 디스크 저장이 일시 실패해도 살아 있는 JS 프로세스 안에서는 탭을 잃지
+    // 않는다. listener가 즉시 이 큐를 비우고, 실패하면 다음 AppState에서 재시도.
+    replaceVolatileTapQueue([...volatileTapQueue, entry]);
   }
   if (notifyListener) {
     try {
@@ -986,8 +1069,27 @@ export async function drainQueuedTap(navigateTo) {
   try {
     return await runExclusiveTapQueue(async () => {
       const now = Date.now();
-      const raw = await AsyncStorage.getItem(TAP_QUEUE_KEY);
-      let entries = parseTapQueue(raw);
+      let storageAvailable = true;
+      let persistentEntries = [];
+      try {
+        const raw = await AsyncStorage.getItem(TAP_QUEUE_KEY);
+        persistentEntries = parseTapQueue(raw);
+      } catch (error) {
+        storageAvailable = false;
+        console.warn('[NAV:INTENT] tap queue read failed; using memory queue', {
+          message: error?.message || String(error),
+        });
+      }
+
+      const memoryEntries = volatileTapQueue.splice(0, volatileTapQueue.length);
+      const seenIds = new Set();
+      let entries = [...persistentEntries, ...memoryEntries]
+        .sort((left, right) => Number(left?.ts ?? 0) - Number(right?.ts ?? 0))
+        .filter(item => {
+          if (!item?.id || seenIds.has(item.id)) return false;
+          seenIds.add(item.id);
+          return true;
+        });
       const expired = entries.filter(
         item => !Number.isFinite(item?.ts) || now - item.ts > TAP_QUEUE_TTL_MS,
       ).length;
@@ -1002,11 +1104,36 @@ export async function drainQueuedTap(navigateTo) {
         });
       }
       if (entries.length === 0) {
-        await AsyncStorage.setItem(TAP_QUEUE_KEY, '[]');
+        if (storageAvailable) {
+          try {
+            await AsyncStorage.setItem(TAP_QUEUE_KEY, '[]');
+          } catch (error) {
+            console.warn('[NAV:INTENT] empty tap queue checkpoint failed', {
+              message: error?.message || String(error),
+            });
+          }
+        }
         console.log('[NAV:INTENT] drainQueuedTap: empty');
         return true;
       }
       console.log('[NAV:INTENT] drainQueuedTap start', { count: entries.length });
+
+      const checkpoint = async () => {
+        if (storageAvailable) {
+          try {
+            await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(entries));
+            replaceVolatileTapQueue([]);
+            return true;
+          } catch (error) {
+            storageAvailable = false;
+            console.warn('[NAV:INTENT] tap queue checkpoint failed', {
+              message: error?.message || String(error),
+            });
+          }
+        }
+        replaceVolatileTapQueue(entries);
+        return false;
+      };
 
       while (entries.length > 0) {
         const item = entries[0];
@@ -1019,7 +1146,7 @@ export async function drainQueuedTap(navigateTo) {
         );
         if (!result?.handled) {
           // 실패 항목과 뒤 항목을 그대로 보존한다. AppState active/다음 실행에서 재시도.
-          await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(entries));
+          await checkpoint();
           logPushTap({
             source: 'notifee_queue',
             outcome: 'queue_retry_pending',
@@ -1030,7 +1157,13 @@ export async function drainQueuedTap(navigateTo) {
         }
         entries.shift();
         // 항목마다 체크포인트를 남겨 성공 직후 프로세스가 죽어도 앞선 탭을 재생하지 않는다.
-        await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(entries));
+        if (storageAvailable) {
+          if (!(await checkpoint())) return false;
+        } else {
+          // 영속 저장소가 읽히지 않은 경우에는 메모리 큐를 항목마다 갱신한다.
+          // 이 프로세스 안에서는 계속 진행할 수 있고, 실패분은 그대로 남는다.
+          replaceVolatileTapQueue(entries);
+        }
       }
       console.log('[NAV:INTENT] drainQueuedTap done');
       return true;

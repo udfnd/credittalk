@@ -335,4 +335,40 @@ describe('Payload backup on display → restore on data-less tap (삼성 no_targ
       expect.objectContaining({ postId: '77' }),
     );
   });
+
+  test('remote image failure keeps the text notification visible', async () => {
+    notifee.displayNotification.mockReset();
+    notifee.displayNotification
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('image download failed'));
+
+    await expect(
+      push.displayOnce(
+        {
+          messageId: 'mid-image-fallback',
+          data: {
+            nid: 'image_fallback_1',
+            title: '이미지 알림',
+            body: '본문은 반드시 표시',
+            link_url: 'https://example.com/image-post',
+            image: 'https://example.com/unavailable.jpg',
+          },
+        },
+        'foreground',
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
+    const textFirst = notifee.displayNotification.mock.calls[0][0];
+    const richUpdate = notifee.displayNotification.mock.calls[1][0];
+    expect(textFirst.android.largeIcon).toBeUndefined();
+    expect(textFirst.android.style.type).toBe(1); // BIGTEXT
+    expect(richUpdate.android.style.type).toBe(0); // BIGPICTURE
+
+    const restored = await push.extractTapData({
+      id: 'image_fallback_1',
+      data: {},
+    });
+    expect(restored.link_url).toBe('https://example.com/image-post');
+  });
 });
