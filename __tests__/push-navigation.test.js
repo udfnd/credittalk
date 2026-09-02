@@ -186,7 +186,7 @@ describe('Push Notification Navigation - EventDetail', () => {
       expect(pkg).toMatch(/PushIntentModule\(reactContext\)/);
     });
 
-    test('MainActivity captures push intent on cold and warm start with consume-once + recents guard', () => {
+    test('MainActivity captures raw push intent before RN dispatch on cold and warm start', () => {
       const act = read(
         'android/app/src/main/java/com/credittalka/MainActivity.kt',
       );
@@ -194,6 +194,14 @@ describe('Push Notification Navigation - EventDetail', () => {
       expect(act).toMatch(/fun consumePendingPushData/);
       // onCreate(cold) + onNewIntent(warm) 모두에서 캡처
       expect(act.match(/capturePushIntent\(intent\)/g)?.length).toBeGreaterThanOrEqual(2);
+      // OneUI에서 super가 메시징/Notifee 리스너에 인텐트를 dispatch한 뒤에는
+      // data가 비는 사례가 있어, 원본 캡처 순서가 핵심 회귀 조건이다.
+      expect(act).toMatch(
+        /override fun onCreate[\s\S]*?capturePushIntent\(intent\)[\s\S]*?super\.onCreate/,
+      );
+      expect(act).toMatch(
+        /override fun onNewIntent[\s\S]*?capturePushIntent\(intent\)[\s\S]*?super\.onNewIntent/,
+      );
       // recents 재실행 시 원래 인텐트 재처리 방지 플래그
       expect(act).toMatch(/HANDLED_FLAG/);
     });

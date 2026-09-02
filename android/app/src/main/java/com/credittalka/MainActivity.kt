@@ -37,10 +37,12 @@ class MainActivity : ReactActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    // RN/메시징 모듈에 인텐트를 넘기기 전에 원본 FCM extras를 보존한다.
+    // 일부 OneUI 탭에서는 super 호출 뒤 Notifee 이벤트에 id만 남고 data가
+    // 비어 도착했으므로, JS 브리지 초기화보다 캡처가 반드시 먼저여야 한다.
+    capturePushIntent(intent)
     super.onCreate(null)
     checkAndRequestPermissions()
-    // 콜드스타트: 알림 탭으로 열렸다면 FCM data extras를 캡처해 둔다.
-    capturePushIntent(intent)
   }
 
   /**
@@ -48,11 +50,11 @@ class MainActivity : ReactActivity() {
    * Deep Link Intent를 React Native로 전달하기 위해 필요.
    */
   override fun onNewIntent(intent: Intent?) {
+    // 웜 스타트도 라이브러리 dispatch 전에 원본 extras부터 복사한다.
+    capturePushIntent(intent)
     super.onNewIntent(intent)
     // 새 Intent를 현재 Intent로 설정하여 React Native Linking이 처리할 수 있도록 함
     setIntent(intent)
-    // 웜 스타트: 백그라운드 상태에서 알림을 탭하면 여기로 들어온다.
-    capturePushIntent(intent)
   }
 
   /**

@@ -1,9 +1,9 @@
 /**
  * Push payload backup/restore regression tests (S24/S25 no_target 홈만 켜짐 버그)
  *
- * 원인: 삼성 OneUI(And 12~16)에서 notifee가 표시한 알림을 탭하면 PRESS 이벤트의
- * notification.data가 비어 도착하는 사례 실측(push_tap_logs no_target 주 45건,
- * 전원 notifee_initial/notifee_queue 경로, 같은 발송을 받은 타 유저는 정상 이동).
+ * 원인: 삼성 OneUI(And 12~16)에서 알림을 탭하면 PRESS 이벤트의
+ * notification.data가 비어 도착하는 사례가 실측됐다. v38 no_target 140건은
+ * 전부 notifee_queue였고, 같은 탭의 initial 객체에는 id가 남아 있었다.
  * data가 비면 openFromPayload가 이동 대상을 못 찾아 앱은 홈 화면만 표시된다.
  *
  * 수정: displayOnce가 표시 직전에 notification id → data를 AsyncStorage에 백업하고,
@@ -121,11 +121,11 @@ describe('Payload backup on display → restore on data-less tap (삼성 no_targ
     expect(out).toEqual({});
   });
 
-  // ── 완전 빈 PRESS(id·data 모두 소거) blind restore ──────────────────────
-  // v36 백업 복원(id 기반)은 배포 후 push_tap_logs에서 복원 성공 0건 —
-  // OneUI가 PRESS 이벤트의 notification을 id까지 통째로 비워 보내는 것이 실측됨
-  // (no_target 전건 keys:[], nid:null, restored:false). id가 없으면 백업 조회가
-  // 불가능하므로 쉐이드 관측으로 좁힌다: 탭된 알림은 autoCancel로 방금 쉐이드에서
+  // ── 빈 PRESS(data 소거, id 부재 또는 백업과 불일치) blind restore ────────
+  // v36의 id 기반 복원은 배포 후 성공 0건이었고, v38에서는 no_target 큐 data가
+  // 전부 비었지만 같은 탭의 initial 객체에 id는 남아 있었다. 즉 id 자체의 부재뿐
+  // 아니라 표시 시 저장한 id와 탭 이벤트 id가 달라지는 경우까지 처리해야 한다.
+  // 정확 백업 조회가 불가능하면 쉐이드 관측으로 좁힌다: 탭된 알림은 autoCancel로
   // 사라졌으므로 "인덱스에 있고 + 쉐이드에 없고 + 미소비"인 후보가 정확히 1건일
   // 때만 그 payload를 복원한다(_restored='2'). 0건/복수/관측 실패면 포기(홈 유지).
   // PRESS 이벤트 경로에서만 허용(allowBlindRestore).
@@ -167,7 +167,8 @@ describe('Payload backup on display → restore on data-less tap (삼성 no_targ
     const out = await push.extractTapData({}, { allowBlindRestore: true });
 
     expect(out.link_url).toBeUndefined();
-    expect(out._noid).toBe('1');
+    expect(out._emptyTap).toBe('1');
+    expect(out._tapHadId).toBe('0');
   });
 
   test('후보 복수(스와이프로 지운 미탭 알림 혼재) → 복원 포기', async () => {
@@ -178,7 +179,7 @@ describe('Payload backup on display → restore on data-less tap (삼성 no_targ
     const out = await push.extractTapData({}, { allowBlindRestore: true });
 
     expect(out._restored).toBeUndefined();
-    expect(out._noid).toBe('1');
+    expect(out._emptyTap).toBe('1');
     expect(out._cand).toBe('2');
   });
 
@@ -249,13 +250,34 @@ describe('Payload backup on display → restore on data-less tap (삼성 no_targ
     expect(out).toEqual({ foo: '1' });
   });
 
-  test('id가 있으나 백업 없음(라우팅 없는 알림 탭) → blind 복원하지 않음', async () => {
+  test('id가 백업 id와 달라도 OneUI 빈 PRESS를 blind 복원', async () => {
     await displayWith('bcast_12', { link_url: 'https://youtu.be/xyz' });
+    const out = await push.extractTapData(
+      { id: 'oneui-synthetic-id', data: {} },
+      { allowBlindRestore: true },
+    );
+    expect(out.link_url).toBe('https://youtu.be/xyz');
+    expect(out._restored).toBe('2');
+    expect(out._tapHadId).toBe('1');
+    expect(out._idBackupMiss).toBe('1');
+  });
+
+  test('라우팅 없는 알림 탭: 기존 링크 알림이 쉐이드에 남아 있으면 오이동 안 함', async () => {
+    await displayWith('bcast_kept', { link_url: 'https://youtu.be/kept' });
+    notifee.getDisplayedNotifications.mockResolvedValue([
+      { notification: { id: 'bcast_kept' } },
+    ]);
+
     const out = await push.extractTapData(
       { id: 'plain-notification', data: {} },
       { allowBlindRestore: true },
     );
-    expect(out).toEqual({});
+
+    expect(out.link_url).toBeUndefined();
+    expect(out._emptyTap).toBe('1');
+    expect(out._tapHadId).toBe('1');
+    expect(out._idBackupMiss).toBe('1');
+    expect(out._cand).toBe('0');
   });
 
   test('내부 마커(_mid 등)는 네비게이션 params로 새지 않는다', async () => {

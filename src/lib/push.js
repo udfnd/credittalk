@@ -416,8 +416,10 @@ export async function removeFromDisplayIndex(id) {
   } catch {}
 }
 
-// 완전 빈 PRESS(OneUI가 notification을 id·data 통째로 비워 전달 — v36 id 기반
-// 복원이 배포 후 성공 0건으로 실측된 원인) 복구.
+// 빈 PRESS(OneUI가 data를 비우고, id는 없애거나 다른 값으로
+// 바꿔서 전달) 복구. v38 프로덕션 no_target은 모두 data가 비었고,
+// 같은 탭의 notifee_initial은 hasId=true였다. "id가 없을 때만" blind
+// 복원하던 조건이 실제 OneUI의 id 불일치 케이스를 놓친 것이다.
 //
 // 추측이 아니라 관측으로 대상을 좁힌다: notifee 알림은 autoCancel(기본 true)로
 // 탭 직후 쉐이드에서 사라지므로, 후보(collectBlindCandidates)가 정확히 1건일
@@ -471,47 +473,61 @@ export async function extractTapData(
   const data = notification?.data || {};
   if (hasRoutingFields(data)) return data;
   const id = notification?.id;
-  if (!id) {
-    // OneUI 소거 시그니처: id·data 모두 빈 PRESS(실측: 필드의 no_target 전건이
-    // 이 형태). 라우팅 없는 알림의 탭도 같은 시그니처로 오므로, 복원 함수가
-    // 쉐이드 관측으로 후보를 좁혀 1건일 때만 복원한다. 삼성 OneUI 한정 증상이라
-    // 안드로이드에서만 시도(iOS는 실익 없이 오이동 위험만 추가).
-    if (
-      allowBlindRestore &&
-      Platform.OS === 'android' &&
-      Object.keys(data).length === 0
-    ) {
-      const { payload, indexLen, candidates, dispN, matched } =
-        await restoreLatestDisplayedPayload();
-      if (payload) return payload;
-      // 복원 실패 진단 마커: id 부재(_noid), 당시 인덱스 크기(_idx), 후보 수
-      // (_cand: -1=쉐이드 관측 실패), 쉐이드 알림 수/인덱스 일치 수
-      // (_dispn/_match: OneUI가 쉐이드 id까지 합성 폴백으로 바꾸는 기기 감지),
-      // 발생 시각(_ts: 60초 dedup 키 붕괴로 연타 진단이 dedup_skip에 먹히는 것
-      // 방지). underscore 필터로 화면 params에는 새지 않는다.
+  let idBackupMiss = false;
+
+  // id가 정상적으로 보존된 경우의 정확 복원을 가장 먼저 시도한다.
+  if (id) {
+    try {
+      const raw = await AsyncStorage.getItem(PAYLOAD_BACKUP_PREFIX + id);
+      if (raw) {
+        const { ts, data: saved } = JSON.parse(raw) || {};
+        if (
+          Number.isFinite(ts) &&
+          Date.now() - ts <= PAYLOAD_BACKUP_TTL_MS &&
+          hasRoutingFields(saved)
+        ) {
+          console.log('[PUSH] tap data restored from backup', { id });
+          return { ...saved, ...data, _restored: '1' };
+        }
+      }
+      idBackupMiss = true;
+    } catch {
+      idBackupMiss = true;
+    }
+  }
+
+  // PRESS임이 확실하고 data가 완전히 빈 경우, id 부재뿐 아니라
+  // OneUI가 백업과 다른 id를 준 경우도 쉐이드 관측 복원을 탄다.
+  // getInitialNotification 캐시 경로에서는 allowBlindRestore를 주지 않으므로
+  // 일반 실행이 과거 푸시로 오이동하지 않는다.
+  if (
+    allowBlindRestore &&
+    Platform.OS === 'android' &&
+    Object.keys(data).length === 0
+  ) {
+    const { payload, indexLen, candidates, dispN, matched } =
+      await restoreLatestDisplayedPayload();
+    if (payload) {
       return {
-        _noid: '1',
-        _idx: String(indexLen),
-        _cand: String(candidates),
-        _dispn: String(dispN),
-        _match: String(matched),
-        _ts: String(Date.now()),
+        ...payload,
+        _tapHadId: id ? '1' : '0',
+        ...(idBackupMiss ? { _idBackupMiss: '1' } : {}),
       };
     }
-    return data;
+    // 실패 진단 마커. _ts는 빈 탭의 dedup 키가 "{}"로 붕괴해
+    // 후속 진단이 먹히는 것을 막는다. 내부 마커는 화면 params에 안 샌다.
+    return {
+      _emptyTap: '1',
+      _tapHadId: id ? '1' : '0',
+      ...(idBackupMiss ? { _idBackupMiss: '1' } : {}),
+      _idx: String(indexLen),
+      _cand: String(candidates),
+      _dispn: String(dispN),
+      _match: String(matched),
+      _ts: String(Date.now()),
+    };
   }
-  try {
-    const raw = await AsyncStorage.getItem(PAYLOAD_BACKUP_PREFIX + id);
-    if (!raw) return data;
-    const { ts, data: saved } = JSON.parse(raw) || {};
-    if (!Number.isFinite(ts) || Date.now() - ts > PAYLOAD_BACKUP_TTL_MS)
-      return data;
-    if (!hasRoutingFields(saved)) return data;
-    console.log('[PUSH] tap data restored from backup', { id });
-    return { ...saved, ...data, _restored: '1' };
-  } catch {
-    return data;
-  }
+  return data;
 }
 
 function getTapKeyFromData(data = {}) {
@@ -703,11 +719,12 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
           keys: Object.keys(data || {}),
           // '1'=id 기반 복원, '2'=blind 복원, null=복원 안 거침(성공 로그와 동형)
           restored: data?._restored ?? null,
-          // 빈 PRESS(blind restore 시도) 실패 진단: id 부재 + 당시 인덱스
+          // 빈 PRESS(blind restore 시도) 실패 진단: id 부재/백업 miss + 당시 인덱스
           // 크기 + 후보 수(-1=쉐이드 관측 실패) + 쉐이드 관측치
-          ...(data?._noid === '1'
+          ...(data?._emptyTap === '1'
             ? {
-                hasId: false,
+                hasId: data?._tapHadId === '1',
+                idBackupMiss: data?._idBackupMiss === '1',
                 indexLen: Number(data?._idx),
                 candidates: Number(data?._cand),
                 dispN: Number(data?._dispn),

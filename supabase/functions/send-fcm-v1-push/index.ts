@@ -18,6 +18,9 @@ const SERVICE_ACCOUNT = JSON.parse(
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const ANDROID_CHANNEL_ID = 'push_default_v2';
+// 기존 설치본의 launcher filter와도 호환되는 명시적 action.
+// 새 custom action은 구버전에서 Activity가 resolve되지 않아 탭을 더 망가뜨린다.
+const ANDROID_CLICK_ACTION = 'android.intent.action.MAIN';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   global: { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
@@ -213,6 +216,7 @@ function buildMessage(params: {
           notification: {
             channel_id: ANDROID_CHANNEL_ID,
             tag: nid,
+            click_action: ANDROID_CLICK_ACTION,
             ...(cleanImage ? { image: cleanImage } : {}),
           },
         }
@@ -392,7 +396,14 @@ Deno.serve(async req => {
     const deadTokens: string[] = [];
 
     const BATCH = 100;
-    const dataStr = normalizeDataPayload(payload?.data);
+    const normalizedData = normalizeDataPayload(payload?.data);
+    // 한 발송의 모든 토큰이 같은 data/collapse/tag 키를 쓰게 한다.
+    // buildMessage 안에서 토큰별 Date.now() nid를 만들면 장치별 추적과
+    // OneUI 복원용 id 대조가 불가능해진다.
+    const dataStr: Record<string, string> = {
+      ...normalizedData,
+      nid: normalizedData.nid || `push_${crypto.randomUUID()}`,
+    };
 
     const hasLink =
       (typeof dataStr.link_url === 'string' && dataStr.link_url.length > 0) ||
@@ -462,7 +473,7 @@ Deno.serve(async req => {
       }),
       { headers: { 'Content-Type': 'application/json' } },
     );
-  } catch (e) {
+  } catch (e: any) {
     console.error('[send-fcm-v1-push] Main Error:', e?.message ?? e);
     return new Response(JSON.stringify({ error: String(e?.message ?? e) }), {
       status: 500,

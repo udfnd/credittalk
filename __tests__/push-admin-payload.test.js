@@ -62,9 +62,23 @@ describe('Admin Push Payload - EventDetail', () => {
       expect(enqueueRouteSource).toMatch(/\.\.\.data/);
     });
 
-    test('should pass data field to sendWithRetry', () => {
+    test('should pass the job-stable merged data field to sendWithRetry', () => {
       expect(enqueueRouteSource).toMatch(
-        /data:\s*data\s*\?\?\s*null/,
+        /data:\s*mergedData/,
+      );
+    });
+
+    test('should create one stable nid per push job', () => {
+      expect(enqueueRouteSource).toMatch(
+        /nid:\s*suppliedNid\s*\?\?\s*`push_\$\{crypto\.randomUUID\(\)\}`/,
+      );
+      expect(enqueueRouteSource).toMatch(/collapse_key:\s*dataPayload\.nid/);
+      expect(enqueueRouteSource).toMatch(/tag:\s*dataPayload\.nid/);
+    });
+
+    test('should use the explicit Android push click action', () => {
+      expect(enqueueRouteSource).toMatch(
+        /click_action:\s*ANDROID_CLICK_ACTION/,
       );
     });
   });
