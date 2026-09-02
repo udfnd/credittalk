@@ -35,12 +35,12 @@ import {
   updatePushTokenOnLogin,
   setupTokenRefreshListener,
   requestNotificationPermissionAndroid,
-  requestCallDetectionPermissionsAndroid,
   ensureNotificationChannel,
   drainQueuedTap,
   drainNativeNotificationTap,
   runExclusivePushOp,
   extractTapData,
+  queueTapIntent,
 } from './src/lib/push';
 import { logPushTap } from './src/lib/pushTapLog';
 
@@ -579,11 +579,12 @@ function NavIntentReplayer({
   onAuthReadyChange,
 }: {
   navRef: NavigationContainerRefWithCurrent<RootStackParamList>;
-  pendingNavRef: React.MutableRefObject<{
+  pendingNavRef: React.MutableRefObject<Array<{
     screen: string;
     params?: any;
-  } | null>;
-  navigateToScreen: (screen: string, params?: any) => void;
+    ts: number;
+  }>>;
+  navigateToScreen: (screen: string, params?: any) => boolean;
   onAuthReadyChange: (ready: boolean) => void;
 }) {
   const { user, profile } = useAuth();
@@ -604,15 +605,19 @@ function NavIntentReplayer({
       return;
     }
     const pending = pendingNavRef.current;
-    if (!pending) {
+    if (!pending.length) {
       L_INTENT('no pending intent to flush');
       return;
     }
     if (user && profile) {
-      const fresh = takePendingNav();
-      if (fresh) {
+      let fresh = takePendingNav();
+      while (fresh) {
         L_INTENT('flushing pending (auth ready)', fresh);
-        navigateToScreen(fresh.screen, fresh.params);
+        if (!navigateToScreen(fresh.screen, fresh.params)) {
+          setPendingNav(fresh.screen, fresh.params);
+          break;
+        }
+        fresh = takePendingNav();
       }
     } else {
       L_INTENT('pending exists, but auth not ready yet');
@@ -625,48 +630,49 @@ function NavIntentReplayer({
 // 미처리 네비게이션 인텐트는 모듈 스코프에 보관한다. 액티비티 재생성으로
 // App이 리마운트돼도(프로세스/JS 컨텍스트 유지) 인증 대기 중이던 알림 탭이
 // 유실되지 않도록 useRef(마운트 수명) 대신 모듈 수명 홀더를 쓴다.
-const pendingNavHolder: React.MutableRefObject<{
+const pendingNavHolder: React.MutableRefObject<Array<{
   screen: string;
   params?: any;
   ts: number;
-} | null> = { current: null };
+}>> = { current: [] };
 
 // 홀더가 프로세스 수명 동안 살아있으므로 TTL을 둔다: 인증 미준비로 큐잉된
 // 탭이 한참 뒤 로그인 시점에 유령 이동하는 것 방지.
 const PENDING_NAV_TTL_MS = 5 * 60 * 1000;
+const PENDING_NAV_MAX = 20;
 
 function setPendingNav(screen: string, params?: any) {
-  const prev = pendingNavHolder.current;
-  // 단일 슬롯이라 서로 다른 인텐트가 겹치면 이전 것이 조용히 유실된다 → 기록
-  if (prev && (prev.screen !== screen || JSON.stringify(prev.params) !== JSON.stringify(params))) {
-    L_INTENT('pending overwritten', { prev: prev.screen, next: screen });
+  const queue = pendingNavHolder.current;
+  const last = queue[queue.length - 1];
+  if (last && last.screen === screen && JSON.stringify(last.params) === JSON.stringify(params)) {
+    return;
+  }
+  queue.push({ screen, params, ts: Date.now() });
+  if (queue.length > PENDING_NAV_MAX) {
+    const dropped = queue.shift();
     logPushTap({
       source: 'nav_intent',
-      outcome: 'pending_overwritten',
-      data: { screen: prev.screen },
-      detail: { prevScreen: prev.screen, prevParams: prev.params ?? null, nextScreen: screen },
+      outcome: 'pending_queue_overflow',
+      data: { screen: dropped?.screen },
+      detail: { max: PENDING_NAV_MAX },
     });
   }
-  pendingNavHolder.current = { screen, params, ts: Date.now() };
 }
 
-/** 꺼내면서 비운다. TTL 초과분은 폐기하고 null 반환. */
+/** 가장 오래된 유효 인텐트를 꺼낸다. 만료분은 기록 후 계속 건너뛴다. */
 function takePendingNav(): { screen: string; params?: any } | null {
-  const pending = pendingNavHolder.current;
-  pendingNavHolder.current = null;
-  if (!pending) return null;
-  if (Date.now() - pending.ts > PENDING_NAV_TTL_MS) {
+  let pending = pendingNavHolder.current.shift();
+  while (pending && Date.now() - pending.ts > PENDING_NAV_TTL_MS) {
     L_INTENT('pending expired, dropping', { screen: pending.screen });
-    // 탭이 최종적으로 아무 데도 도달하지 못하고 폐기됨 → 기록
     logPushTap({
       source: 'nav_intent',
       outcome: 'pending_expired',
       data: { screen: pending.screen },
       detail: { params: pending.params ?? null, ageMs: Date.now() - pending.ts },
     });
-    return null;
+    pending = pendingNavHolder.current.shift();
   }
-  return pending;
+  return pending ? { screen: pending.screen, params: pending.params } : null;
 }
 
 function App(): React.JSX.Element {
@@ -707,19 +713,19 @@ function App(): React.JSX.Element {
   );
 
   const navigateToScreen = useCallback(
-    (screen: string, params?: any) => {
+    (screen: string, params?: any): boolean => {
       L_NAV('navigateToScreen called', { screen, params });
 
       if (!navRef.isReady()) {
         L_INTENT('nav not ready → queue', { screen, params });
         setPendingNav(screen, params);
-        return;
+        return true;
       }
 
       if (needsAuth(screen) && !authReadyRef.current) {
         L_INTENT('protected & auth not ready → queue', { screen, params });
         setPendingNav(screen, params);
-        return;
+        return true;
       }
 
       const castAndNavigate = (targetScreen: string, targetParams?: any) => {
@@ -803,24 +809,44 @@ function App(): React.JSX.Element {
           data: { screen },
           detail: { message: String(e?.message || e), params: params ?? null },
         });
+        return false;
       }
+      return true;
     },
     [navRef, verifyNavOutcome],
   );
 
   const navigateToMaybeQueue = useCallback(
-    (screen: string, params?: any) => {
+    (screen: string, params?: any): boolean => {
       L_INTENT('navigateToMaybeQueue', {
         screen,
         params,
         navReady: navRef.isReady(),
       });
       if (navRef.isReady()) {
-        navigateToScreen(screen, params);
+        return navigateToScreen(screen, params);
       } else {
         L_INTENT('queue (nav not ready)', { screen, params });
         setPendingNav(screen, params);
+        return true;
       }
+    },
+    [navRef, navigateToScreen],
+  );
+
+  // 푸시 탭은 Navigation/Auth가 아직 준비되지 않았을 때 성공으로 소비하지 않는다.
+  // 호출자가 영속 AsyncStorage 큐에 남겼다가 onReady/authReady에서 재시도한다.
+  const navigatePushIntent = useCallback(
+    (screen: string, params?: any): boolean => {
+      if (!navRef.isReady()) {
+        L_INTENT('push nav not ready → keep persistent queue', { screen });
+        return false;
+      }
+      if (needsAuth(screen) && !authReadyRef.current) {
+        L_INTENT('push auth not ready → keep persistent queue', { screen });
+        return false;
+      }
+      return navigateToScreen(screen, params);
     },
     [navRef, navigateToScreen],
   );
@@ -829,15 +855,24 @@ function App(): React.JSX.Element {
     (ready: boolean) => {
       L_AUTH('onAuthReadyChange', { ready });
       authReadyRef.current = ready;
-      if (ready && navRef.isReady() && pendingNavRef.current) {
-        const fresh = takePendingNav();
-        if (fresh) {
+      if (ready && navRef.isReady() && pendingNavRef.current.length) {
+        let fresh = takePendingNav();
+        while (fresh) {
           L_INTENT('auth ready & nav ready → flush pending', fresh);
-          navigateToScreen(fresh.screen, fresh.params);
+          if (!navigateToScreen(fresh.screen, fresh.params)) {
+            setPendingNav(fresh.screen, fresh.params);
+            break;
+          }
+          fresh = takePendingNav();
         }
       }
+      if (ready && navRef.isReady()) {
+        runExclusivePushOp('auth-ready-tap-drain', () =>
+          drainQueuedTap(navigatePushIntent),
+        );
+      }
     },
-    [navRef, navigateToScreen, pendingNavRef],
+    [navRef, navigateToScreen, navigatePushIntent, pendingNavRef],
   );
 
   useEffect(() => {
@@ -886,7 +921,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     // 1) 앱이 OS 배너 탭으로 열렸을 때(FG/BG 상태에서) FCM가 직접 주는 콜백
     const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp(
-      remoteMessage => {
+      async remoteMessage => {
         L_PUSH('onNotificationOpenedApp', {
           hasMsg: !!remoteMessage,
           data: remoteMessage?.data,
@@ -897,7 +932,18 @@ function App(): React.JSX.Element {
           const data = remoteMessage.messageId
             ? { ...remoteMessage.data, _mid: String(remoteMessage.messageId) }
             : remoteMessage.data;
-          openFromPayloadOnce(navigateToMaybeQueue, data, 'fcm_opened_app');
+          // 먼저 영속 큐에 기록한다. nav/auth 준비 전이거나 링크 앱 실행이
+          // 일시 실패해도 다음 onReady/AppState에서 같은 탭을 재시도한다.
+          const stored = await queueTapIntent(data);
+          if (!stored) {
+            // 저장소가 일시 실패해도 현재 프로세스에서 즉시 한 번은 처리한다.
+            // navigatePushIntent가 false를 반환하면 성공/소비 로그를 남기지 않는다.
+            await openFromPayloadOnce(
+              navigatePushIntent,
+              data,
+              'fcm_opened_app_storage_fallback',
+            );
+          }
         }
       },
     );
@@ -906,23 +952,14 @@ function App(): React.JSX.Element {
     //    (중복 네비게이션 방지: 포그라운드 탭 핸들러는 push.js: wireMessageHandlers에서만 등록)
 
     (async () => {
-      // 2) 권한/채널 준비
-      await requestNotificationPermissionAndroid().then(() =>
-        L_APP('Android notification permission requested'),
-      );
-      await requestCallDetectionPermissionsAndroid().then(result =>
-        L_APP('Android call detection permissions requested', result),
-      );
-      await ensureNotificationChannel().then(() =>
-        L_APP('ensureNotificationChannel done'),
-      );
-
-      // 3) 포그라운드 핸들러 및 AppState 복귀 drain을 "정확히 한 번"만 바인딩
-      await wireMessageHandlers(navigateToMaybeQueue).then(() =>
+      // 2) 탭/포그라운드 핸들러를 권한 다이얼로그보다 먼저 바인딩한다.
+      // 알림으로 콜드스타트한 사용자가 다른 권한 요청을 처리하는 동안 탭이
+      // 유실되던 순서 의존성을 없앤다.
+      await wireMessageHandlers(navigatePushIntent).then(() =>
         L_PUSH('wireMessageHandlers bound (foreground listeners)'),
       );
 
-      // 4~5) 콜드/웜 스타트 초기 알림 처리.
+      // 3) 콜드/웜 스타트 초기 알림 처리.
       //  - 전체를 직렬화 체인에서 실행: AppState 'active' 드레인과 인터리빙되면
       //    실제 탭이 stale 재생에게 마지막-네비게이션을 빼앗기는 레이스 실측(7/17).
       //  - 순서: 네이티브 캡처(실제 런치 인텐트, 가장 신뢰) → notifee 초기 →
@@ -931,7 +968,7 @@ function App(): React.JSX.Element {
         // 4) 네이티브 인텐트 캡처 최우선: MainActivity가 실제 런치 인텐트에서
         //    직접 읽은 값이라 RNFirebase 캐시보다 신뢰할 수 있다.
         const nativeHandled = await drainNativeNotificationTap(
-          navigateToMaybeQueue,
+          navigatePushIntent,
         );
         let coldStartHandled = nativeHandled;
 
@@ -963,12 +1000,15 @@ function App(): React.JSX.Element {
             }
             if (Object.keys(tapData).length > 0) {
               coldStartHandled = true;
-              await openFromPayloadOnce(
-                navigateToMaybeQueue,
+              const result = await openFromPayloadOnce(
+                navigatePushIntent,
                 tapData,
                 'notifee_initial',
                 { fromInitialCache: true },
               );
+              if (!result?.handled) {
+                await queueTapIntent(tapData, { notifyListener: false });
+              }
             }
           }
         }
@@ -987,17 +1027,20 @@ function App(): React.JSX.Element {
                   _mid: String(initialRemote.messageId),
                 }
               : initialRemote.data;
-            await openFromPayloadOnce(
-              navigateToMaybeQueue,
+            const result = await openFromPayloadOnce(
+              navigatePushIntent,
               data,
               'fcm_initial',
               { fromInitialCache: true },
             );
+            if (!result?.handled) {
+              await queueTapIntent(data, { notifyListener: false });
+            }
           }
         }
 
         // 5) BG 컨텍스트에서 큐에 적재해 둔 탭을 한 번만 소진
-        await drainQueuedTap(navigateToMaybeQueue);
+        await drainQueuedTap(navigatePushIntent);
 
         if (!coldStartHandled) {
           L_PUSH(
@@ -1005,13 +1048,22 @@ function App(): React.JSX.Element {
           );
         }
       });
+
+      // 4) 탭 복구가 끝난 뒤 표시 채널과 Android 알림 권한을 준비한다.
+      // Manifest에 선언하지 않은 전화/마이크 권한은 여기서 요청하지 않는다.
+      await ensureNotificationChannel().then(() =>
+        L_APP('ensureNotificationChannel done'),
+      );
+      await requestNotificationPermissionAndroid().then(result =>
+        L_APP('Android notification permission checked', result),
+      );
     })();
 
     return () => {
       L_PUSH('unsubscribe onNotificationOpenedApp');
       unsubscribeNotificationOpened();
     };
-  }, [navigateToMaybeQueue]);
+  }, [navigatePushIntent]);
 
   // Deep Link 처리 (알림 클릭 시 credittalk://search?phoneNumber=xxx 형태)
   useEffect(() => {
@@ -1069,18 +1121,25 @@ function App(): React.JSX.Element {
           ref={navRef}
           onReady={() => {
             L_NAV('NavigationContainer onReady');
-            if (pendingNavRef.current) {
-              const { screen, params } = pendingNavRef.current;
+            runExclusivePushOp('navigation-ready-tap-drain', () =>
+              drainQueuedTap(navigatePushIntent),
+            );
+            if (pendingNavRef.current.length) {
+              const { screen, params } = pendingNavRef.current[0];
               L_INTENT('onReady pending found', {
                 screen,
                 params,
                 authReady: authReadyRef.current,
               });
               if (!needsAuth(screen) || authReadyRef.current) {
-                const fresh = takePendingNav();
-                if (fresh) {
+                let fresh = takePendingNav();
+                while (fresh) {
                   L_INTENT('onReady → flushing pending');
-                  navigateToScreen(fresh.screen, fresh.params);
+                  if (!navigateToScreen(fresh.screen, fresh.params)) {
+                    setPendingNav(fresh.screen, fresh.params);
+                    break;
+                  }
+                  fresh = takePendingNav();
                 }
               } else {
                 L_INTENT('onReady → keep pending (auth not ready)');

@@ -2,6 +2,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts'; //
+import {
+  getSupabasePublishableKey,
+  getSupabaseSecretKey,
+} from '../_shared/supabase-admin.ts';
 
 interface CreateChatRoomPayload {
   otherUserId: string;
@@ -23,7 +27,7 @@ serve(async (req: Request) => {
     // Supabase Admin 클라이언트 생성 (서비스 키 사용, 사용자 컨텍스트 전달 제거)
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      getSupabaseSecretKey(),
       // { global: { headers: { Authorization: req.headers.get('Authorization')! } } } // 이 부분을 제거하거나 주석 처리!
     );
 
@@ -34,7 +38,7 @@ serve(async (req: Request) => {
     // 여기서는 클라이언트에서 보낸 JWT를 사용하여 사용자 정보를 가져옵니다.
     const userSupabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '', // 일반적으로 anon key 사용
+      getSupabasePublishableKey(),
       {
         global: {
           headers: { Authorization: req.headers.get('Authorization')! },

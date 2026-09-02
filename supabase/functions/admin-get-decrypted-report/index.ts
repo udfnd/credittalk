@@ -5,22 +5,27 @@ import {
   SupabaseClient,
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getSupabaseSecretKey } from '../_shared/supabase-admin.ts';
 
-// !!! 중요: 실제 관리자 인증/권한 검증 로직 구현 필수 !!!
 async function verifyAdmin(
-  _supabaseAdminClient: SupabaseClient,
-  _authorizationHeader?: string | null,
+  supabaseAdminClient: SupabaseClient,
+  authorizationHeader?: string | null,
 ): Promise<boolean> {
-  // 방법 1: 요청 헤더의 JWT 토큰 검증 및 custom claims 확인
-  // 방법 2: 별도의 관리자 API 키 확인
-  // 방법 3: 관리자 테이블 조회 등
-  console.warn(
-    '!!! Admin verification is NOT implemented. Access allowed for testing ONLY. !!!',
-  );
-  // const { data: { user } } = await supabaseClient.auth.getUser(); // user context 필요시
-  // const isAdmin = user?.app_metadata?.claims_admin === true; // 예시
-  // return isAdmin;
-  return true; // 실제 구현 필요!
+  if (!authorizationHeader?.startsWith('Bearer ')) return false;
+  const token = authorizationHeader.slice('Bearer '.length).trim();
+  if (!token) return false;
+  const {
+    data: { user },
+    error: authError,
+  } = await supabaseAdminClient.auth.getUser(token);
+  if (authError || !user) return false;
+
+  const { data: profile, error: profileError } = await supabaseAdminClient
+    .from('users')
+    .select('is_admin')
+    .eq('auth_user_id', user.id)
+    .maybeSingle();
+  return !profileError && profile?.is_admin === true;
 }
 
 async function getDecryptedReport(
@@ -56,10 +61,10 @@ serve(async req => {
     // 관리자 작업은 service_role 키 사용
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      getSupabaseSecretKey(),
     );
 
-    // 관리자 권한 검증
+    // 호출자의 실제 Auth JWT와 public.users 관리자 플래그를 모두 검증한다.
     const isAdmin = await verifyAdmin(
       supabaseAdminClient,
       req.headers.get('Authorization'),

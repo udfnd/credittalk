@@ -13,6 +13,7 @@ const ADMIN_ROOT = path.resolve(__dirname, '../../credittalk-admin');
 describe('Admin Push Payload - EventDetail', () => {
   let pushPageSource;
   let enqueueRouteSource;
+  let canonicalSenderSource;
 
   beforeAll(() => {
     pushPageSource = fs.readFileSync(
@@ -21,6 +22,10 @@ describe('Admin Push Payload - EventDetail', () => {
     );
     enqueueRouteSource = fs.readFileSync(
       path.resolve(ADMIN_ROOT, 'src/app/api/push/enqueue/route.ts'),
+      'utf-8',
+    );
+    canonicalSenderSource = fs.readFileSync(
+      path.resolve(__dirname, '../supabase/functions/send-fcm-v1-push/index.ts'),
       'utf-8',
     );
   });
@@ -45,15 +50,15 @@ describe('Admin Push Payload - EventDetail', () => {
     });
   });
 
-  describe('Enqueue route FCM message', () => {
+  describe('Enqueue route and canonical FCM sender', () => {
     test('should normalize data payload values to strings for FCM', () => {
       // FCM data payload must be Record<string, string>
-      expect(enqueueRouteSource).toMatch(
+      expect(canonicalSenderSource).toMatch(
         /function normalizeDataPayload/,
       );
       // Verify it converts non-string values
-      expect(enqueueRouteSource).toMatch(
-        /typeof v === 'string' \? v : JSON\.stringify\(v\)/,
+      expect(canonicalSenderSource).toMatch(
+        /typeof raw === 'string' \? raw : JSON\.stringify\(raw\)/,
       );
     });
 
@@ -72,14 +77,28 @@ describe('Admin Push Payload - EventDetail', () => {
       expect(enqueueRouteSource).toMatch(
         /nid:\s*suppliedNid\s*\?\?\s*`push_\$\{crypto\.randomUUID\(\)\}`/,
       );
-      expect(enqueueRouteSource).toMatch(/collapse_key:\s*dataPayload\.nid/);
-      expect(enqueueRouteSource).toMatch(/tag:\s*dataPayload\.nid/);
+      expect(canonicalSenderSource).toMatch(/tag:\s*nid/);
+      // FCM은 앱별 collapse key를 최대 4개만 보관하므로 매 알림 고유 키를
+      // transport collapse_key로 쓰면 정상 알림이 퇴출될 수 있다.
+      expect(canonicalSenderSource).not.toMatch(/collapse_key\s*:/);
     });
 
     test('should use the explicit Android push click action', () => {
-      expect(enqueueRouteSource).toMatch(
+      expect(canonicalSenderSource).toMatch(
         /click_action:\s*ANDROID_CLICK_ACTION/,
       );
+    });
+
+    test('should surface remaining transient token failures to the durable worker', () => {
+      expect(canonicalSenderSource).toMatch(/retryable_failed:\s*retryableFailed/);
+      expect(canonicalSenderSource).toMatch(
+        /if \(retryableFailed > 0\) return json\(result, 503\)/,
+      );
+    });
+
+    test('should reject malformed or excessive targeted audiences before enqueue', () => {
+      expect(enqueueRouteSource).toMatch(/MAX_EXPLICIT_TARGETS\s*=\s*1000/);
+      expect(enqueueRouteSource).toMatch(/targetUserIds\.some\(id => !UUID_PATTERN\.test\(id\)\)/);
     });
   });
 });

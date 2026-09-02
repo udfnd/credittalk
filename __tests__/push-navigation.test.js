@@ -163,11 +163,14 @@ describe('Push Notification Navigation - EventDetail', () => {
       expect(wireMatch[0]).toMatch(/drainNativeNotificationTap/);
     });
 
-    test('App.tsx calls drainNativeNotificationTap on cold start', () => {
+    test('App.tsx calls drainNativeNotificationTap with persistent-retry navigation', () => {
       // 호출이 멀티라인 포맷이어도 매칭되도록 공백/개행 허용
       expect(appSource).toMatch(
-        /drainNativeNotificationTap\(\s*navigateToMaybeQueue,?\s*\)/,
+        /drainNativeNotificationTap\(\s*navigatePushIntent,?\s*\)/,
       );
+      expect(appSource).toMatch(/queueTapIntent\(data\)/);
+      expect(appSource).toMatch(/navigation-ready-tap-drain/);
+      expect(appSource).toMatch(/auth-ready-tap-drain/);
     });
 
     test('PushIntentModule.kt exists and exposes getInitialNotificationData', () => {
@@ -220,9 +223,9 @@ describe('new-comment-notification board_type coverage', () => {
   );
 
   test('maps notices comments to NoticeDetail', () => {
-    expect(fnSource).toMatch(/notices:\s*\{/);
-    expect(fnSource).toMatch(/'NoticeDetail'/);
-    expect(fnSource).toMatch(/noticeId/);
+    expect(fnSource).toMatch(
+      /notices:\s*\['notices',\s*'title',\s*null,\s*'NoticeDetail',\s*'noticeId'\]/,
+    );
   });
 
   test('legacy "review" board_type is aliased to reviews mapping', () => {
@@ -232,8 +235,8 @@ describe('new-comment-notification board_type coverage', () => {
   test('notices mapping must not assume an author column (notices has none)', () => {
     // notices 테이블에는 user_id/uploader_id가 없으므로 작성자 푸시는 건너뛰고
     // 부모 댓글 작성자 + 관리자 알림만 발송해야 한다.
-    const noticesBlock = fnSource.match(/notices:\s*\{[\s\S]*?\}/);
+    const noticesBlock = fnSource.match(/notices:\s*\[[^\]]+\]/);
     expect(noticesBlock).not.toBeNull();
-    expect(noticesBlock[0]).not.toMatch(/postAuthorColumn:\s*'(user_id|uploader_id)'/);
+    expect(noticesBlock[0]).toMatch(/'title',\s*null,/);
   });
 });

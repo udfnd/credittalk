@@ -1,6 +1,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, User } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  getSupabasePublishableKey,
+  getSupabaseSecretKey,
+} from '../_shared/supabase-admin.ts';
 
 // Supabase Edge Function: Naver 로그인 처리 함수
 serve(async req => {
@@ -29,7 +33,7 @@ serve(async req => {
     // Supabase Admin 클라이언트 생성
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      getSupabaseSecretKey(),
     );
 
     // 2. 전체 페이지 순회하여 기존 사용자 검색
@@ -94,7 +98,7 @@ serve(async req => {
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
+      getSupabasePublishableKey(),
     );
     const { data: otpData, error: verifyError } =
       await supabaseClient.auth.verifyOtp({

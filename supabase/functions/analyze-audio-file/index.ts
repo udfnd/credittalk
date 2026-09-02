@@ -3,6 +3,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getSupabaseSecretKey } from '../_shared/supabase-admin.ts';
 
 const PHISHING_KEYWORDS = [
   '압수수색',
@@ -181,7 +182,7 @@ async function analyzeAudio(filePath: string) {
   console.log(`[SERVER] 1. analyzeAudio 함수 시작 (filePath: ${filePath})`);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const serviceRoleKey = getSupabaseSecretKey();
   const gcpProjectId = Deno.env.get('GCP_PROJECT_ID')!;
   const googleCredentialsJson = Deno.env.get('GOOGLE_CREDENTIALS')!;
   const location = 'asia-northeast1';

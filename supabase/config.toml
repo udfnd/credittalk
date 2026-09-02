@@ -1,6 +1,6 @@
 [functions.insert-scammer-report]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/insert-scammer-report/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -33,7 +33,7 @@ entrypoint = "./functions/create-chat-room/index.ts"
 
 [functions.send-sens-notification]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/send-sens-notification/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -44,7 +44,7 @@ entrypoint = "./functions/send-sens-notification/index.ts"
 
 [functions.log-search]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/log-search/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -52,3 +52,39 @@ entrypoint = "./functions/log-search/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/log-search/*.html" ]
+
+# These public-gateway functions validate the user (where required) inside the
+# handler. Keep the deployed auth behavior explicit so a future deploy cannot
+# silently flip it back to the CLI default.
+[functions.get-home-stats]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/get-home-stats/index.ts"
+
+[functions.delete-user]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/delete-user/index.ts"
+
+[functions.trigger-audio-analysis]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/trigger-audio-analysis/index.ts"
+
+# Internal push webhooks authenticate an `apikey` against SUPABASE_SECRET_KEYS
+# inside the handler. New sb_secret keys are not JWTs, so gateway JWT checks
+# must stay disabled for these functions.
+[functions.send-fcm-v1-push]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-fcm-v1-push/index.ts"
+
+[functions.new-post-notification]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/new-post-notification/index.ts"
+
+[functions.new-comment-notification]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/new-comment-notification/index.ts"

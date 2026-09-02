@@ -2,6 +2,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getSupabaseSecretKey } from '../_shared/supabase-admin.ts';
 
 serve(async req => {
   // 1) CORS preflight 처리
@@ -25,7 +26,7 @@ serve(async req => {
     // 3) Supabase Admin 클라이언트 초기화 (서비스 역할 키 사용)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      getSupabaseSecretKey(),
       { auth: { persistSession: false } },
     );
 

@@ -2,6 +2,10 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  getSupabasePublishableKey,
+  getSupabaseSecretKey,
+} from '../_shared/supabase-admin.ts';
 
 Deno.serve(async req => {
   // CORS preflight request 처리
@@ -12,7 +16,7 @@ Deno.serve(async req => {
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
+      getSupabasePublishableKey(),
       {
         global: {
           headers: { Authorization: req.headers.get('Authorization')! },
@@ -32,7 +36,7 @@ Deno.serve(async req => {
     // 이 클라이언트는 service_role key를 사용하므로, 데이터베이스의 모든 작업을 수행할 수 있습니다.
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      getSupabaseSecretKey(),
     );
 
     // auth.users 테이블에서 사용자를 삭제합니다.

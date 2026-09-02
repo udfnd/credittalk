@@ -4,6 +4,10 @@ import {
   SupabaseClient,
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  getSupabasePublishableKey,
+  getSupabaseSecretKey,
+} from '../_shared/supabase-admin.ts';
 
 interface DamageAccount {
   accountHolderName?: string | null;
@@ -165,7 +169,7 @@ serve(async (req: Request) => {
 
     const userSupabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      getSupabasePublishableKey(),
       { global: { headers: { Authorization: authorization } } },
     );
     const {
@@ -245,7 +249,7 @@ serve(async (req: Request) => {
     const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0].trim();
     const supabaseAdminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      getSupabaseSecretKey(),
       { auth: { persistSession: false } },
     );
 

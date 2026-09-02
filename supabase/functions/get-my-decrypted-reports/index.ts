@@ -1,6 +1,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  getSupabasePublishableKey,
+  getSupabaseSecretKey,
+} from '../_shared/supabase-admin.ts';
 
 // 가장 효율적인 방법은 DB 뷰를 직접 호출하는 것이므로,
 // 클라이언트 사이드에서 복호화 로직은 필요 없습니다.
@@ -14,11 +18,11 @@ serve(async (req: Request) => {
   try {
     // 1. 환경 변수 유효성 검사
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const secretKey = getSupabaseSecretKey();
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl) {
       console.error(
-        'Server configuration error: Missing Supabase URL or Service Role Key.',
+        'Server configuration error: Missing Supabase URL.',
       );
       throw new Error('서버 구성 오류가 발생했습니다.');
     }
@@ -32,7 +36,7 @@ serve(async (req: Request) => {
     // 사용자 클라이언트를 생성하여 사용자 인증
     const userSupabaseClient = createClient(
       supabaseUrl,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
+      getSupabasePublishableKey(),
       {
         global: { headers: { Authorization: authorization } },
       },
@@ -50,7 +54,7 @@ serve(async (req: Request) => {
       });
     }
 
-    const supabaseAdminClient = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdminClient = createClient(supabaseUrl, secretKey);
     const { data: decryptedReports, error: fetchError } =
       await supabaseAdminClient
         .from('decrypted_scammer_reports') // <- 원본 테이블이 아닌, 복호화된 뷰를 조회

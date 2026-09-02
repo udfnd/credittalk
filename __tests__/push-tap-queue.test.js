@@ -55,9 +55,12 @@ const path = require('path');
 describe('Push tap queue - race-free drain (S24/S25)', () => {
   let push;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    jest.restoreAllMocks();
+    jest.clearAllMocks();
     jest.resetModules();
     global.__PUSH_FG_BOUND__ = false;
+    await require('@react-native-async-storage/async-storage').clear();
     push = require('../src/lib/push');
   });
 
@@ -124,6 +127,26 @@ describe('Push tap queue - race-free drain (S24/S25)', () => {
       expect.objectContaining({ noticeId: '7' }),
     );
   });
+
+  test('navigation rejection keeps the tap until a later successful drain', async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage');
+    push.setTapQueueListener(null);
+    await push.queueTapIntent(
+      { nid: 'persistent-retry-1', screen: 'NoticeDetail', noticeId: '11' },
+      { notifyListener: false },
+    );
+
+    expect(await push.drainQueuedTap(jest.fn(() => false))).toBe(false);
+    expect(JSON.parse(await AsyncStorage.getItem('noti_tap_queue'))).toHaveLength(1);
+
+    const accepted = jest.fn(() => true);
+    expect(await push.drainQueuedTap(accepted)).toBe(true);
+    expect(accepted).toHaveBeenCalledWith(
+      'NoticeDetail',
+      expect.objectContaining({ noticeId: '11' }),
+    );
+    expect(JSON.parse(await AsyncStorage.getItem('noti_tap_queue'))).toEqual([]);
+  });
 });
 
 describe('Tap dedup key must distinguish nid-less notifications', () => {
@@ -148,18 +171,74 @@ describe('Tap dedup key must distinguish nid-less notifications', () => {
   });
 });
 
-describe('External link opening under Android 11+ package visibility', () => {
+describe('External push link safety and retry', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    jest.clearAllMocks();
+  });
+
   // manifest <queries>에 없는 스킴은 canOpenURL이 false를 반환하지만,
-  // 실제 openURL은 성공할 수 있음. canOpenURL false로 이동을 포기하면 안 됨.
-  test('openFromPayload still attempts openURL when canOpenURL is false', async () => {
+  // 실제 HTTPS openURL은 성공할 수 있음. canOpenURL false로 이동을 포기하면 안 됨.
+  test('still attempts an HTTPS URL when canOpenURL is false', async () => {
     const { Linking } = require('react-native');
     jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(false);
     const openSpy = jest
       .spyOn(Linking, 'openURL')
       .mockResolvedValue(undefined);
     const push2 = require('../src/lib/push');
-    await push2.openFromPayload(jest.fn(), { link_url: 'kakaotalk://inapp' });
-    expect(openSpy).toHaveBeenCalledWith('kakaotalk://inapp');
+    const result = await push2.openFromPayload(jest.fn(), {
+      link_url: 'example.com/path',
+    });
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/path');
+    expect(result.handled).toBe(true);
+  });
+
+  test('still attempts an HTTPS URL when canOpenURL throws', async () => {
+    const { Linking } = require('react-native');
+    jest
+      .spyOn(Linking, 'canOpenURL')
+      .mockRejectedValue(new Error('package visibility lookup failed'));
+    const openSpy = jest
+      .spyOn(Linking, 'openURL')
+      .mockResolvedValue(undefined);
+    const push2 = require('../src/lib/push');
+    const result = await push2.openFromPayload(jest.fn(), {
+      link_url: 'https://example.com/path',
+    });
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/path');
+    expect(result.handled).toBe(true);
+  });
+
+  test('rejects arbitrary schemes instead of dispatching them to another app', async () => {
+    const { Linking } = require('react-native');
+    const openSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const push2 = require('../src/lib/push');
+    const result = await push2.openFromPayload(jest.fn(), {
+      link_url: 'kakaotalk://inapp',
+    });
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({ handled: true, outcome: 'invalid_link' }),
+    );
+  });
+
+  test('an openURL failure is not consumed and succeeds on retry', async () => {
+    const { Linking } = require('react-native');
+    jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
+    const openSpy = jest
+      .spyOn(Linking, 'openURL')
+      .mockRejectedValueOnce(new Error('activity unavailable'))
+      .mockResolvedValueOnce(undefined);
+    const push2 = require('../src/lib/push');
+    const data = {
+      nid: 'retry-link-1',
+      link_url: 'https://example.com/notice',
+    };
+    const first = await push2.openFromPayloadOnce(jest.fn(), data);
+    const second = await push2.openFromPayloadOnce(jest.fn(), data);
+    expect(first.handled).toBe(false);
+    expect(second.handled).toBe(true);
+    expect(openSpy).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -212,8 +291,9 @@ describe('Pending nav intent must survive App remounts', () => {
       'utf-8',
     );
     // 액티비티 재생성으로 App이 리마운트되면 useRef 기반 pending은 유실된다.
-    expect(appSource).toMatch(/const pendingNavHolder[\s\S]{0,200}?current:\s*null/);
+    expect(appSource).toMatch(/const pendingNavHolder[\s\S]{0,200}?current:\s*\[\]/);
     expect(appSource).not.toMatch(/pendingNavRef = useRef/);
+    expect(appSource).toMatch(/PENDING_NAV_MAX/);
   });
 
   test('pending intents expire (오래된 탭의 지연 로그인 후 유령 이동 방지)', () => {

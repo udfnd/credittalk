@@ -11,6 +11,7 @@ import notifee, {
   AndroidImportance,
   AndroidLaunchActivityFlag,
   AndroidStyle,
+  AuthorizationStatus,
   EventType,
 } from '@notifee/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,17 +30,55 @@ export async function ensureNotificationChannel() {
   });
 }
 
+let notificationSettingsAlertShown = false;
+
 export const requestNotificationPermissionAndroid = async () => {
   if (Platform.OS !== 'android') return { granted: true };
-  if (Platform.Version < 33) return { granted: true };
   try {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    let permissionResult = 'pre_android_13';
+    if (Platform.Version >= 33) {
+      const alreadyGranted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      );
+      permissionResult = alreadyGranted
+        ? PermissionsAndroid.RESULTS.GRANTED
+        : await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+          );
+    }
+    const settings = await notifee.getNotificationSettings();
+    const channelBlocked = await notifee.isChannelBlocked(CHANNEL_ID).catch(
+      () => false,
     );
-    const granted = result === PermissionsAndroid.RESULTS.GRANTED;
-    console.log('[APP]', 'Android notification permission requested');
-    console.log('[Push] POST_NOTIFICATIONS', result);
-    return { granted };
+    const granted =
+      settings.authorizationStatus === AuthorizationStatus.AUTHORIZED &&
+      !channelBlocked;
+    console.log('[Push] notification health', {
+      permissionResult,
+      authorizationStatus: settings.authorizationStatus,
+      channelBlocked,
+    });
+    if (!granted && !notificationSettingsAlertShown) {
+      notificationSettingsAlertShown = true;
+      Alert.alert(
+        '알림이 차단되어 있어요',
+        channelBlocked
+          ? '크레딧톡 알림 채널을 켜야 새 알림을 받을 수 있습니다.'
+          : '기기 설정에서 크레딧톡 알림을 허용해 주세요.',
+        [
+          { text: '나중에', style: 'cancel' },
+          {
+            text: '설정 열기',
+            onPress: () => notifee.openNotificationSettings(CHANNEL_ID),
+          },
+        ],
+      );
+    }
+    return {
+      granted,
+      channelBlocked,
+      authorizationStatus: settings.authorizationStatus,
+    };
   } catch (err) {
     console.warn('[Push] request permission failed', err);
     return { granted: false };
@@ -93,17 +132,42 @@ export const requestCallDetectionPermissionsAndroid = async () => {
   }
 };
 
-async function openExternalUrlBestEffort(url) {
-  if (!url) return;
-  try {
-    // Android 11+ 패키지 가시성: manifest <queries>에 없는 스킴은 canOpenURL이
-    // false를 반환하지만 실제 openURL은 성공할 수 있음 → 항상 시도한다.
-    const supported = await Linking.canOpenURL(url);
-    if (!supported) console.warn(`[Push] canOpenURL=false, trying anyway: ${url}`);
-    await Linking.openURL(url);
-  } catch (error) {
-    console.error('[Push] Error opening URL:', error);
+export function normalizeExternalPushUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  let candidate = value.trim();
+  // 과거 관리자 도구가 저장한 `naver.com/...` 형태도 안전하게 복구한다.
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+    candidate = `https://${candidate}`;
   }
+  try {
+    const parsed = new URL(candidate);
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) {
+      return null;
+    }
+    if (parsed.username || parsed.password || candidate.length > 2048) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function openExternalUrl(url) {
+  const safeUrl = normalizeExternalPushUrl(url);
+  if (!safeUrl) throw new Error('Invalid or unsupported push URL');
+  // Android 11+에서 canOpenURL이 오탐할 수 있어 결과는 진단에만 쓰되,
+  // 실제 openURL 실패는 호출자에게 전파하여 탭을 소비 처리하지 않는다.
+  try {
+    const supported = await Linking.canOpenURL(safeUrl);
+    if (!supported) console.warn('[Push] canOpenURL=false; trying HTTPS URL');
+  } catch (error) {
+    // 일부 OEM/패키지 가시성 조합에서는 진단 API만 예외를 던진다. 실제 VIEW
+    // 인텐트까지 막지 말고 openURL의 결과만 최종 성공 여부로 사용한다.
+    console.warn('[Push] canOpenURL check failed; trying HTTPS URL', {
+      message: error?.message || String(error),
+    });
+  }
+  await Linking.openURL(safeUrl);
+  return safeUrl;
 }
 
 export function hasNotificationPayload(remote) {
@@ -167,7 +231,7 @@ function getMessageKey(remote) {
 // TTL 경과 후 다시 표시되도록 허용한다. (마커 영구 저장 시 알림이 영영 안 뜨는 버그 방지)
 const SEEN_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
-async function markAndCheckSeen(key) {
+async function isRecentlySeen(key) {
   if (!key) return false;
   const k = `noti_seen:${key}`;
   const prev = await AsyncStorage.getItem(k);
@@ -175,8 +239,12 @@ async function markAndCheckSeen(key) {
     const ts = Number(prev);
     if (Number.isFinite(ts) && Date.now() - ts < SEEN_TTL_MS) return true;
   }
-  await AsyncStorage.setItem(k, String(Date.now()));
   return false;
+}
+
+async function markSeen(key) {
+  if (!key) return;
+  await AsyncStorage.setItem(`noti_seen:${key}`, String(Date.now()));
 }
 
 // ── 메시지 단위 consume 마커 ─────────────────────────────────────────────
@@ -309,6 +377,24 @@ async function backupPayload(id, data = {}) {
       arr.push({ id, ts: Date.now() });
       if (arr.length > PAYLOAD_INDEX_MAX) arr = arr.slice(-PAYLOAD_INDEX_MAX);
       await AsyncStorage.setItem(PAYLOAD_INDEX_KEY, JSON.stringify(arr));
+    });
+  } catch {}
+}
+
+async function removePayloadBackup(id) {
+  if (!id) return;
+  try {
+    await AsyncStorage.removeItem(PAYLOAD_BACKUP_PREFIX + id);
+    await runExclusiveIndexWrite(async () => {
+      const raw = (await AsyncStorage.getItem(PAYLOAD_INDEX_KEY)) || '[]';
+      let entries = [];
+      try {
+        entries = JSON.parse(raw) || [];
+      } catch {}
+      await AsyncStorage.setItem(
+        PAYLOAD_INDEX_KEY,
+        JSON.stringify(entries.filter(entry => String(entry?.id) !== String(id))),
+      );
     });
   } catch {}
 }
@@ -551,12 +637,23 @@ function getTapKeyFromData(data = {}) {
   );
 }
 
-export async function displayOnce(remote, source = 'unknown') {
+let displayOpChain = Promise.resolve();
+
+export function displayOnce(remote, source = 'unknown') {
+  const operation = displayOpChain.then(() => displayOnceInternal(remote, source));
+  displayOpChain = operation.then(
+    () => {},
+    () => {},
+  );
+  return operation;
+}
+
+async function displayOnceInternal(remote, source = 'unknown') {
   console.log('[PUSH] displayOnce enter', { source, platform: Platform.OS });
 
   // 1) 동일 메시지 재표시 방지
   const key = getMessageKey(remote);
-  if (await markAndCheckSeen(key)) {
+  if (await isRecentlySeen(key)) {
     console.log('[PUSH] displayOnce dedup skip', { key });
     return;
   }
@@ -565,12 +662,14 @@ export async function displayOnce(remote, source = 'unknown') {
   const picked = pickTitleBody(remote);
   if (Platform.OS === 'ios' && picked?.data?.expect_os_alert === '1') {
     console.log('[PUSH] iOS expect_os_alert=1 → skip app display');
+    await markSeen(key);
     return;
   }
 
   // 3) OS가 이미 표시한(notification payload) 케이스는 스킵
   if (source !== 'foreground' && hasNotificationPayload(remote)) {
     console.log('[PUSH] displayOnce skip: OS already displayed');
+    await markSeen(key);
     return;
   }
 
@@ -637,8 +736,15 @@ export async function displayOnce(remote, source = 'unknown') {
     hasIos: !!notif.ios,
   });
 
-  await notifee.displayNotification(notif);
-  console.log('[PUSH] displayOnce done');
+  try {
+    await notifee.displayNotification(notif);
+    await markSeen(key);
+    console.log('[PUSH] displayOnce done');
+  } catch (error) {
+    // 표시가 실패했는데 seen/백업이 남으면 후속 재전달까지 6시간 막힌다.
+    await removePayloadBackup(stableId);
+    throw error;
+  }
 }
 
 export async function openFromPayload(navigateTo, data = {}, source = 'unknown') {
@@ -697,16 +803,31 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
         screen,
         params: finalParams,
       });
-      navigateTo?.(screen, finalParams);
+      if (typeof navigateTo !== 'function') throw new Error('Navigation handler is unavailable');
+      const accepted = await Promise.resolve(navigateTo(screen, finalParams));
+      if (accepted === false) throw new Error('Navigation handler rejected the push intent');
       logPushTap({ source, outcome: 'navigate_screen', data, ...restoredDetail });
-      return;
+      return { handled: true, outcome: 'navigate_screen' };
     }
 
     const externalUrl = link_url || url;
     if (typeof externalUrl === 'string') {
-      console.log('[NAV:INTENT] open external url', externalUrl);
+      const normalizedUrl = normalizeExternalPushUrl(externalUrl);
+      if (!normalizedUrl) {
+        console.warn('[NAV:INTENT] rejected invalid external url');
+        logPushTap({
+          source,
+          outcome: 'invalid_link',
+          data,
+          detail: { reason: 'Only http(s) URLs without credentials are allowed' },
+        });
+        return { handled: true, outcome: 'invalid_link' };
+      }
+      console.log('[NAV:INTENT] open external url');
+      await openExternalUrl(normalizedUrl);
+      // openURL이 resolve된 뒤에만 성공으로 기록한다.
       logPushTap({ source, outcome: 'open_link', data, ...restoredDetail });
-      await openExternalUrlBestEffort(externalUrl);
+      return { handled: true, outcome: 'open_link' };
     } else {
       console.log('[NAV:INTENT] nothing to open, payload=', data);
       // keys: 탭 data가 통째로 빈 것인지(키 0개) 라우팅 필드만 빠진 것인지 구분,
@@ -733,10 +854,12 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
             : {}),
         },
       });
+      return { handled: true, outcome: 'no_target' };
     }
   } catch (e) {
     console.warn('[Push] openFromPayload error:', e?.message || e);
     logPushTap({ source, outcome: 'error', data, detail: { message: String(e?.message || e) } });
+    return { handled: false, outcome: 'error', error: e };
   }
 }
 
@@ -744,8 +867,18 @@ export async function openFromPayload(navigateTo, data = {}, source = 'unknown')
 // drainQueuedTap + messaging.onNotificationOpenedApp/getInitialNotification)가
 // 같은 탭을 중복 네비게이션하는 것만 차단. 짧은 TTL이라 이후 동일 nid 재탭은 정상 동작.
 const TAP_DEDUP_TTL_MS = 60 * 1000; // 60s
+let tapOpenChain = Promise.resolve();
 
-export async function openFromPayloadOnce(
+export function openFromPayloadOnce(...args) {
+  const operation = tapOpenChain.then(() => openFromPayloadOnceInternal(...args));
+  tapOpenChain = operation.then(
+    () => {},
+    () => {},
+  );
+  return operation;
+}
+
+async function openFromPayloadOnceInternal(
   navigateTo,
   data = {},
   source = 'unknown',
@@ -759,7 +892,7 @@ export async function openFromPayloadOnce(
       key: getConsumeKey(data),
     });
     logPushTap({ source, outcome: 'stale_replay_skip', data });
-    return;
+    return { handled: true, outcome: 'stale_replay_skip' };
   }
 
   const key = getTapKeyFromData(data);
@@ -772,13 +905,17 @@ export async function openFromPayloadOnce(
         key,
       });
       logPushTap({ source, outcome: 'dedup_skip', data });
-      return;
+      return { handled: true, outcome: 'dedup_skip' };
     }
   }
-  if (key) await AsyncStorage.setItem(marker, String(Date.now()));
-  // 실제 처리로 진입 → 이후 콜드스타트 캐시가 이 메시지를 재반환해도 무시되도록 기록
-  await markTapConsumed(data);
-  return openFromPayload(navigateTo, data, source);
+  const result = await openFromPayload(navigateTo, data, source);
+  // 실제 링크 열기/네비게이션 인계가 성공한 뒤에만 소비한다. 일시 실패는 큐에서
+  // 재시도할 수 있고, 실패가 60초 dedup에 가려지지 않는다.
+  if (result?.handled) {
+    if (key) await AsyncStorage.setItem(marker, String(Date.now()));
+    await markTapConsumed(data);
+  }
+  return result;
 }
 
 // push-notified queue: 탭 적재 완료 직후 등록된 드레인 리스너를 호출한다.
@@ -788,60 +925,116 @@ export async function openFromPayloadOnce(
 // 리스너는 wireMessageHandlers에서 초기화 드레인보다 먼저 바인딩되므로,
 // 쓰기가 늦든 읽기가 늦든 둘 중 하나는 반드시 탭을 소비한다.
 let tapQueueListener = null;
+const TAP_QUEUE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TAP_QUEUE_MAX = 20;
+let tapQueueChain = Promise.resolve();
+
+function runExclusiveTapQueue(operation) {
+  const result = tapQueueChain.then(operation, operation);
+  tapQueueChain = result.then(
+    () => {},
+    () => {},
+  );
+  return result;
+}
+
+function parseTapQueue(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export function setTapQueueListener(listener) {
   tapQueueListener = listener;
 }
 
-export async function queueTapIntent(data = {}) {
+export async function queueTapIntent(
+  data = {},
+  { notifyListener = true } = {},
+) {
+  let stored = false;
   try {
-    const raw = (await AsyncStorage.getItem(TAP_QUEUE_KEY)) || '[]';
-    const arr = JSON.parse(raw);
-    arr.push({ ts: Date.now(), data });
-    await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(arr));
-    console.log('[PUSH] queueTapIntent stored', arr.length);
+    await runExclusiveTapQueue(async () => {
+      const now = Date.now();
+      const raw = await AsyncStorage.getItem(TAP_QUEUE_KEY);
+      const entries = parseTapQueue(raw).filter(
+        item => Number.isFinite(item?.ts) && now - item.ts <= TAP_QUEUE_TTL_MS,
+      );
+      entries.push({ id: `${now}:${Math.random()}`, ts: now, data });
+      const bounded = entries.slice(-TAP_QUEUE_MAX);
+      await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(bounded));
+      console.log('[PUSH] queueTapIntent stored', bounded.length);
+    });
+    stored = true;
   } catch (e) {
     console.warn('[PUSH] queueTapIntent error', e?.message || e);
   }
-  try {
-    await tapQueueListener?.();
-  } catch (e) {
-    console.warn('[PUSH] tapQueueListener error', e?.message || e);
+  if (notifyListener) {
+    try {
+      await tapQueueListener?.();
+    } catch (e) {
+      console.warn('[PUSH] tapQueueListener error', e?.message || e);
+    }
   }
+  return stored;
 }
 
 export async function drainQueuedTap(navigateTo) {
   try {
-    const raw = (await AsyncStorage.getItem(TAP_QUEUE_KEY)) || '[]';
-    let arr = [];
-    try {
-      arr = JSON.parse(raw) || [];
-    } catch {
-      arr = [];
-    }
-    if (!Array.isArray(arr) || arr.length === 0) {
-      console.log('[NAV:INTENT] drainQueuedTap: empty');
-      return;
-    }
-    console.log('[NAV:INTENT] drainQueuedTap start', { count: arr.length });
-
-    await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify([]));
-    for (const item of arr) {
-      const data = item?.data || {};
-      console.log('[NAV:INTENT] draining one', data);
-      try {
-        await openFromPayloadOnce(navigateTo, data, 'notifee_queue');
-      } catch (e) {
-        // 큐는 이미 비웠으므로 여기서 터지면 탭이 조용히 유실된다 → 반드시 기록
+    return await runExclusiveTapQueue(async () => {
+      const now = Date.now();
+      const raw = await AsyncStorage.getItem(TAP_QUEUE_KEY);
+      let entries = parseTapQueue(raw);
+      const expired = entries.filter(
+        item => !Number.isFinite(item?.ts) || now - item.ts > TAP_QUEUE_TTL_MS,
+      ).length;
+      entries = entries.filter(
+        item => Number.isFinite(item?.ts) && now - item.ts <= TAP_QUEUE_TTL_MS,
+      );
+      if (expired) {
         logPushTap({
           source: 'notifee_queue',
-          outcome: 'error',
-          data,
-          detail: { message: String(e?.message || e), phase: 'drain_item' },
+          outcome: 'queue_expired',
+          detail: { count: expired },
         });
       }
-    }
-    console.log('[NAV:INTENT] drainQueuedTap done');
+      if (entries.length === 0) {
+        await AsyncStorage.setItem(TAP_QUEUE_KEY, '[]');
+        console.log('[NAV:INTENT] drainQueuedTap: empty');
+        return true;
+      }
+      console.log('[NAV:INTENT] drainQueuedTap start', { count: entries.length });
+
+      while (entries.length > 0) {
+        const item = entries[0];
+        const data = item?.data || {};
+        const result = await openFromPayloadOnce(
+          navigateTo,
+          data,
+          'notifee_queue',
+          { fromInitialCache: true },
+        );
+        if (!result?.handled) {
+          // 실패 항목과 뒤 항목을 그대로 보존한다. AppState active/다음 실행에서 재시도.
+          await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(entries));
+          logPushTap({
+            source: 'notifee_queue',
+            outcome: 'queue_retry_pending',
+            data,
+            detail: { remaining: entries.length },
+          });
+          return false;
+        }
+        entries.shift();
+        // 항목마다 체크포인트를 남겨 성공 직후 프로세스가 죽어도 앞선 탭을 재생하지 않는다.
+        await AsyncStorage.setItem(TAP_QUEUE_KEY, JSON.stringify(entries));
+      }
+      console.log('[NAV:INTENT] drainQueuedTap done');
+      return true;
+    });
   } catch (e) {
     console.warn('[NAV:INTENT] drainQueuedTap error:', e?.message || e);
     logPushTap({
@@ -849,6 +1042,7 @@ export async function drainQueuedTap(navigateTo) {
       outcome: 'error',
       detail: { message: String(e?.message || e), phase: 'drain' },
     });
+    return false;
   }
 }
 
@@ -862,18 +1056,24 @@ export async function drainNativeNotificationTap(navigateTo) {
   try {
     const mod = NativeModules.PushIntentModule;
     if (!mod?.getInitialNotificationData) return false;
-    const data = await mod.getInitialNotificationData();
-    if (data && (data.link_url || data.url || data.screen)) {
-      console.log('[NAV:INTENT] drainNativeNotificationTap got data', data);
-      // 액티비티 인텐트에서 직접 캡처한 값 = 실제 앱을 연 탭(가장 신뢰 가능).
-      // 단 recents 재전달로 과거 인텐트가 다시 올 수 있으므로 initial-cache 취급.
-      await openFromPayloadOnce(navigateTo, data, 'native_fallback', {
+    let found = false;
+    // MainActivity는 단일 슬롯 대신 최대 10개의 인텐트를 보존한다. 빠른 연속 탭도
+    // 순서대로 비우며, 처리 실패분은 영속 JS 큐로 넘겨 프로세스 종료에도 살린다.
+    for (let index = 0; index < 10; index += 1) {
+      const data = await mod.getInitialNotificationData();
+      if (!data) break;
+      if (!(data.link_url || data.url || data.screen)) continue;
+      found = true;
+      console.log('[NAV:INTENT] drainNativeNotificationTap got data');
+      const result = await openFromPayloadOnce(navigateTo, data, 'native_fallback', {
         fromInitialCache: true,
       });
-      return true;
+      // 이 함수는 항상 runExclusivePushOp 내부에서 호출된다. 여기서 리스너를
+      // 다시 깨우고 await하면 같은 직렬화 체인을 기다리는 교착이 생긴다.
+      if (!result?.handled) await queueTapIntent(data, { notifyListener: false });
     }
-    console.log('[NAV:INTENT] drainNativeNotificationTap: nothing pending');
-    return false;
+    if (!found) console.log('[NAV:INTENT] drainNativeNotificationTap: nothing pending');
+    return found;
   } catch (e) {
     console.warn('[NAV:INTENT] drainNativeNotificationTap error', e?.message || e);
     return false;
@@ -890,7 +1090,10 @@ let currentNavigateTo = null;
 
 export async function wireMessageHandlers(navigateTo) {
   currentNavigateTo = navigateTo;
-  const nav = (screen, params) => currentNavigateTo?.(screen, params);
+  const nav = (screen, params) =>
+    typeof currentNavigateTo === 'function'
+      ? currentNavigateTo(screen, params)
+      : false;
 
   // 탭이 큐에 적재되는 즉시 소비(늦게 도착한 백그라운드/콜드스타트 PRESS 대응).
   // 리마운트 시에도 최신 nav로 재바인딩되어야 하므로 가드보다 먼저 실행.
@@ -956,34 +1159,44 @@ export const updatePushTokenOnLogin = async userId => {
         return;
       }
     }
-    const fcmToken = await messaging().getToken();
-    if (!fcmToken) {
-      console.log('[Push] Could not get FCM token.');
-      return;
-    }
-    const { error } = await supabase.rpc('register_push_token', {
-      fcm_token: fcmToken,
-      p_platform: Platform.OS,
-    });
-    if (error)
-      console.error('[Push] register_push_token RPC error:', error.message);
-    else console.log('[Push] Token registered for user:', userId);
+    await registerPushTokenWithRetry(undefined, userId);
   } catch (error) {
     console.error('[Push] updatePushTokenOnLogin error:', error);
   }
 };
 
+const TOKEN_REGISTER_RETRY_DELAYS_MS = [0, 1000, 5000, 30_000];
+
+async function registerPushTokenWithRetry(suppliedToken, userId) {
+  let lastError;
+  for (const delayMs of TOKEN_REGISTER_RETRY_DELAYS_MS) {
+    if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+    try {
+      const token = suppliedToken || (await messaging().getToken());
+      if (!token) throw new Error('FCM returned an empty token');
+      const { error } = await supabase.rpc('register_push_token', {
+        fcm_token: token,
+        p_platform: Platform.OS,
+      });
+      if (error) throw error;
+      console.log('[Push] Token registered for user:', userId);
+      return true;
+    } catch (error) {
+      lastError = error;
+      console.warn('[Push] token registration attempt failed', {
+        userId,
+        message: error?.message || String(error),
+      });
+    }
+  }
+  throw lastError || new Error('Push token registration failed');
+}
+
 export const setupTokenRefreshListener = userId => {
   if (!userId) return () => {};
   return messaging().onTokenRefresh(async newFcmToken => {
     try {
-      console.log('[Push] FCM token refreshed:', newFcmToken);
-      const { error } = await supabase.rpc('register_push_token', {
-        fcm_token: newFcmToken,
-        p_platform: Platform.OS,
-      });
-      if (error)
-        console.error('[Push] Failed to register refreshed token:', error);
+      await registerPushTokenWithRetry(newFcmToken, userId);
     } catch (e) {
       console.warn('[Push] onTokenRefresh error:', e?.message || e);
     }
@@ -994,10 +1207,11 @@ export async function unregisterPushToken() {
   try {
     const token = await messaging().getToken();
     if (token) {
-      await supabase
+      const { error } = await supabase
         .from('device_push_tokens')
         .update({ enabled: false })
         .eq('token', token);
+      if (error) console.warn('[Push] token disable failed:', error.message);
       await messaging().deleteToken();
       console.log('[Push] Token unregistered and deleted.');
     }

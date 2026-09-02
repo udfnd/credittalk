@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'; // AsyncSt
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
 
+// 변수명은 기존 빌드 설정과의 호환을 위해 유지하지만 값은 sb_publishable_ 키를 쓴다.
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error(
     'Supabase URL or Anon Key is missing. Check your .env file and babel config.',

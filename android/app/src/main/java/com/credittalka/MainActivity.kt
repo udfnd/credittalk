@@ -1,40 +1,14 @@
 package com.credittalka
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import java.util.ArrayDeque
 
 class MainActivity : ReactActivity() {
-
-  private val PERMISSIONS_REQUEST_CODE = 101
-
-  private val requiredPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      arrayOf(
-          Manifest.permission.READ_PHONE_STATE,
-          Manifest.permission.READ_CALL_LOG,
-          Manifest.permission.READ_CONTACTS,
-          Manifest.permission.POST_NOTIFICATIONS,
-          Manifest.permission.READ_MEDIA_AUDIO,
-          Manifest.permission.RECORD_AUDIO,
-          Manifest.permission.FOREGROUND_SERVICE_MICROPHONE
-      )
-  } else {
-      arrayOf(
-          Manifest.permission.READ_PHONE_STATE,
-          Manifest.permission.READ_CALL_LOG,
-          Manifest.permission.READ_CONTACTS,
-          Manifest.permission.READ_EXTERNAL_STORAGE,
-          Manifest.permission.RECORD_AUDIO
-      )
-  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     // RN/메시징 모듈에 인텐트를 넘기기 전에 원본 FCM extras를 보존한다.
@@ -42,7 +16,6 @@ class MainActivity : ReactActivity() {
     // 비어 도착했으므로, JS 브리지 초기화보다 캡처가 반드시 먼저여야 한다.
     capturePushIntent(intent)
     super.onCreate(null)
-    checkAndRequestPermissions()
   }
 
   /**
@@ -93,7 +66,10 @@ class MainActivity : ReactActivity() {
     if (!hasRouteKey(data)) return
 
     intent.putExtra(HANDLED_FLAG, true)
-    pendingPushData = data
+    synchronized(pendingPushData) {
+      if (pendingPushData.size >= MAX_PENDING_PUSHES) pendingPushData.removeFirst()
+      pendingPushData.addLast(data)
+    }
   }
 
   private fun hasRouteKey(data: Map<String, String>): Boolean =
@@ -101,21 +77,6 @@ class MainActivity : ReactActivity() {
       data.containsKey("url") ||
       data.containsKey("screen") ||
       data.containsKey("nid")
-
-  private fun checkAndRequestPermissions() {
-    val permissionsToRequest = requiredPermissions.filter {
-      ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-    }
-
-    if (permissionsToRequest.isNotEmpty()) {
-      ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), PERMISSIONS_REQUEST_CODE)
-    }
-  }
-
-  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-  }
-
 
   /**
    * Returns the name of the main component registered from JavaScript. This is used to schedule
@@ -132,16 +93,16 @@ class MainActivity : ReactActivity() {
 
   companion object {
     private const val HANDLED_FLAG = "ct_notif_handled"
+    private const val MAX_PENDING_PUSHES = 10
 
-    @Volatile
-    private var pendingPushData: HashMap<String, String>? = null
+    private val pendingPushData = ArrayDeque<HashMap<String, String>>()
 
     /** JS(PushIntentModule)에서 1회 읽고 비운다. */
     @JvmStatic
     fun consumePendingPushData(): HashMap<String, String>? {
-      val d = pendingPushData
-      pendingPushData = null
-      return d
+      return synchronized(pendingPushData) {
+        if (pendingPushData.isEmpty()) null else pendingPushData.removeFirst()
+      }
     }
   }
 }

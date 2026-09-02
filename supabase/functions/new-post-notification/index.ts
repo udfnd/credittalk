@@ -1,17 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  authorizeInternalRequest,
+  getPushInternalKey,
+} from '../_shared/push-auth.ts';
 
-const supabaseAdmin = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  {
-    global: {
-      headers: {
-        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`,
-      },
-    },
-    auth: { autoRefreshToken: false, persistSession: false },
-  },
-);
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+const adminKey = getPushInternalKey();
+const supabaseAdmin = createClient(SUPABASE_URL, adminKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
 const SCREEN_MAP: Record<string, string> = {
   community_posts: 'CommunityPostDetail',
@@ -35,155 +32,120 @@ const ID_PARAM_MAP: Record<string, string> = {
 
 const CHUNK_SIZE = 100;
 
-Deno.serve(async req => {
-  try {
-    const { table, record: post } = await req.json();
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
-    if (!post || !post.id) {
-      return new Response(JSON.stringify({ message: 'No-op' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200,
-      });
+async function enqueuePush(
+  title: string,
+  body: string,
+  data: Record<string, string>,
+  userIds: string[] | null,
+) {
+  const { data: job, error } = await supabaseAdmin
+    .from('push_jobs')
+    .insert({
+      title,
+      body,
+      data,
+      audience: userIds ? null : { all: true },
+      target_user_ids: userIds,
+      dry_run: false,
+      scheduled_at: new Date().toISOString(),
+      status: 'queued',
+      attempt_count: 0,
+      locked_at: null,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return Number(job.id);
+}
+
+Deno.serve(async request => {
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  try {
+    if (!authorizeInternalRequest(request)) return json({ error: 'Unauthorized' }, 401);
+    const { table, record: post } = await request.json();
+    const tableName = String(table ?? '');
+    const screen = SCREEN_MAP[tableName];
+    const idParamKey = ID_PARAM_MAP[tableName];
+    if (!post?.id || !screen || !idParamKey) {
+      return json({ error: 'Unsupported table or missing post id' }, 400);
     }
 
     const postTitle =
       [post.title, post.subject, post.case_name, '제목 없음'].find(
-        (t: unknown) => typeof t === 'string' && String(t).trim() !== '',
+        value => typeof value === 'string' && value.trim(),
       ) ?? '제목 없음';
-
-    const authorId = post.user_id || post.uploader_id;
-
-    // 매핑 없는 테이블은 screen을 아예 싣지 않는다. 과거 'Home' fallback은
-    // 클라이언트 ALLOWED_SCREENS에 없어 탭해도 아무 데도 못 가는 dead-nav였음.
-    const screen = SCREEN_MAP[String(table)] ?? null;
-    const idParamKey = ID_PARAM_MAP[String(table)] ?? 'id';
-    const nid = `post_${String(table)}_${String(post.id)}`;
-
-    const makeDataPayload = () => ({
+    const authorId = post.user_id || post.uploader_id || post.created_by;
+    const data = {
       type: 'NAV',
-      nid: String(nid),
-      ...(screen
-        ? {
-            screen: String(screen),
-            params: JSON.stringify({ [idParamKey]: String(post.id) }),
-            [idParamKey]: String(post.id),
-          }
-        : {}),
-    });
+      nid: `post_${tableName}_${String(post.id)}`,
+      screen,
+      params: JSON.stringify({ [idParamKey]: String(post.id) }),
+      [idParamKey]: String(post.id),
+    };
 
-    let isAdminAuthor = false;
-
-    if (String(table) === 'notices') {
-      isAdminAuthor = true;
-    } else if (authorId) {
-      let authorProfile: { is_admin?: boolean; auth_user_id?: string } | null =
-        null;
-
+    let isAdminAuthor = tableName === 'notices';
+    if (!isAdminAuthor && authorId) {
       const byAuth = await supabaseAdmin
         .from('users')
-        .select('is_admin, auth_user_id')
+        .select('is_admin')
         .eq('auth_user_id', authorId)
         .maybeSingle();
-
-      if (byAuth.data) {
-        authorProfile = byAuth.data;
+      if (byAuth.error) throw byAuth.error;
+      if (byAuth.data?.is_admin === true) {
+        isAdminAuthor = true;
       } else {
         const byId = await supabaseAdmin
           .from('users')
-          .select('is_admin, auth_user_id')
+          .select('is_admin')
           .eq('id', authorId)
           .maybeSingle();
-        if (byId.data) authorProfile = byId.data;
+        if (byId.error) throw byId.error;
+        isAdminAuthor = byId.data?.is_admin === true;
       }
-
-      if (authorProfile?.is_admin === true) isAdminAuthor = true;
     }
 
-    if (!isAdminAuthor) {
-      const { data: adminUsers, error: adminErr } = await supabaseAdmin
-        .from('users')
-        .select('auth_user_id')
-        .eq('is_admin', true);
-
-      if (adminErr) {
-        return new Response(
-          JSON.stringify({ message: 'Error fetching admins' }),
-          {
-            headers: { 'Content-Type': 'application/json' },
-            status: 500,
-          },
-        );
-      }
-
-      const adminIds = (adminUsers ?? [])
-        .map(u => u.auth_user_id)
-        .filter(
-          (id): id is string => typeof id === 'string' && id.trim().length > 0,
-        );
-
-      for (let i = 0; i < adminIds.length; i += CHUNK_SIZE) {
-        const chunk = adminIds.slice(i, i + CHUNK_SIZE).map(String);
-        await supabaseAdmin.functions.invoke('send-fcm-v1-push', {
-          body: {
-            user_ids: chunk,
-            title: '새 글이 등록되었습니다 (관리자용)',
-            body: `${postTitle}`,
-            data: makeDataPayload(),
-          },
-        });
-      }
-
-      return new Response(
-        JSON.stringify({ message: 'Not admin author → notified admins only' }),
-        {
-          headers: { 'Content-Type': 'application/json' },
-          status: 200,
-        },
+    if (isAdminAuthor) {
+      const jobId = await enqueuePush(
+        '새로운 글이 등록되었습니다',
+        String(postTitle),
+        data,
+        null,
       );
+      return json({ message: 'Broadcast queued', job_id: jobId }, 202);
     }
 
-    const { data: users, error: userError } = await supabaseAdmin
+    const { data: admins, error } = await supabaseAdmin
       .from('users')
-      .select('auth_user_id');
-
-    if (userError) {
-      return new Response(JSON.stringify({ message: 'Error fetching users' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 500,
-      });
-    }
-
-    const userIds = (users ?? [])
-      .map(u => u.auth_user_id)
-      .filter((id): id is string => typeof id === 'string' && id.trim() !== '');
-
-    const jobs: Promise<unknown>[] = [];
-    for (let i = 0; i < userIds.length; i += CHUNK_SIZE) {
-      const chunk = userIds.slice(i, i + CHUNK_SIZE).map(String);
-      jobs.push(
-        supabaseAdmin.functions.invoke('send-fcm-v1-push', {
-          body: {
-            user_ids: chunk,
-            title: '새로운 글이 등록되었습니다',
-            body: `${postTitle}`,
-            data: makeDataPayload(),
-          },
-        }),
+      .select('auth_user_id')
+      .eq('is_admin', true);
+    if (error) throw error;
+    const adminIds = [...new Set(
+      (admins ?? [])
+        .map(user => user.auth_user_id)
+        .filter((id): id is string => typeof id === 'string' && Boolean(id.trim())),
+    )];
+    const jobIds = [];
+    for (let index = 0; index < adminIds.length; index += CHUNK_SIZE) {
+      jobIds.push(
+        await enqueuePush(
+          '새 글이 등록되었습니다 (관리자용)',
+          String(postTitle),
+          data,
+          adminIds.slice(index, index + CHUNK_SIZE),
+        ),
       );
     }
-    await Promise.allSettled(jobs);
-
-    return new Response(JSON.stringify({ message: 'OK, push jobs invoked.' }), {
-      headers: { 'Content-Type': 'application/json' },
-      status: 200,
-    });
-  } catch (e: any) {
-    return new Response(
-      JSON.stringify({ message: e?.message ?? 'Internal error' }),
-      {
-        headers: { 'Content-Type': 'application/json' },
-        status: 500,
-      },
-    );
+    return json({ message: 'Admin notification queued', job_ids: jobIds }, 202);
+  } catch (error) {
+    const message = String((error as Error)?.message ?? error).slice(0, 500);
+    console.error('[new-post-notification]', message);
+    return json({ error: message }, 500);
   }
 });
