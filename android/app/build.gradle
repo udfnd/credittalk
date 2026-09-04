@@ -57,7 +57,10 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+// Play "앱 최적화" 리포트 난독화 비율 2%(기준 25%) 경고 대응(2026-09-04).
+// keep 규칙은 app/proguard-rules.pro 참고 — RN consumer rule이 NativeModule
+// 구현체를 보존하고, 그 밖에 리플렉션으로 접근되는 SDK만 명시적으로 고정한다.
+def enableProguardInReleaseBuilds = true
 
 // Load secrets from secrets.properties (gitignored)
 def secretsFile = rootProject.file("secrets.properties")
