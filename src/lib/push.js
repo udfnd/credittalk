@@ -4,6 +4,7 @@ import {
   Linking,
   Alert,
   AppState,
+  DeviceEventEmitter,
   NativeModules,
 } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
@@ -652,6 +653,17 @@ function getTapKeyFromData(data = {}) {
   );
 }
 
+// 네이티브 브리지(ReadableMap)는 문자열만 안전하게 왕복한다. 객체/숫자가 섞여
+// 있으면 인텐트 extras 단계에서 유실되므로 표시 직전에 직렬화한다.
+function toStringMap(data = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(data || {})) {
+    if (value === null || typeof value === 'undefined') continue;
+    out[key] = typeof value === 'string' ? value : JSON.stringify(value);
+  }
+  return out;
+}
+
 let displayOpChain = Promise.resolve();
 
 export function displayOnce(remote, source = 'unknown') {
@@ -755,9 +767,23 @@ async function displayOnceInternal(remote, source = 'unknown') {
   });
 
   try {
-    if (Platform.OS === 'android' && image) {
-      // 원격 이미지는 느리거나 1MB/포맷 제한을 넘을 수 있다. 이미지 다운로드를
-      // 기다리다 foreground/headless 실행 시간이 끝나면 알림 전체가 사라지므로,
+    if (Platform.OS === 'android' && NativeModules.PushNotifier?.display) {
+      // 안드로이드는 앱이 직접 표시한다. notifee가 표시한 알림은 탭 payload가
+      // OneUI에서 비워져 도착하고(사용자 155명 중 2명만 성공), notifee의 런치
+      // 인텐트에는 payload가 실리지 않아 네이티브로도 구제할 수 없기 때문이다.
+      // 네이티브 모듈이 만드는 PendingIntent는 MainActivity에 data를 평면
+      // extras로 실어 보내므로, 탭이 검증된 capturePushIntent 경로로 들어온다.
+      await NativeModules.PushNotifier.display({
+        id: String(stableId),
+        title: title || '',
+        body: body || '',
+        channelId: CHANNEL_ID,
+        image: image || null,
+        data: toStringMap(data),
+      });
+    } else if (Platform.OS === 'android' && image) {
+      // 폴백(네이티브 모듈 없음): 원격 이미지는 느리거나 1MB/포맷 제한을 넘을 수
+      // 있다. 다운로드를 기다리다 실행 시간이 끝나면 알림 전체가 사라지므로
       // 텍스트 알림을 먼저 확정하고 같은 id로 rich 알림을 best-effort 갱신한다.
       await notifee.displayNotification({
         ...notif,
@@ -1244,6 +1270,14 @@ export async function wireMessageHandlers(navigateTo) {
     } catch (e) {
       console.warn('[FCM] onMessage display error:', e?.message || e);
     }
+  });
+
+  // 앱이 포그라운드인 채로 알림을 탭하면 AppState 전이가 없다. MainActivity가
+  // 인텐트를 보관한 직후 쏘는 이벤트로 즉시 드레인한다.
+  DeviceEventEmitter.addListener('PushIntentCaptured', () => {
+    runExclusivePushOp('native-tap-event', () =>
+      drainNativeNotificationTap(nav),
+    );
   });
 
   notifee.onForegroundEvent(async ({ type, detail }) => {

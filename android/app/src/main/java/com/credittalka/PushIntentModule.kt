@@ -6,6 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 /**
  * PushIntentModule
@@ -18,11 +19,36 @@ import com.facebook.react.bridge.WritableMap
  * (S24/S25: 탭해도 링크 페이지로 이동하지 않고 앱만 열림)의 폴백 경로.
  *
  * 반환값은 consume-once: 한 번 읽으면 네이티브 보관분은 비워진다.
+ *
+ * 캡처가 일어나면 JS로 이벤트를 쏜다. 앱이 이미 포그라운드일 때 알림을 탭하면
+ * AppState 'active' 전이가 없어 드레인 트리거가 사라지기 때문이다(포그라운드
+ * 수신분을 앱이 직접 표시하게 되면서 이 경로가 상시 경로가 된다).
  */
 class PushIntentModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
+    init {
+        instance = this
+    }
+
     override fun getName(): String = "PushIntentModule"
+
+    override fun invalidate() {
+        if (instance === this) instance = null
+        super.invalidate()
+    }
+
+    private fun emitCaptured() {
+        try {
+            if (!reactApplicationContext.hasActiveReactInstance()) return
+            reactApplicationContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(EVENT_CAPTURED, null)
+        } catch (_: Exception) {
+            // JS 컨텍스트가 아직/이미 없으면 무시한다. 보관분은 남아 있으므로
+            // 다음 초기화나 AppState 'active' 드레인이 소비한다.
+        }
+    }
 
     @ReactMethod
     fun getInitialNotificationData(promise: Promise) {
@@ -37,6 +63,19 @@ class PushIntentModule(reactContext: ReactApplicationContext) :
             promise.resolve(map)
         } catch (e: Exception) {
             promise.reject("PUSH_INTENT_ERROR", e.message, e)
+        }
+    }
+
+    companion object {
+        private const val EVENT_CAPTURED = "PushIntentCaptured"
+
+        @Volatile
+        private var instance: PushIntentModule? = null
+
+        /** MainActivity가 탭 인텐트를 보관한 직후 호출한다. */
+        @JvmStatic
+        fun notifyCaptured() {
+            instance?.emitCaptured()
         }
     }
 }

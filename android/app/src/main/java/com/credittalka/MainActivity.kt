@@ -70,6 +70,9 @@ class MainActivity : ReactActivity() {
       if (pendingPushData.size >= MAX_PENDING_PUSHES) pendingPushData.removeFirst()
       pendingPushData.addLast(data)
     }
+    // 앱이 이미 포그라운드면 AppState 'active' 전이가 없어 드레인이 안 돈다.
+    // 보관 직후 JS에 알려 즉시 소비하게 한다(콜드스타트는 초기화 시퀀스가 담당).
+    PushIntentModule.notifyCaptured()
   }
 
   private fun hasRouteKey(data: Map<String, String>): Boolean =
