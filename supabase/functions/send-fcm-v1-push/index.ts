@@ -16,7 +16,6 @@ const SERVICE_ACCOUNT = JSON.parse(
 );
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const ANDROID_CHANNEL_ID = 'push_default_v2';
-const ANDROID_CLICK_ACTION = 'android.intent.action.MAIN';
 const ANDROID_TTL = '86400s';
 const ACTIVE_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 1000;
@@ -284,6 +283,10 @@ function buildMessage({
       nid,
       expect_os_alert: osAlert ? '1' : '0',
     },
+    // android.notification.click_action은 절대 지정하지 않는다: 지정하면 FCM이
+    // 명시적 런치 인텐트(getLaunchIntentForPackage) 대신 카테고리 없는 암시적
+    // 인텐트를 만들고, MainActivity의 MAIN 필터에는 CATEGORY_DEFAULT가 없어
+    // 탭이 해석되지 않는다(= 알림은 뜨는데 화면 이동이 안 됨).
     android: {
       priority: 'HIGH',
       ttl: ANDROID_TTL,
@@ -292,7 +295,6 @@ function buildMessage({
             notification: {
               channel_id: ANDROID_CHANNEL_ID,
               tag: nid,
-              click_action: ANDROID_CLICK_ACTION,
               ...(imageUrl ? { image: imageUrl } : {}),
             },
           }

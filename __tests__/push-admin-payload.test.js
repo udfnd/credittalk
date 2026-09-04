@@ -83,10 +83,15 @@ describe('Admin Push Payload - EventDetail', () => {
       expect(canonicalSenderSource).not.toMatch(/collapse_key\s*:/);
     });
 
-    test('should use the explicit Android push click action', () => {
-      expect(canonicalSenderSource).toMatch(
-        /click_action:\s*ANDROID_CLICK_ACTION/,
-      );
+    test('should not set an Android push click action', () => {
+      // click_action을 지정하면 FCM이 명시적 런치 인텐트 대신 카테고리 없는
+      // 암시적 인텐트를 만들고, MainActivity의 MAIN 필터에 CATEGORY_DEFAULT가
+      // 없어 탭이 해석되지 않는다(2026-09-02~09-04 실측: fcm_opened_app 0건).
+      // 상세 근거와 방어선은 __tests__/push-fcm-tap-intent.test.js 참조.
+      const code = canonicalSenderSource
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      expect(code).not.toMatch(/click_action/);
     });
 
     test('should surface remaining transient token failures to the durable worker', () => {
